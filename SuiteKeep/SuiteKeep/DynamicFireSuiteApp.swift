@@ -8,23 +8,71 @@
 import SwiftUI
 import AVFoundation
 
+// MARK: - Settings Manager
+class SettingsManager: ObservableObject {
+    @Published var suiteName: String {
+        didSet {
+            UserDefaults.standard.set(suiteName, forKey: "suiteName")
+        }
+    }
+    
+    @Published var venueLocation: String {
+        didSet {
+            UserDefaults.standard.set(venueLocation, forKey: "venueLocation")
+        }
+    }
+    
+    init() {
+        self.suiteName = UserDefaults.standard.string(forKey: "suiteName") ?? "Fire Suite"
+        self.venueLocation = UserDefaults.standard.string(forKey: "venueLocation") ?? "Ford Amphitheater"
+    }
+}
+
+// MARK: - Vibrant Color Theme
+extension Color {
+    // Beautiful gradient backgrounds
+    static let primaryGradientStart = Color(red: 0.2, green: 0.1, blue: 0.9) // Deep purple
+    static let primaryGradientEnd = Color(red: 0.8, green: 0.2, blue: 0.9) // Magenta
+    static let secondaryGradientStart = Color(red: 0.0, green: 0.7, blue: 1.0) // Bright blue
+    static let secondaryGradientEnd = Color(red: 0.0, green: 0.9, blue: 0.6) // Teal
+    
+    // Card gradient colors
+    static let cardPurple = LinearGradient(colors: [Color(red: 0.4, green: 0.2, blue: 0.8), Color(red: 0.6, green: 0.3, blue: 0.9)], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let cardBlue = LinearGradient(colors: [Color(red: 0.1, green: 0.4, blue: 0.9), Color(red: 0.2, green: 0.6, blue: 1.0)], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let cardTeal = LinearGradient(colors: [Color(red: 0.0, green: 0.7, blue: 0.7), Color(red: 0.1, green: 0.8, blue: 0.8)], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let cardOrange = LinearGradient(colors: [Color(red: 1.0, green: 0.4, blue: 0.1), Color(red: 1.0, green: 0.6, blue: 0.2)], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let cardPink = LinearGradient(colors: [Color(red: 0.9, green: 0.1, blue: 0.5), Color(red: 1.0, green: 0.3, blue: 0.6)], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let cardGreen = LinearGradient(colors: [Color(red: 0.1, green: 0.7, blue: 0.3), Color(red: 0.2, green: 0.8, blue: 0.4)], startPoint: .topLeading, endPoint: .bottomTrailing)
+    
+    // Modern colors (keeping some for compatibility)
+    static let modernBackground = Color(red: 0.96, green: 0.97, blue: 1.0)
+    static let modernSecondary = Color(red: 0.94, green: 0.95, blue: 0.98)
+    static let modernAccent = Color(red: 0.3, green: 0.2, blue: 0.9)
+    static let modernText = Color(white: 0.1)
+    static let modernTextSecondary = Color(white: 0.4)
+    static let modernSuccess = Color(red: 0.1, green: 0.7, blue: 0.3)
+    static let modernWarning = Color(red: 1.0, green: 0.5, blue: 0.0)
+    static let modernDanger = Color(red: 1.0, green: 0.2, blue: 0.3)
+}
+
 struct DynamicFireSuiteApp: View {
     @State private var selectedTab = 0
     @State private var animateFlames = true
     @StateObject private var concertManager = ConcertDataManager()
+    @StateObject private var settingsManager = SettingsManager()
     
     var body: some View {
         TabView(selection: $selectedTab) {
-            DynamicDashboard(concerts: $concertManager.concerts)
+            DynamicDashboard(concerts: $concertManager.concerts, settingsManager: settingsManager)
                 .tabItem {
-                    Image(systemName: selectedTab == 0 ? "flame.fill" : "flame")
-                    Text("Suite")
+                    Image(systemName: selectedTab == 0 ? "house.fill" : "house")
+                    Text("Dashboard")
                 }
                 .tag(0)
             
-            DynamicConcerts(concertManager: concertManager)
+            DynamicConcerts(concertManager: concertManager, settingsManager: settingsManager)
                 .tabItem {
-                    Image(systemName: selectedTab == 1 ? "music.note.house.fill" : "music.note.house")
+                    Image(systemName: selectedTab == 1 ? "music.note.list" : "music.note")
                     Text("Concerts")
                 }
                 .tag(1)
@@ -36,14 +84,14 @@ struct DynamicFireSuiteApp: View {
                 }
                 .tag(2)
             
-            DynamicPortfolio()
+            SettingsView(settingsManager: settingsManager)
                 .tabItem {
-                    Image(systemName: selectedTab == 3 ? "dollarsign.circle.fill" : "dollarsign.circle")
-                    Text("Portfolio")
+                    Image(systemName: selectedTab == 3 ? "gearshape.fill" : "gearshape")
+                    Text("Settings")
                 }
                 .tag(3)
         }
-        .accentColor(.orange)
+        .accentColor(.modernAccent)
         .onAppear {
             startFlameAnimation()
         }
@@ -61,17 +109,18 @@ struct DynamicDashboard: View {
     @State private var pulseFirepit = false
     @State private var rotateValue: Double = 0
     @Binding var concerts: [Concert]
+    @ObservedObject var settingsManager: SettingsManager
     
     var body: some View {
         NavigationView {
             ZStack {
-                // Dynamic gradient background
+                // Consistent dark gradient background
                 LinearGradient(
                     colors: [
-                        Color.black.opacity(0.9),
-                        Color.orange.opacity(0.3),
-                        Color.red.opacity(0.2),
-                        Color.black.opacity(0.9)
+                        Color(red: 0.1, green: 0.1, blue: 0.15),
+                        Color(red: 0.15, green: 0.12, blue: 0.2),
+                        Color(red: 0.12, green: 0.1, blue: 0.18),
+                        Color(red: 0.08, green: 0.08, blue: 0.16)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -79,9 +128,68 @@ struct DynamicDashboard: View {
                 .ignoresSafeArea()
                 
                 ScrollView {
-                    VStack(spacing: 30) {
+                    VStack(spacing: 24) {
+                        // Modern Header Card
+                        VStack(spacing: 12) {
+                            Text("Dashboard")
+                                .font(.system(size: 32, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                            
+                            HStack(spacing: 8) {
+                                Image(systemName: "building.2")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.8))
+                                
+                                Text(settingsManager.suiteName)
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(.white)
+                                
+                                Circle()
+                                    .fill(.white.opacity(0.5))
+                                    .frame(width: 4, height: 4)
+                                
+                                Image(systemName: "location")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.8))
+                                
+                                Text(settingsManager.venueLocation)
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 20)
+                        .padding(.horizontal, 24)
+                        .background(
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [
+                                                Color(red: 0.3, green: 0.2, blue: 0.9),
+                                                Color(red: 0.5, green: 0.3, blue: 0.95),
+                                                Color(red: 0.7, green: 0.4, blue: 1.0)
+                                            ],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [.white.opacity(0.1), .clear, .black.opacity(0.1)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                            }
+                            .shadow(color: .black.opacity(0.15), radius: 15, x: 0, y: 8)
+                        )
+                        .padding(.top, 20)
+                        
                         // Suite Overview Summary
-                        SuiteSummaryView(concerts: concerts)
+                        SuiteSummaryView(concerts: concerts, settingsManager: settingsManager)
                         
                         // Performance Metrics
                         PerformanceMetricsView(concerts: concerts)
@@ -89,14 +197,10 @@ struct DynamicDashboard: View {
                         // Recent Activity
                         RecentActivityFeed(concerts: concerts)
                     }
-                    .padding()
+                    .padding(.horizontal)
                 }
             }
-            .navigationTitle("")
             .navigationBarHidden(true)
-            .onAppear {
-                startPulseAnimation()
-            }
         }
     }
     
@@ -110,6 +214,7 @@ struct DynamicDashboard: View {
 // MARK: - Suite Summary View
 struct SuiteSummaryView: View {
     let concerts: [Concert]
+    @ObservedObject var settingsManager: SettingsManager
     @State private var animateStats = false
     
     var totalTicketsSold: Int {
@@ -132,56 +237,39 @@ struct SuiteSummaryView: View {
     
     var body: some View {
         VStack(spacing: 20) {
-            // Title
-            VStack(spacing: 5) {
-                Text("FIRE SUITE")
-                    .font(.system(size: 32, weight: .heavy, design: .rounded))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.orange, .red, .yellow],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                    )
-                
-                Text("FORD AMPHITHEATER")
-                    .font(.system(size: 14, weight: .medium, design: .monospaced))
-                    .foregroundColor(.white.opacity(0.8))
-                    .tracking(2)
-            }
             
-            // Key Metrics Cards
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 15), count: 2), spacing: 15) {
+            // Key Metrics Cards with Beautiful Gradients
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 18), count: 2), spacing: 18) {
                 MetricCard(
                     title: "Total Sold",
                     value: "\(totalTicketsSold)",
-                    subtitle: "tickets",
-                    color: .green,
+                    subtitle: "tickets sold",
+                    gradient: Color.cardGreen,
                     icon: "ticket.fill"
                 )
                 
                 MetricCard(
                     title: "Revenue",
                     value: "$\(Int(totalRevenue))",
-                    subtitle: "total",
-                    color: .blue,
+                    subtitle: "total earnings",
+                    gradient: Color.cardBlue,
                     icon: "dollarsign.circle.fill"
                 )
                 
                 MetricCard(
                     title: "Upcoming",
                     value: "\(upcomingConcerts)",
-                    subtitle: "concerts",
-                    color: .orange,
-                    icon: "calendar"
+                    subtitle: "concerts scheduled",
+                    gradient: Color.cardOrange,
+                    icon: "calendar.badge.plus"
                 )
                 
                 MetricCard(
                     title: "Occupancy",
                     value: "\(averageOccupancy)%",
-                    subtitle: "average",
-                    color: .purple,
-                    icon: "chart.bar.fill"
+                    subtitle: "average rate",
+                    gradient: Color.cardPurple,
+                    icon: "chart.pie.fill"
                 )
             }
         }
@@ -195,65 +283,116 @@ struct SuiteSummaryView: View {
     }
 }
 
-// MARK: - Metric Card
+// MARK: - Enhanced Metric Card
 struct MetricCard: View {
     let title: String
     let value: String
     let subtitle: String
-    let color: Color
+    let gradient: LinearGradient
     let icon: String
     
     @State private var isPressed = false
+    @State private var animateValue = false
     
     var body: some View {
-        VStack(spacing: 8) {
-            HStack {
+        VStack(spacing: 12) {
+            // Icon with gradient background - centered
+            ZStack {
+                Circle()
+                    .fill(gradient)
+                    .frame(width: 40, height: 40)
+                    .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
+                
                 Image(systemName: icon)
-                    .font(.title2)
-                    .foregroundColor(color)
-                Spacer()
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.white)
             }
             
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(spacing: 4) {
                 Text(value)
-                    .font(.system(size: 24, weight: .heavy, design: .rounded))
+                    .font(.system(size: 24, weight: .black, design: .rounded))
                     .foregroundColor(.white)
+                    .scaleEffect(animateValue ? 1.05 : 1.0)
+                    .animation(.spring(response: 0.6, dampingFraction: 0.8), value: animateValue)
                 
                 Text(title)
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(.white.opacity(0.9))
                 
                 Text(subtitle)
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
-                    .foregroundColor(.white.opacity(0.6))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.white.opacity(0.7))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding()
+        .padding(16)
+        .frame(maxWidth: .infinity)
+        .frame(height: 120)
         .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(color.opacity(0.3), lineWidth: 1)
-                )
-        )
-        .scaleEffect(isPressed ? 0.95 : 1.0)
-        .onTapGesture {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                isPressed.toggle()
+            ZStack {
+                // Main gradient background
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(gradient)
+                
+                // Subtle overlay pattern
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(
+                        LinearGradient(
+                            colors: [.white.opacity(0.1), .clear, .black.opacity(0.1)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            .shadow(color: .black.opacity(0.15), radius: 15, x: 0, y: 8)
+        )
+        .scaleEffect(isPressed ? 0.96 : 1.0)
+        .rotation3DEffect(
+            .degrees(isPressed ? 2 : 0),
+            axis: (x: 1, y: 0, z: 0)
+        )
+        .onTapGesture {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                isPressed.toggle()
+                animateValue.toggle()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
                     isPressed.toggle()
+                }
+            }
+        }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double.random(in: 0.1...0.5)) {
+                withAnimation(.spring(response: 0.8, dampingFraction: 0.6)) {
+                    animateValue = true
                 }
             }
         }
     }
 }
 
-// MARK: - Fire Suite Hero View
-struct FireSuiteHeroView: View {
+// MARK: - Status Indicator
+struct StatusIndicator: View {
+    let count: Int
+    let label: String
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 2) {
+            Text("\(count)")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundColor(color)
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundColor(.modernTextSecondary)
+        }
+    }
+}
+
+// MARK: - Fire Suite Hero View (Legacy - kept for reference)
+/* struct FireSuiteHeroView: View {
     @Binding var pulseFirepit: Bool
     @State private var seatColors: [Color] = Array(repeating: .gray.opacity(0.6), count: 8)
     @State private var animateSales = false
@@ -399,7 +538,7 @@ struct FireSuiteHeroView: View {
             }
         }
     }
-}
+} */
 
 // MARK: - Dynamic Seat View
 struct DynamicSeatView: View {
@@ -484,10 +623,11 @@ struct DynamicFirepitView: View {
 }
 
 
-// MARK: - Performance Metrics View
+// MARK: - Enhanced Performance Metrics View
 struct PerformanceMetricsView: View {
     let concerts: [Concert]
     @State private var showChart = false
+    @State private var animateBars = false
     
     var chartData: [Double] {
         let sortedConcerts = concerts.sorted { $0.date < $1.date }
@@ -509,57 +649,137 @@ struct PerformanceMetricsView: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 15) {
+        VStack(alignment: .leading, spacing: 20) {
+            // Enhanced Header
             HStack {
-                Text("Performance")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Performance Trends")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(.white)
+                    Text("Concert occupancy over time")
+                        .font(.system(size: 14))
+                        .foregroundColor(.white.opacity(0.8))
+                }
                 Spacer()
-                Image(systemName: "waveform.path.ecg")
-                    .foregroundColor(.green)
+                
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient(colors: [.white.opacity(0.2), .white.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 40, height: 40)
+                    Image(systemName: "chart.line.uptrend.xyaxis")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                }
             }
             
             if showChart {
-                // Concert performance chart
-                HStack(alignment: .bottom, spacing: 8) {
-                    ForEach(0..<12, id: \.self) { index in
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(
-                                LinearGradient(
-                                    colors: [.green, .orange],
-                                    startPoint: .bottom,
-                                    endPoint: .top
-                                )
-                            )
-                            .frame(width: 20, height: max(20, CGFloat(chartData[index])))
-                            .animation(.spring(response: 0.8, dampingFraction: 0.6).delay(Double(index) * 0.1), value: showChart)
+                // Beautiful Concert Performance Chart - Fixed overflow
+                VStack(spacing: 16) {
+                    GeometryReader { geometry in
+                        let availableWidth = geometry.size.width - 32 // Account for padding
+                        let barSpacing: CGFloat = 4
+                        let totalSpacing = barSpacing * 11 // 11 spaces between 12 bars
+                        let barWidth = max(8, (availableWidth - totalSpacing) / 12) // Minimum 8pt width
+                        
+                        HStack(alignment: .bottom, spacing: barSpacing) {
+                            ForEach(0..<12, id: \.self) { index in
+                                VStack(spacing: 6) {
+                                    // Animated bar with gradient
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .fill(
+                                            LinearGradient(
+                                                colors: chartData[index] > 75 ? 
+                                                    [Color(red: 0.1, green: 0.8, blue: 0.4), Color(red: 0.2, green: 0.9, blue: 0.5)] :
+                                                chartData[index] > 50 ?
+                                                    [Color(red: 1.0, green: 0.5, blue: 0.1), Color(red: 1.0, green: 0.7, blue: 0.2)] :
+                                                    [Color(red: 0.6, green: 0.6, blue: 0.7), Color(red: 0.7, green: 0.7, blue: 0.8)],
+                                                startPoint: .bottom,
+                                                endPoint: .top
+                                            )
+                                        )
+                                        .frame(width: barWidth, height: animateBars ? max(20, CGFloat(chartData[index] * 0.8)) : 0)
+                                        .animation(.spring(response: 0.8, dampingFraction: 0.7).delay(Double(index) * 0.08), value: animateBars)
+                                        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+                                    
+                                    // Month indicator
+                                    Text("\(index + 1)")
+                                        .font(.system(size: 9, weight: .medium))
+                                        .foregroundColor(.white.opacity(0.6))
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 16)
+                    }
+                    .frame(height: 100)
+                    
+                    // Performance indicators
+                    HStack(spacing: 20) {
+                        HStack(spacing: 6) {
+                            Circle().fill(Color(red: 0.1, green: 0.8, blue: 0.4)).frame(width: 8, height: 8)
+                            Text("75%+ Sold")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.white.opacity(0.8))
+                        }
+                        HStack(spacing: 6) {
+                            Circle().fill(Color(red: 1.0, green: 0.5, blue: 0.1)).frame(width: 8, height: 8)
+                            Text("50-75% Sold")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.white.opacity(0.8))
+                        }
+                        HStack(spacing: 6) {
+                            Circle().fill(Color(red: 0.6, green: 0.6, blue: 0.7)).frame(width: 8, height: 8)
+                            Text("<50% Sold")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.white.opacity(0.8))
+                        }
                     }
                 }
-                .padding()
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                .padding(24)
             }
         }
+        .padding(24)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(Color.cardTeal)
+                
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(
+                        LinearGradient(
+                            colors: [.white.opacity(0.05), .clear, .black.opacity(0.1)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+            .shadow(color: .black.opacity(0.15), radius: 15, x: 0, y: 8)
+        )
         .onAppear {
-            withAnimation(.easeInOut(duration: 1.0).delay(0.8)) {
+            withAnimation(.easeInOut(duration: 0.8).delay(0.3)) {
                 showChart = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                animateBars = true
             }
         }
     }
 }
 
-// MARK: - Recent Activity Feed
+// MARK: - Enhanced Recent Activity Feed
 struct RecentActivityFeed: View {
     let concerts: [Concert]
+    @State private var animateRows = false
     
-    var recentActivities: [(String, String, String, String, Color)] {
+    var recentActivities: [(String, String, String, String, LinearGradient)] {
         let sortedConcerts = concerts.sorted { $0.date > $1.date }.prefix(4)
         return sortedConcerts.map { concert in
             let timeAgo = timeAgoString(from: concert.date)
-            let emoji = concert.ticketsSold == 8 ? "🎵" : (concert.ticketsSold > 0 ? "🔥" : "🎸")
+            let icon = concert.ticketsSold == 8 ? "checkmark.seal.fill" : (concert.ticketsSold > 0 ? "ticket.fill" : "music.note")
             let subtitle = concert.ticketsSold == 8 ? "Sold out!" : "Tickets sold: \(concert.ticketsSold)/8"
-            let color: Color = concert.ticketsSold == 8 ? .green : (concert.ticketsSold > 0 ? .orange : .gray)
+            let gradient: LinearGradient = concert.ticketsSold == 8 ? Color.cardGreen : (concert.ticketsSold > 0 ? Color.cardOrange : Color.cardPink)
             
-            return (emoji, concert.artist, subtitle, timeAgo, color)
+            return (icon, concert.artist, subtitle, timeAgo, gradient)
         }
     }
     
@@ -583,87 +803,210 @@ struct RecentActivityFeed: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 15) {
+        VStack(alignment: .leading, spacing: 20) {
+            // Enhanced Header
             HStack {
-                Text("Recent Activity")
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Recent Activity")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(.white)
+                    Text("Latest concert updates")
+                        .font(.system(size: 14))
+                        .foregroundColor(.white.opacity(0.8))
+                }
                 Spacer()
-                Image(systemName: "clock.arrow.circlepath")
-                    .foregroundColor(.orange)
+                
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient(colors: [.white.opacity(0.2), .white.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 40, height: 40)
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                }
             }
             
             if recentActivities.isEmpty {
-                VStack(spacing: 10) {
-                    Image(systemName: "music.note")
-                        .font(.system(size: 30))
-                        .foregroundColor(.white.opacity(0.3))
+                VStack(spacing: 16) {
+                    ZStack {
+                        Circle()
+                            .fill(LinearGradient(colors: [.white.opacity(0.1), .white.opacity(0.05)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                            .frame(width: 80, height: 80)
+                        Image(systemName: "music.note")
+                            .font(.system(size: 32))
+                            .foregroundColor(.white.opacity(0.6))
+                    }
                     
-                    Text("No recent activity")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.white.opacity(0.6))
+                    VStack(spacing: 8) {
+                        Text("No recent activity")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.white)
+                        
+                        Text("Add a concert to get started")
+                            .font(.system(size: 14))
+                            .foregroundColor(.white.opacity(0.7))
+                    }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 20)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                .padding(.vertical, 40)
             } else {
-                VStack(spacing: 12) {
+                VStack(spacing: 16) {
                     ForEach(Array(recentActivities.enumerated()), id: \.offset) { index, activity in
-                        ActivityRow(
-                            emoji: activity.0,
+                        EnhancedActivityRow(
+                            icon: activity.0,
                             title: activity.1,
                             subtitle: activity.2,
                             time: activity.3,
-                            color: activity.4
+                            gradient: activity.4
                         )
-                        .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(Double(index) * 0.1), value: index)
+                        .opacity(animateRows ? 1.0 : 0.0)
+                        .offset(y: animateRows ? 0 : 20)
+                        .animation(.spring(response: 0.7, dampingFraction: 0.8).delay(Double(index) * 0.1), value: animateRows)
                     }
+                }
+            }
+        }
+        .padding(24)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(Color.cardPink)
+                
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(
+                        LinearGradient(
+                            colors: [.white.opacity(0.05), .clear, .black.opacity(0.1)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+            .shadow(color: .black.opacity(0.15), radius: 15, x: 0, y: 8)
+        )
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                animateRows = true
+            }
+        }
+    }
+}
+
+// MARK: - Enhanced Activity Row
+struct EnhancedActivityRow: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    let time: String
+    let gradient: LinearGradient
+    
+    @State private var isPressed = false
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            // Gradient icon background
+            ZStack {
+                Circle()
+                    .fill(LinearGradient(colors: [.white.opacity(0.3), .white.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(width: 50, height: 50)
+                    .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
+                
+                Image(systemName: icon)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(.white)
+            }
+            
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.white)
+                    .lineLimit(1)
+                
+                Text(subtitle)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.white.opacity(0.8))
+                    .lineLimit(1)
+            }
+            
+            Spacer()
+            
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(time)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white.opacity(0.7))
+                
+                Circle()
+                    .fill(.white.opacity(0.3))
+                    .frame(width: 6, height: 6)
+            }
+        }
+        .padding(18)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(LinearGradient(colors: [.white.opacity(0.1), .white.opacity(0.05)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+        )
+        .scaleEffect(isPressed ? 0.98 : 1.0)
+        .onTapGesture {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                isPressed.toggle()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    isPressed.toggle()
                 }
             }
         }
     }
 }
 
-// MARK: - Activity Row
+// MARK: - Activity Row (Legacy - keeping for compatibility)
 struct ActivityRow: View {
-    let emoji: String
+    let icon: String
     let title: String
     let subtitle: String
     let time: String
     let color: Color
     
     var body: some View {
-        HStack(spacing: 12) {
-            Text(emoji)
-                .font(.title2)
-                .frame(width: 40, height: 40)
-                .background(color.opacity(0.2))
-                .clipShape(Circle())
+        HStack(spacing: 16) {
+            Circle()
+                .fill(color.opacity(0.1))
+                .frame(width: 44, height: 44)
+                .overlay(
+                    Image(systemName: icon)
+                        .font(.system(size: 18, weight: .medium))
+                        .foregroundColor(color)
+                )
             
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
-                    .foregroundColor(.white)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.modernText)
                 
                 Text(subtitle)
-                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .font(.system(size: 14))
                     .foregroundColor(color)
             }
             
             Spacer()
             
             Text(time)
-                .font(.system(size: 12, weight: .medium, design: .rounded))
-                .foregroundColor(.white.opacity(0.6))
+                .font(.system(size: 12))
+                .foregroundColor(.modernTextSecondary)
         }
-        .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+        )
     }
 }
 
 // MARK: - Concert Management
 struct DynamicConcerts: View {
     @ObservedObject var concertManager: ConcertDataManager
+    @ObservedObject var settingsManager: SettingsManager
     @State private var showingAddConcert = false
     @State private var showingAllConcerts = false
     
@@ -676,13 +1019,13 @@ struct DynamicConcerts: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Background
+                // Consistent dark gradient background
                 LinearGradient(
                     colors: [
-                        Color.black.opacity(0.9),
-                        Color.orange.opacity(0.3),
-                        Color.red.opacity(0.2),
-                        Color.black.opacity(0.9)
+                        Color(red: 0.1, green: 0.1, blue: 0.15),
+                        Color(red: 0.15, green: 0.12, blue: 0.2),
+                        Color(red: 0.12, green: 0.1, blue: 0.18),
+                        Color(red: 0.08, green: 0.08, blue: 0.16)
                     ],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
@@ -690,9 +1033,22 @@ struct DynamicConcerts: View {
                 .ignoresSafeArea()
                 
                 ScrollView {
-                    VStack(spacing: 25) {
+                    VStack(spacing: 24) {
+                        // Header
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Concerts")
+                                .font(.system(size: 34, weight: .bold, design: .rounded))
+                                .foregroundColor(.modernText)
+                            
+                            Text("Manage upcoming performances")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.modernTextSecondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 20)
+                        
                         // Action Buttons
-                        HStack(spacing: 15) {
+                        HStack(spacing: 12) {
                             Button(action: {
                                 showingAddConcert = true
                             }) {
@@ -703,15 +1059,11 @@ struct DynamicConcerts: View {
                                 }
                                 .foregroundColor(.white)
                                 .frame(maxWidth: .infinity)
-                                .padding()
+                                .padding(.vertical, 16)
                                 .background(
-                                    LinearGradient(
-                                        colors: [.orange, .red],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .fill(Color.modernAccent)
                                 )
-                                .cornerRadius(12)
                             }
                             
                             Button(action: {
@@ -722,50 +1074,53 @@ struct DynamicConcerts: View {
                                     Text("View All")
                                         .font(.system(size: 16, weight: .semibold))
                                 }
-                                .foregroundColor(.white)
+                                .foregroundColor(.modernAccent)
                                 .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(.ultraThinMaterial)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .stroke(Color.white.opacity(0.3), lineWidth: 1)
+                                .padding(.vertical, 16)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .stroke(Color.modernAccent, lineWidth: 2)
                                 )
-                                .cornerRadius(12)
                             }
                         }
                         
                         // Section Header
                         HStack {
                             Text("Next 2 Weeks")
-                                .font(.system(size: 20, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundColor(.modernText)
                             Spacer()
                             Text("\(upcomingConcerts.count) concerts")
                                 .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.white.opacity(0.7))
+                                .foregroundColor(.modernTextSecondary)
                         }
                         
                         // Upcoming Concerts
                         if upcomingConcerts.isEmpty {
-                            VStack(spacing: 15) {
+                            VStack(spacing: 16) {
                                 Image(systemName: "calendar.badge.exclamationmark")
                                     .font(.system(size: 50))
-                                    .foregroundColor(.white.opacity(0.3))
+                                    .foregroundColor(.modernTextSecondary.opacity(0.3))
                                 
                                 Text("No concerts in the next 2 weeks")
                                     .font(.system(size: 18, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.6))
+                                    .foregroundColor(.modernTextSecondary)
                                 
                                 Text("Add a concert to get started")
                                     .font(.system(size: 14))
-                                    .foregroundColor(.white.opacity(0.4))
+                                    .foregroundColor(.modernTextSecondary.opacity(0.8))
                             }
                             .frame(maxWidth: .infinity)
-                            .padding(.vertical, 40)
+                            .padding(.vertical, 60)
+                            .background(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(Color.white)
+                                    .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
+                            )
                         } else {
-                            LazyVStack(spacing: 15) {
+                            LazyVStack(spacing: 12) {
                                 ForEach(upcomingConcerts) { concert in
-                                    NavigationLink(destination: ConcertDetailView(concert: concert, concertManager: concertManager)) {
+                                    NavigationLink(destination: ConcertDetailView(concert: concert, concertManager: concertManager, settingsManager: settingsManager)) {
                                         ConcertRowView(concert: concert)
                                     }
                                     .buttonStyle(PlainButtonStyle())
@@ -773,21 +1128,10 @@ struct DynamicConcerts: View {
                             }
                         }
                     }
-                    .padding()
+                    .padding(.horizontal)
                 }
             }
-            .navigationTitle("Concerts")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        showingAddConcert = true
-                    }) {
-                        Image(systemName: "plus")
-                            .foregroundColor(.orange)
-                    }
-                }
-            }
+            .navigationBarHidden(true)
             .sheet(isPresented: $showingAddConcert) {
                 AddConcertView { newConcert in
                     concertManager.addConcert(newConcert)
@@ -823,16 +1167,27 @@ enum SeatStatus: String, Codable, CaseIterable {
     }
 }
 
+// MARK: - Ticket Source Enum
+enum TicketSource: String, Codable, CaseIterable {
+    case family = "Family"
+    case facebook = "Facebook"
+    case stubhub = "Stubhub"
+    case axs = "AXS"
+    case other = "Other"
+}
+
 // MARK: - Seat Model
 struct Seat: Codable {
     var status: SeatStatus
     var price: Double?
     var note: String? // For reserved seats - max 5 words
+    var source: TicketSource? // For sold seats - ticket source
     
-    init(status: SeatStatus = .available, price: Double? = nil, note: String? = nil) {
+    init(status: SeatStatus = .available, price: Double? = nil, note: String? = nil, source: TicketSource? = nil) {
         self.status = status
         self.price = price
         self.note = note
+        self.source = source
     }
 }
 
@@ -916,49 +1271,54 @@ class ConcertDataManager: ObservableObject {
 struct ConcertRowView: View {
     let concert: Concert
     
+    var statusColor: Color {
+        concert.ticketsSold == 8 ? .modernSuccess : (concert.ticketsSold > 0 ? .modernWarning : .modernTextSecondary)
+    }
+    
     var body: some View {
-        HStack(spacing: 15) {
+        HStack(spacing: 16) {
             // Concert Icon
-            ZStack {
-                Circle()
-                    .fill(LinearGradient(colors: [.orange, .red], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 50, height: 50)
-                
-                Image(systemName: "music.note")
-                    .font(.title2)
-                    .foregroundColor(.white)
-            }
+            Circle()
+                .fill(statusColor.opacity(0.1))
+                .frame(width: 52, height: 52)
+                .overlay(
+                    Image(systemName: "music.note")
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundColor(statusColor)
+                )
             
             // Concert Info
             VStack(alignment: .leading, spacing: 4) {
                 Text(concert.artist)
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.modernText)
                 
                 Text(concert.date, style: .date)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white.opacity(0.7))
+                    .font(.system(size: 14))
+                    .foregroundColor(.modernTextSecondary)
                 
-                Text("\(concert.ticketsSold)/8 tickets sold")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(concert.ticketsSold == 8 ? .green : .orange)
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(statusColor)
+                        .frame(width: 6, height: 6)
+                    Text("\(concert.ticketsSold)/8 tickets sold")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(statusColor)
+                }
             }
             
             Spacer()
             
-            // Status indicator
-            Circle()
-                .fill(concert.ticketsSold == 8 ? .green : (concert.ticketsSold > 0 ? .orange : .gray))
-                .frame(width: 12, height: 12)
+            // Chevron
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.modernTextSecondary)
         }
-        .padding()
+        .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                )
+                .fill(Color.white)
+                .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
         )
     }
 }
@@ -974,77 +1334,112 @@ struct AddConcertView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                Color.black.ignoresSafeArea()
+                // Consistent dark gradient background
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.1, green: 0.1, blue: 0.15),
+                        Color(red: 0.15, green: 0.12, blue: 0.2),
+                        Color(red: 0.12, green: 0.1, blue: 0.18),
+                        Color(red: 0.08, green: 0.08, blue: 0.16)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
                 
-                VStack(spacing: 25) {
-                    // Artist field
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Artist")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
+                VStack(spacing: 24) {
+                    // Header
+                    VStack(spacing: 8) {
+                        Text("Add Concert")
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundColor(.modernText)
                         
-                        TextField("Enter artist name", text: $artist)
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
+                        Text("Schedule a new performance")
                             .font(.system(size: 16))
+                            .foregroundColor(.modernTextSecondary)
                     }
+                    .padding(.top, 20)
                     
-                    // Date field
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Concert Date")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
-                        
-                        DatePicker("Select date", selection: $selectedDate, displayedComponents: .date)
-                            .datePickerStyle(GraphicalDatePickerStyle())
-                            .accentColor(.orange)
-                            .colorScheme(.dark)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .fill(Color.gray.opacity(0.2))
-                            )
+                    // Form Card
+                    VStack(spacing: 24) {
+                        // Artist field
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Artist Name")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.modernTextSecondary)
+                            
+                            TextField("Enter artist name", text: $artist)
+                                .font(.system(size: 16))
+                                .padding(16)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(Color.modernSecondary)
+                                )
+                        }
+                    
+                        // Date field
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Concert Date")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.modernTextSecondary)
+                            
+                            DatePicker("Select date", selection: $selectedDate, displayedComponents: .date)
+                                .datePickerStyle(CompactDatePickerStyle())
+                                .accentColor(.modernAccent)
+                                .padding(12)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(Color.modernSecondary)
+                                )
+                        }
                     }
+                    .padding(24)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(Color.white)
+                            .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
+                    )
                     
                     Spacer()
                     
-                    // Save button
-                    Button(action: {
-                        let newConcert = Concert(
-                            id: Int.random(in: 1000...9999),
-                            artist: artist,
-                            date: selectedDate
-                        )
-                        onSave(newConcert)
-                        dismiss()
-                    }) {
-                        Text("Add Concert")
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(
-                                LinearGradient(
-                                    colors: [.orange, .red],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
+                    // Action Buttons
+                    VStack(spacing: 12) {
+                        Button(action: {
+                            let newConcert = Concert(
+                                id: Int.random(in: 1000...9999),
+                                artist: artist,
+                                date: selectedDate
                             )
-                            .cornerRadius(12)
+                            onSave(newConcert)
+                            dismiss()
+                        }) {
+                            Text("Add Concert")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .fill(Color.modernAccent)
+                                )
+                        }
+                        .disabled(artist.isEmpty)
+                        .opacity(artist.isEmpty ? 0.6 : 1.0)
+                        
+                        Button(action: {
+                            dismiss()
+                        }) {
+                            Text("Cancel")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.modernTextSecondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                        }
                     }
-                    .disabled(artist.isEmpty)
-                    .opacity(artist.isEmpty ? 0.6 : 1.0)
                 }
-                .padding()
+                .padding(.horizontal)
             }
-            .navigationTitle("Add Concert")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .foregroundColor(.orange)
-                }
-            }
+            .navigationBarHidden(true)
         }
     }
 }
@@ -1062,21 +1457,32 @@ struct AllConcertsView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                Color.black.ignoresSafeArea()
+                // Consistent dark gradient background
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.1, green: 0.1, blue: 0.15),
+                        Color(red: 0.15, green: 0.12, blue: 0.2),
+                        Color(red: 0.12, green: 0.1, blue: 0.18),
+                        Color(red: 0.08, green: 0.08, blue: 0.16)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
                 
                 if concertManager.concerts.isEmpty {
                     VStack(spacing: 20) {
                         Image(systemName: "music.note.house")
                             .font(.system(size: 60))
-                            .foregroundColor(.white.opacity(0.3))
+                            .foregroundColor(.modernTextSecondary.opacity(0.3))
                         
                         Text("No Concerts Yet")
                             .font(.system(size: 24, weight: .bold))
-                            .foregroundColor(.white)
+                            .foregroundColor(.modernText)
                         
                         Text("Add your first concert to get started")
                             .font(.system(size: 16))
-                            .foregroundColor(.white.opacity(0.6))
+                            .foregroundColor(.modernTextSecondary)
                         
                         Button(action: {
                             showingAddConcert = true
@@ -1087,50 +1493,66 @@ struct AllConcertsView: View {
                                     .font(.system(size: 16, weight: .semibold))
                             }
                             .foregroundColor(.white)
-                            .padding()
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 16)
                             .background(
-                                LinearGradient(
-                                    colors: [.orange, .red],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(Color.modernAccent)
                             )
-                            .cornerRadius(12)
                         }
                     }
                 } else {
                     ScrollView {
-                        LazyVStack(spacing: 15) {
-                            ForEach(sortedConcerts) { concert in
-                                NavigationLink(destination: ConcertDetailView(concert: concert, concertManager: concertManager)) {
-                                    ConcertRowView(concert: concert)
+                        VStack(spacing: 24) {
+                            // Header
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("All Concerts")
+                                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                                    .foregroundColor(.modernText)
+                                
+                                Text("\(sortedConcerts.count) total concerts")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.modernTextSecondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 20)
+                            
+                            LazyVStack(spacing: 12) {
+                                ForEach(sortedConcerts) { concert in
+                                    NavigationLink(destination: ConcertDetailView(concert: concert, concertManager: concertManager, settingsManager: SettingsManager())) {
+                                        ConcertRowView(concert: concert)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
                                 }
-                                .buttonStyle(PlainButtonStyle())
                             }
                         }
-                        .padding()
+                        .padding(.horizontal)
                     }
                 }
             }
-            .navigationTitle("All Concerts")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+            .navigationBarHidden(true)
+            .overlay(
+                HStack {
                     Button("Done") {
                         dismiss()
                     }
-                    .foregroundColor(.orange)
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.modernAccent)
+                    
+                    Spacer()
+                    
                     Button(action: {
                         showingAddConcert = true
                     }) {
-                        Image(systemName: "plus")
-                            .foregroundColor(.orange)
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.modernAccent)
                     }
                 }
-            }
+                .padding()
+                .padding(.top, 44)
+                , alignment: .top
+            )
             .sheet(isPresented: $showingAddConcert) {
                 AddConcertView { newConcert in
                     concertManager.addConcert(newConcert)
@@ -1144,17 +1566,19 @@ struct AllConcertsView: View {
 struct ConcertDetailView: View {
     @State var concert: Concert
     @ObservedObject var concertManager: ConcertDataManager
+    @ObservedObject var settingsManager: SettingsManager
     @State private var showingAllConcerts = false
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         ZStack {
-            // Background
+            // Consistent dark gradient background
             LinearGradient(
                 colors: [
-                    Color.black.opacity(0.9),
-                    Color.orange.opacity(0.3),
-                    Color.red.opacity(0.2),
-                    Color.black.opacity(0.9)
+                    Color(red: 0.1, green: 0.1, blue: 0.15),
+                    Color(red: 0.15, green: 0.12, blue: 0.2),
+                    Color(red: 0.12, green: 0.1, blue: 0.18),
+                    Color(red: 0.08, green: 0.08, blue: 0.16)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -1162,44 +1586,67 @@ struct ConcertDetailView: View {
             .ignoresSafeArea()
             
             ScrollView {
-                VStack(spacing: 30) {
-                    // Concert Header
-                    VStack(spacing: 10) {
-                        Text(concert.artist)
-                            .font(.system(size: 32, weight: .heavy, design: .rounded))
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [.orange, .red, .yellow],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
+                VStack(spacing: 24) {
+                    // Navigation Header
+                    HStack {
+                        Button(action: {
+                            dismiss()
+                        }) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "chevron.left")
+                                    .font(.system(size: 16, weight: .semibold))
+                                Text("Back")
+                                    .font(.system(size: 16, weight: .medium))
+                            }
+                            .foregroundColor(.modernAccent)
+                        }
                         
-                        Text(concert.date, style: .date)
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.white.opacity(0.8))
+                        Spacer()
                         
-                        Text("\(concert.ticketsSold)/8 tickets sold")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(concert.ticketsSold == 8 ? .green : .orange)
+                        Button("Concert List") {
+                            showingAllConcerts = true
+                        }
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.modernAccent)
                     }
+                    .padding(.top, 20)
+                    
+                    // Concert Header Card
+                    VStack(spacing: 16) {
+                        Text(concert.artist)
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundColor(.modernText)
+                        
+                        VStack(spacing: 8) {
+                            Text(concert.date, style: .date)
+                                .font(.system(size: 16))
+                                .foregroundColor(.modernTextSecondary)
+                            
+                            HStack {
+                                Circle()
+                                    .fill(concert.ticketsSold == 8 ? Color.modernSuccess : Color.modernWarning)
+                                    .frame(width: 8, height: 8)
+                                Text("\(concert.ticketsSold)/8 tickets sold")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(concert.ticketsSold == 8 ? .modernSuccess : .modernWarning)
+                            }
+                        }
+                    }
+                    .padding(24)
+                    .frame(maxWidth: .infinity)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(Color.white)
+                            .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
+                    )
                     
                     // Interactive Fire Suite Layout for seat selection
-                    InteractiveFireSuiteView(concert: $concert, concertManager: concertManager)
+                    InteractiveFireSuiteView(concert: $concert, concertManager: concertManager, settingsManager: settingsManager)
                 }
-                .padding()
+                .padding(.horizontal)
             }
         }
-        .navigationTitle("")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button("Concert List") {
-                    showingAllConcerts = true
-                }
-                .foregroundColor(.orange)
-            }
-        }
+        .navigationBarHidden(true)
         .sheet(isPresented: $showingAllConcerts) {
             AllConcertsView(concertManager: concertManager)
         }
@@ -1210,6 +1657,7 @@ struct ConcertDetailView: View {
 struct InteractiveFireSuiteView: View {
     @Binding var concert: Concert
     @ObservedObject var concertManager: ConcertDataManager
+    @ObservedObject var settingsManager: SettingsManager
     @State private var pulseFirepit = false
     @State private var showingSeatOptions = false
     @State private var selectedSeatIndex: Int?
@@ -1218,15 +1666,14 @@ struct InteractiveFireSuiteView: View {
     var body: some View {
         VStack(spacing: 20) {
             // Title
-            VStack(spacing: 5) {
-                Text("FIRE SUITE SEATING")
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundColor(.white)
-                    .tracking(1)
+            VStack(spacing: 8) {
+                Text("\(settingsManager.suiteName) Seating")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(.modernText)
                 
-                Text("Tap seats to purchase/refund tickets")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.white.opacity(0.6))
+                Text("Tap seats to manage tickets")
+                    .font(.system(size: 14))
+                    .foregroundColor(.modernTextSecondary)
             }
             
             // 3D-like Fire Suite Layout
@@ -1324,6 +1771,7 @@ struct InteractiveFireSuiteView: View {
                     }
                 }
                 .padding()
+                .offset(y: -36)
             }
             
             // Revenue display
@@ -1436,6 +1884,13 @@ struct InteractiveSeatView: View {
                     Text(seat.price != nil ? "$\(Int(seat.price!))" : "SOLD")
                         .font(.system(size: 8, weight: .medium, design: .monospaced))
                         .foregroundColor(seat.status.color)
+                    
+                    if let source = seat.source {
+                        Text(source.rawValue)
+                            .font(.system(size: 6, weight: .medium, design: .monospaced))
+                            .foregroundColor(seat.status.color.opacity(0.8))
+                            .lineLimit(1)
+                    }
                 } else if seat.status == .reserved && seat.note != nil {
                     Text(seat.note!)
                         .font(.system(size: 6, weight: .medium, design: .monospaced))
@@ -1463,6 +1918,7 @@ struct SeatOptionsView: View {
     @State private var selectedStatus: SeatStatus
     @State private var priceInput: String
     @State private var noteInput: String
+    @State private var selectedSource: TicketSource
     
     init(seatNumber: Int, seat: Seat, onUpdate: @escaping (Seat) -> Void) {
         self.seatNumber = seatNumber
@@ -1471,170 +1927,256 @@ struct SeatOptionsView: View {
         self._selectedStatus = State(initialValue: seat.status)
         self._priceInput = State(initialValue: String(seat.price ?? 25.0))
         self._noteInput = State(initialValue: seat.note ?? "")
+        self._selectedSource = State(initialValue: seat.source ?? .family)
     }
     
     var body: some View {
         NavigationView {
             ZStack {
-                Color.black.ignoresSafeArea()
+                // Consistent dark gradient background
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.1, green: 0.1, blue: 0.15),
+                        Color(red: 0.15, green: 0.12, blue: 0.2),
+                        Color(red: 0.12, green: 0.1, blue: 0.18),
+                        Color(red: 0.08, green: 0.08, blue: 0.16)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
                 
-                VStack(spacing: 25) {
-                    // Seat info
-                    VStack(spacing: 10) {
-                        Text("Seat \(seatNumber)")
-                            .font(.system(size: 24, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
-                        
-                        Text("Current Status: \(seat.status.rawValue.capitalized)")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(seat.status.color)
-                    }
-                    
-                    // Status selection
-                    VStack(alignment: .leading, spacing: 15) {
-                        Text("Set Status")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.white)
-                        
-                        ForEach(SeatStatus.allCases, id: \.self) { status in
-                            Button(action: {
-                                selectedStatus = status
-                            }) {
-                                HStack {
-                                    Circle()
-                                        .fill(status.color)
-                                        .frame(width: 20, height: 20)
-                                    
-                                    Text(status.rawValue.capitalized)
-                                        .font(.system(size: 16, weight: .medium))
-                                        .foregroundColor(.white)
-                                    
-                                    Spacer()
-                                    
-                                    if selectedStatus == status {
-                                        Image(systemName: "checkmark")
-                                            .foregroundColor(status.color)
-                                    }
-                                }
-                                .padding()
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(selectedStatus == status ? status.color.opacity(0.2) : Color.gray.opacity(0.1))
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .stroke(selectedStatus == status ? status.color : Color.gray.opacity(0.3), lineWidth: 1)
-                                        )
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Header
+                        VStack(spacing: 16) {
+                            Circle()
+                                .fill(seat.status.color.opacity(0.1))
+                                .frame(width: 80, height: 80)
+                                .overlay(
+                                    Text("\(seatNumber)")
+                                        .font(.system(size: 32, weight: .bold))
+                                        .foregroundColor(seat.status.color)
                                 )
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                        }
-                    }
-                    
-                    // Price input (only for sold status)
-                    if selectedStatus == .sold {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Sale Price")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(.white)
+                            
+                            Text("Seat \(seatNumber)")
+                                .font(.system(size: 24, weight: .bold))
+                                .foregroundColor(.modernText)
                             
                             HStack {
-                                Text("$")
-                                    .font(.system(size: 18, weight: .bold))
-                                    .foregroundColor(.white)
-                                
-                                TextField("25.00", text: $priceInput)
-                                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                                Circle()
+                                    .fill(seat.status.color)
+                                    .frame(width: 8, height: 8)
+                                Text(seat.status.rawValue.capitalized)
                                     .font(.system(size: 16))
-                                    .keyboardType(.decimalPad)
+                                    .foregroundColor(seat.status.color)
                             }
                         }
-                    }
+                        .padding(.top, 20)
                     
-                    // Note input (only for reserved status)
-                    if selectedStatus == .reserved {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Reservation Note")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(.white)
+                        // Status selection
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("Seat Status")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundColor(.modernText)
                             
-                            Text("(Max 5 words)")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.white.opacity(0.6))
-                            
-                            TextField("Enter note...", text: $noteInput)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .font(.system(size: 16))
-                                .onChange(of: noteInput) { _, newValue in
-                                    let words = newValue.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
-                                    if words.count > 5 {
-                                        noteInput = words.prefix(5).joined(separator: " ")
+                            VStack(spacing: 12) {
+                                ForEach(SeatStatus.allCases, id: \.self) { status in
+                                    Button(action: {
+                                        selectedStatus = status
+                                    }) {
+                                        HStack(spacing: 16) {
+                                            Circle()
+                                                .fill(status.color.opacity(0.1))
+                                                .frame(width: 40, height: 40)
+                                                .overlay(
+                                                    Circle()
+                                                        .fill(status.color)
+                                                        .frame(width: 16, height: 16)
+                                                )
+                                            
+                                            Text(status.rawValue.capitalized)
+                                                .font(.system(size: 16, weight: .medium))
+                                                .foregroundColor(.modernText)
+                                            
+                                            Spacer()
+                                            
+                                            if selectedStatus == status {
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .font(.system(size: 20))
+                                                    .foregroundColor(status.color)
+                                            }
+                                        }
+                                        .padding(16)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 16)
+                                                .fill(selectedStatus == status ? status.color.opacity(0.1) : Color.white)
+                                                .shadow(color: Color.black.opacity(selectedStatus == status ? 0.08 : 0.04), radius: 8, x: 0, y: 2)
+                                        )
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                }
+                            }
+                        }
+                    
+                        // Price and Source input (only for sold status)
+                        if selectedStatus == .sold {
+                            VStack(spacing: 20) {
+                                // Price input
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Sale Price")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.modernTextSecondary)
+                                    
+                                    HStack {
+                                        Text("$")
+                                            .font(.system(size: 18, weight: .bold))
+                                            .foregroundColor(.modernText)
+                                        
+                                        TextField("25.00", text: $priceInput)
+                                            .font(.system(size: 16))
+                                            .padding(16)
+                                            .padding(.leading, -10)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .fill(Color.white)
+                                                    .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+                                            )
+                                            .keyboardType(.decimalPad)
                                     }
                                 }
+                            
+                                // Source dropdown
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Ticket Source")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.modernTextSecondary)
+                                    
+                                    Menu {
+                                        ForEach(TicketSource.allCases, id: \.self) { source in
+                                            Button(source.rawValue) {
+                                                selectedSource = source
+                                            }
+                                        }
+                                    } label: {
+                                        HStack {
+                                            Text(selectedSource.rawValue)
+                                                .font(.system(size: 16))
+                                                .foregroundColor(.modernText)
+                                            Spacer()
+                                            Image(systemName: "chevron.down")
+                                                .font(.system(size: 14))
+                                                .foregroundColor(.modernTextSecondary)
+                                        }
+                                        .padding(16)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .fill(Color.white)
+                                                .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    
+                        // Note input (only for reserved status)
+                        if selectedStatus == .reserved {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Reservation Note")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.modernTextSecondary)
+                                
+                                Text("Maximum 5 words")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.modernTextSecondary.opacity(0.8))
+                                
+                                TextField("Enter note...", text: $noteInput)
+                                    .font(.system(size: 16))
+                                    .padding(16)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(Color.white)
+                                            .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+                                    )
+                                    .onChange(of: noteInput) { _, newValue in
+                                        let words = newValue.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+                                        if words.count > 5 {
+                                            noteInput = words.prefix(5).joined(separator: " ")
+                                        }
+                                    }
+                            }
+                        }
+                    
+                        Spacer()
+                        
+                        // Action buttons
+                        VStack(spacing: 12) {
+                            Button("Update Seat") {
+                                var updatedSeat = seat
+                                updatedSeat.status = selectedStatus
+                                
+                                if selectedStatus == .sold {
+                                    updatedSeat.price = Double(priceInput) ?? 25.0
+                                    updatedSeat.note = nil
+                                    updatedSeat.source = selectedSource
+                                    // Play ding sound effect
+                                    playDingSound()
+                                } else if selectedStatus == .reserved {
+                                    updatedSeat.price = nil
+                                    updatedSeat.note = noteInput.isEmpty ? nil : noteInput
+                                    updatedSeat.source = nil
+                                } else {
+                                    updatedSeat.price = nil
+                                    updatedSeat.note = nil
+                                    updatedSeat.source = nil
+                                }
+                                
+                                onUpdate(updatedSeat)
+                                dismiss()
+                            }
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(selectedStatus.color)
+                            )
+                            
+                            Button("Cancel") {
+                                dismiss()
+                            }
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.modernTextSecondary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
                         }
                     }
-                    
+                    .padding(.horizontal)
+                }
+            }
+            .navigationBarHidden(true)
+            .overlay(
+                HStack {
                     Spacer()
-                    
-                    // Action buttons
-                    HStack(spacing: 15) {
-                        Button("Cancel") {
-                            dismiss()
-                        }
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.gray)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                        )
-                        
-                        Button("Update Seat") {
-                            var updatedSeat = seat
-                            updatedSeat.status = selectedStatus
-                            
-                            if selectedStatus == .sold {
-                                updatedSeat.price = Double(priceInput) ?? 25.0
-                                updatedSeat.note = nil
-                                // Play ding sound effect
-                                playDingSound()
-                            } else if selectedStatus == .reserved {
-                                updatedSeat.price = nil
-                                updatedSeat.note = noteInput.isEmpty ? nil : noteInput
-                            } else {
-                                updatedSeat.price = nil
-                                updatedSeat.note = nil
-                            }
-                            
-                            onUpdate(updatedSeat)
-                            dismiss()
-                        }
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(
-                            LinearGradient(
-                                colors: [selectedStatus.color, selectedStatus.color.opacity(0.8)],
-                                startPoint: .leading,
-                                endPoint: .trailing
+                    Button(action: {
+                        dismiss()
+                    }) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.modernTextSecondary)
+                            .frame(width: 32, height: 32)
+                            .background(
+                                Circle()
+                                    .fill(Color.white)
+                                    .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
                             )
-                        )
-                        .cornerRadius(12)
                     }
                 }
                 .padding()
-            }
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .foregroundColor(.orange)
-                }
-            }
+                .padding(.top, 44)
+                , alignment: .topTrailing
+            )
         }
     }
     
@@ -1647,12 +2189,36 @@ struct DynamicAnalytics: View {
     var body: some View {
         NavigationView {
             ZStack {
-                Color.black.ignoresSafeArea()
-                Text("📊 Analytics Coming Soon")
-                    .font(.title)
-                    .foregroundColor(.white)
+                // Consistent dark gradient background
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.1, green: 0.1, blue: 0.15),
+                        Color(red: 0.15, green: 0.12, blue: 0.2),
+                        Color(red: 0.12, green: 0.1, blue: 0.18),
+                        Color(red: 0.08, green: 0.08, blue: 0.16)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+                
+                VStack(spacing: 40) {
+                    VStack(spacing: 8) {
+                        Image(systemName: "chart.line.uptrend.xyaxis")
+                            .font(.system(size: 60))
+                            .foregroundColor(.modernAccent)
+                        
+                        Text("Analytics Coming Soon")
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundColor(.modernText)
+                        
+                        Text("Performance insights and trends")
+                            .font(.system(size: 16))
+                            .foregroundColor(.modernTextSecondary)
+                    }
+                }
             }
-            .navigationTitle("Analytics")
+            .navigationBarHidden(true)
         }
     }
 }
@@ -1667,6 +2233,163 @@ struct DynamicPortfolio: View {
                     .foregroundColor(.white)
             }
             .navigationTitle("Portfolio")
+        }
+    }
+}
+
+// MARK: - Settings View
+struct SettingsView: View {
+    @ObservedObject var settingsManager: SettingsManager
+    @State private var tempSuiteName: String = ""
+    @State private var tempVenueLocation: String = ""
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                // Consistent dark gradient background
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.1, green: 0.1, blue: 0.15),
+                        Color(red: 0.15, green: 0.12, blue: 0.2),
+                        Color(red: 0.12, green: 0.1, blue: 0.18),
+                        Color(red: 0.08, green: 0.08, blue: 0.16)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Header
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Settings")
+                                .font(.system(size: 34, weight: .bold, design: .rounded))
+                                .foregroundColor(.modernText)
+                            
+                            Text("Customize your suite experience")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.modernTextSecondary)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 20)
+                        
+                        // Suite Customization Section
+                        VStack(alignment: .leading, spacing: 20) {
+                            Text("Suite Information")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundColor(.modernText)
+                            
+                            VStack(spacing: 20) {
+                                // Suite Name
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Suite Name")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.modernTextSecondary)
+                                    
+                                    TextField("Enter suite name", text: $tempSuiteName)
+                                        .font(.system(size: 16))
+                                        .padding(16)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .fill(Color.white)
+                                                .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+                                        )
+                                        .onSubmit {
+                                            settingsManager.suiteName = tempSuiteName
+                                        }
+                                }
+                                
+                                // Venue Location
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Venue Location")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.modernTextSecondary)
+                                    
+                                    TextField("Enter venue location", text: $tempVenueLocation)
+                                        .font(.system(size: 16))
+                                        .padding(16)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .fill(Color.white)
+                                                .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+                                        )
+                                        .onSubmit {
+                                            settingsManager.venueLocation = tempVenueLocation
+                                        }
+                                }
+                            }
+                            .padding(20)
+                            .background(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(Color.white)
+                                    .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
+                            )
+                        }
+                        
+                        // Save Button
+                        Button(action: {
+                            settingsManager.suiteName = tempSuiteName
+                            settingsManager.venueLocation = tempVenueLocation
+                        }) {
+                            Text("Save Changes")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .fill(Color.modernAccent)
+                                )
+                        }
+                        
+                        // About Section
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("About")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundColor(.modernText)
+                            
+                            VStack(alignment: .leading, spacing: 12) {
+                                HStack {
+                                    Text("Version")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.modernTextSecondary)
+                                    Spacer()
+                                    Text("1.0.0")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.modernText)
+                                }
+                                
+                                Divider()
+                                
+                                HStack {
+                                    Text("Developer")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.modernTextSecondary)
+                                    Spacer()
+                                    Text("Mike Myers")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.modernText)
+                                }
+                            }
+                            .padding(20)
+                            .background(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(Color.white)
+                                    .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
+                            )
+                        }
+                        
+                        Spacer(minLength: 100)
+                    }
+                    .padding(.horizontal)
+                }
+            }
+            .navigationBarHidden(true)
+            .onAppear {
+                tempSuiteName = settingsManager.suiteName
+                tempVenueLocation = settingsManager.venueLocation
+            }
         }
     }
 }
