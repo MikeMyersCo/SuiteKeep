@@ -663,13 +663,13 @@ struct StatusIndicator: View {
                             endPoint: .bottom
                         )
                     )
-                    .frame(width: 350, height: 160)
+                    .frame(width: 420, height: 250)
                     .overlay(
                         RoundedRectangle(cornerRadius: 20)
                             .stroke(Color.white.opacity(0.2), lineWidth: 1)
                     )
                 
-                VStack(spacing: 18) {
+                VStack(spacing: 25) {
                     // Stage
                     HStack {
                         Spacer()
@@ -690,7 +690,7 @@ struct StatusIndicator: View {
                         // Top section with side seats and firepit
                         HStack(spacing: 40) {
                             // Left side: Seats 8 (top) and 7 (bottom)
-                            VStack(spacing: 15) {
+                            VStack(spacing: 25) {
                                 DynamicSeatView(
                                     seatNumber: 8,
                                     color: seatColors[7],
@@ -707,7 +707,7 @@ struct StatusIndicator: View {
                             DynamicFirepitView(isPulsing: pulseFirepit)
                             
                             // Right side: Seats 1 (top) and 2 (bottom)
-                            VStack(spacing: 15) {
+                            VStack(spacing: 25) {
                                 DynamicSeatView(
                                     seatNumber: 1,
                                     color: seatColors[0],
@@ -722,7 +722,7 @@ struct StatusIndicator: View {
                         }
                         
                         // Bottom row: Seats 3, 4, 5, 6 in line
-                        HStack(spacing: 20) {
+                        HStack(spacing: 30) {
                             DynamicSeatView(
                                 seatNumber: 3,
                                 color: seatColors[2],
@@ -2048,13 +2048,13 @@ struct InteractiveFireSuiteView: View {
                             endPoint: .bottom
                         )
                     )
-                    .frame(width: 350, height: 160)
+                    .frame(width: 420, height: 250)
                     .overlay(
                         RoundedRectangle(cornerRadius: 20)
                             .stroke(Color.white.opacity(0.2), lineWidth: 1)
                     )
                 
-                VStack(spacing: 18) {
+                VStack(spacing: 25) {
                     // Stage
                     HStack {
                         Spacer()
@@ -2073,9 +2073,9 @@ struct InteractiveFireSuiteView: View {
                     // Fire Suite Layout
                     VStack(spacing: 8) {
                         // Top section with side seats and firepit
-                        HStack(spacing: 40) {
-                            // Left side: Seats 8 (top) and 7 (bottom)
-                            VStack(spacing: 15) {
+                        HStack {
+                            // Left side: Seats 8 (top) and 7 (bottom) - aligned with seat 6
+                            VStack(spacing: 25) {
                                 InteractiveSeatView(
                                     seatNumber: 8,
                                     seat: concert.seats[7],
@@ -2087,12 +2087,17 @@ struct InteractiveFireSuiteView: View {
                                     onTap: { selectSeat(6) }
                                 )
                             }
+                            .frame(width: 50) // Fixed width to align with seat 6 position
+                            
+                            Spacer()
                             
                             // Center Firepit
                             DynamicFirepitView(isPulsing: pulseFirepit)
                             
-                            // Right side: Seats 1 (top) and 2 (bottom)
-                            VStack(spacing: 15) {
+                            Spacer()
+                            
+                            // Right side: Seats 1 (top) and 2 (bottom) - aligned with seat 3
+                            VStack(spacing: 25) {
                                 InteractiveSeatView(
                                     seatNumber: 1,
                                     seat: concert.seats[0],
@@ -2104,19 +2109,15 @@ struct InteractiveFireSuiteView: View {
                                     onTap: { selectSeat(1) }
                                 )
                             }
+                            .frame(width: 50) // Fixed width to align with seat 3 position
                         }
                         
                         // Bottom row: Seats 3, 4, 5, 6 in line
-                        HStack(spacing: 20) {
+                        HStack(spacing: 30) {
                             InteractiveSeatView(
-                                seatNumber: 3,
-                                seat: concert.seats[2],
-                                onTap: { selectSeat(2) }
-                            )
-                            InteractiveSeatView(
-                                seatNumber: 4,
-                                seat: concert.seats[3],
-                                onTap: { selectSeat(3) }
+                                seatNumber: 6,
+                                seat: concert.seats[5],
+                                onTap: { selectSeat(5) }
                             )
                             InteractiveSeatView(
                                 seatNumber: 5,
@@ -2124,9 +2125,14 @@ struct InteractiveFireSuiteView: View {
                                 onTap: { selectSeat(4) }
                             )
                             InteractiveSeatView(
-                                seatNumber: 6,
-                                seat: concert.seats[5],
-                                onTap: { selectSeat(5) }
+                                seatNumber: 4,
+                                seat: concert.seats[3],
+                                onTap: { selectSeat(3) }
+                            )
+                            InteractiveSeatView(
+                                seatNumber: 3,
+                                seat: concert.seats[2],
+                                onTap: { selectSeat(2) }
                             )
                         }
                     }
@@ -2204,7 +2210,7 @@ struct InteractiveSeatView: View {
     }
     
     var body: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: 4) {
             Button(action: {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
                     isPressed = true
@@ -2219,22 +2225,40 @@ struct InteractiveSeatView: View {
                 ZStack {
                     Circle()
                         .fill(seatColor)
-                        .frame(width: 30, height: 30)
+                        .frame(width: 40, height: 40)
                         .scaleEffect(isPressed ? 1.2 : 1.0)
                         .shadow(color: seatColor.opacity(0.5), radius: seat.status != .available ? 8 : 4)
                     
-                    if seat.status == .sold {
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.white)
-                    } else if seat.status == .reserved {
-                        Image(systemName: "clock")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundColor(.white)
-                    } else {
+                    ZStack {
+                        // Always show seat number
                         Text("\(seatNumber)")
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
+                        
+                        // Show status icon in top-right corner for sold/reserved
+                        if seat.status == .sold {
+                            VStack {
+                                HStack {
+                                    Spacer()
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .background(Circle().fill(Color.green).frame(width: 14, height: 14))
+                                }
+                                Spacer()
+                            }
+                        } else if seat.status == .reserved {
+                            VStack {
+                                HStack {
+                                    Spacer()
+                                    Image(systemName: "clock.fill")
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .background(Circle().fill(Color.orange).frame(width: 14, height: 14))
+                                }
+                                Spacer()
+                            }
+                        }
                     }
                 }
             }
@@ -2243,27 +2267,27 @@ struct InteractiveSeatView: View {
             VStack(spacing: 1) {
                 if seat.status == .sold {
                     Text(seat.price != nil ? "$\(Int(seat.price!))" : "SOLD")
-                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .foregroundColor(seat.status.color)
                     
                     if let source = seat.source {
                         Text(source.rawValue)
-                            .font(.system(size: 6, weight: .medium, design: .monospaced))
+                            .font(.system(size: 8, weight: .medium, design: .monospaced))
                             .foregroundColor(seat.status.color.opacity(0.8))
                             .lineLimit(1)
                     }
                 } else if seat.status == .reserved && seat.note != nil {
                     Text(seat.note!)
-                        .font(.system(size: 6, weight: .medium, design: .monospaced))
+                        .font(.system(size: 8, weight: .medium, design: .monospaced))
                         .foregroundColor(seat.status.color)
                         .lineLimit(2)
                 } else {
                     Text(seat.status.displayText)
-                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .foregroundColor(seat.status.color)
                 }
             }
-            .frame(width: 30)
+            .frame(width: 50, height: 30)
             .multilineTextAlignment(.center)
         }
     }
