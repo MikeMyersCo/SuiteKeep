@@ -46,10 +46,10 @@ extension Color {
     
     // Modern colors (keeping some for compatibility)
     static let modernBackground = Color(red: 0.96, green: 0.97, blue: 1.0)
-    static let modernSecondary = Color(red: 0.94, green: 0.95, blue: 0.98)
+    static let modernSecondary = Color(red: 0.25, green: 0.25, blue: 0.3)
     static let modernAccent = Color(red: 0.3, green: 0.2, blue: 0.9)
-    static let modernText = Color(white: 0.1)
-    static let modernTextSecondary = Color(white: 0.4)
+    static let modernText = Color.white
+    static let modernTextSecondary = Color(white: 0.85)
     static let modernSuccess = Color(red: 0.1, green: 0.7, blue: 0.3)
     static let modernWarning = Color(red: 1.0, green: 0.5, blue: 0.0)
     static let modernDanger = Color(red: 1.0, green: 0.2, blue: 0.3)
@@ -997,8 +997,7 @@ struct ActivityRow: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+                .fill(Color.modernSecondary)
         )
     }
 }
@@ -1114,8 +1113,7 @@ struct DynamicConcerts: View {
                             .padding(.vertical, 60)
                             .background(
                                 RoundedRectangle(cornerRadius: 20)
-                                    .fill(Color.white)
-                                    .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
+                                    .fill(Color.modernSecondary)
                             )
                         } else {
                             LazyVStack(spacing: 12) {
@@ -1317,8 +1315,7 @@ struct ConcertRowView: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+                .fill(Color.modernSecondary)
         )
     }
 }
@@ -1370,6 +1367,7 @@ struct AddConcertView: View {
                             
                             TextField("Enter artist name", text: $artist)
                                 .font(.system(size: 16))
+                                .foregroundColor(.modernText)
                                 .padding(16)
                                 .background(
                                     RoundedRectangle(cornerRadius: 12)
@@ -1396,8 +1394,7 @@ struct AddConcertView: View {
                     .padding(24)
                     .background(
                         RoundedRectangle(cornerRadius: 20)
-                            .fill(Color.white)
-                            .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
+                            .fill(Color(red: 0.35, green: 0.35, blue: 0.4))
                     )
                     
                     Spacer()
@@ -1636,8 +1633,11 @@ struct ConcertDetailView: View {
                     .frame(maxWidth: .infinity)
                     .background(
                         RoundedRectangle(cornerRadius: 20)
-                            .fill(Color.white)
-                            .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
+                            .fill(Color.modernBackground)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 20)
+                                    .stroke(Color.modernSecondary, lineWidth: 1)
+                            )
                     )
                     
                     // Interactive Fire Suite Layout for seat selection
@@ -2010,8 +2010,11 @@ struct SeatOptionsView: View {
                                         .padding(16)
                                         .background(
                                             RoundedRectangle(cornerRadius: 16)
-                                                .fill(selectedStatus == status ? status.color.opacity(0.1) : Color.white)
-                                                .shadow(color: Color.black.opacity(selectedStatus == status ? 0.08 : 0.04), radius: 8, x: 0, y: 2)
+                                                .fill(selectedStatus == status ? status.color.opacity(0.2) : Color.modernSecondary)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 16)
+                                                        .stroke(selectedStatus == status ? status.color.opacity(0.3) : Color.clear, lineWidth: 1)
+                                                )
                                         )
                                     }
                                     .buttonStyle(PlainButtonStyle())
@@ -2035,12 +2038,12 @@ struct SeatOptionsView: View {
                                         
                                         TextField("25.00", text: $priceInput)
                                             .font(.system(size: 16))
+                                            .foregroundColor(.modernText)
                                             .padding(16)
                                             .padding(.leading, -10)
                                             .background(
                                                 RoundedRectangle(cornerRadius: 12)
-                                                    .fill(Color.white)
-                                                    .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+                                                    .fill(Color.modernSecondary)
                                             )
                                             .keyboardType(.decimalPad)
                                     }
@@ -2092,11 +2095,11 @@ struct SeatOptionsView: View {
                                 
                                 TextField("Enter note...", text: $noteInput)
                                     .font(.system(size: 16))
+                                    .foregroundColor(.modernText)
                                     .padding(16)
                                     .background(
                                         RoundedRectangle(cornerRadius: 12)
-                                            .fill(Color.white)
-                                            .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+                                            .fill(Color.modernSecondary)
                                     )
                                     .onChange(of: noteInput) { _, newValue in
                                         let words = newValue.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
@@ -2289,11 +2292,11 @@ struct SettingsView: View {
                                     
                                     TextField("Enter suite name", text: $tempSuiteName)
                                         .font(.system(size: 16))
+                                        .foregroundColor(.modernText)
                                         .padding(16)
                                         .background(
                                             RoundedRectangle(cornerRadius: 12)
-                                                .fill(Color.white)
-                                                .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+                                                .fill(Color.modernSecondary)
                                         )
                                         .onSubmit {
                                             settingsManager.suiteName = tempSuiteName
@@ -2308,11 +2311,11 @@ struct SettingsView: View {
                                     
                                     TextField("Enter venue location", text: $tempVenueLocation)
                                         .font(.system(size: 16))
+                                        .foregroundColor(.modernText)
                                         .padding(16)
                                         .background(
                                             RoundedRectangle(cornerRadius: 12)
-                                                .fill(Color.white)
-                                                .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+                                                .fill(Color.modernSecondary)
                                         )
                                         .onSubmit {
                                             settingsManager.venueLocation = tempVenueLocation
@@ -2322,8 +2325,7 @@ struct SettingsView: View {
                             .padding(20)
                             .background(
                                 RoundedRectangle(cornerRadius: 20)
-                                    .fill(Color.white)
-                                    .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
+                                    .fill(Color.modernSecondary)
                             )
                         }
                         
@@ -2375,8 +2377,7 @@ struct SettingsView: View {
                             .padding(20)
                             .background(
                                 RoundedRectangle(cornerRadius: 20)
-                                    .fill(Color.white)
-                                    .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 4)
+                                    .fill(Color.modernSecondary)
                             )
                         }
                         
