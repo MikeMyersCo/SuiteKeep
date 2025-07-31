@@ -795,11 +795,9 @@ struct DynamicSeatView: View {
                     .foregroundColor(.white)
             }
             
-            Text("$25")
+            Text("")
                 .font(.system(size: 8, weight: .medium, design: .monospaced))
-                .foregroundColor(.white.opacity(0.7))
-                .frame(width: 30)
-                .multilineTextAlignment(.center)
+                .frame(height: 10)
         }
     }
 }
@@ -1393,8 +1391,8 @@ enum SeatStatus: String, Codable, CaseIterable {
     
     var displayText: String {
         switch self {
-        case .available: return "$25"
-        case .reserved: return "RESV"
+        case .available: return ""
+        case .reserved: return "RESERVED"
         case .sold: return "SOLD"
         }
     }
@@ -1865,8 +1863,8 @@ struct AllConcertsView: View {
                         VStack(spacing: 24) {
                             // Header with space for navigation buttons
                             VStack(alignment: .leading, spacing: 8) {
-                                // Spacer for the overlay buttons
-                                Color.clear.frame(height: 44)
+                                // Spacer for the overlay buttons (44 + padding)
+                                Color.clear.frame(height: 70)
                                 
                                 Text("All Concerts")
                                     .font(.system(size: 34, weight: .bold, design: .rounded))
@@ -1930,6 +1928,7 @@ struct ConcertDetailView: View {
     @ObservedObject var concertManager: ConcertDataManager
     @ObservedObject var settingsManager: SettingsManager
     @State private var showingAllConcerts = false
+    @State private var showingDeleteConfirmation = false
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -1965,12 +1964,23 @@ struct ConcertDetailView: View {
                         
                         Spacer()
                         
-                        Button("Concert List") {
-                            showingAllConcerts = true
+                        HStack(spacing: 12) {
+                            Button("List") {
+                                showingAllConcerts = true
+                            }
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.modernAccent)
+                            
+                            Button(action: {
+                                showingDeleteConfirmation = true
+                            }) {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.red)
+                            }
                         }
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.modernAccent)
                     }
+                    .padding(.horizontal)
                     .padding(.top, 20)
                     
                     // Concert Header Card
@@ -2011,6 +2021,19 @@ struct ConcertDetailView: View {
         .sheet(isPresented: $showingAllConcerts) {
             AllConcertsView(concertManager: concertManager)
         }
+        .confirmationDialog("Delete Concert", isPresented: $showingDeleteConfirmation, titleVisibility: .visible) {
+            Button("Delete Concert", role: .destructive) {
+                deleteConcert()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Are you sure you want to delete the concert for \(concert.artist)? This action cannot be undone.")
+        }
+    }
+    
+    private func deleteConcert() {
+        concertManager.deleteConcert(concert)
+        dismiss()
     }
 }
 
@@ -2048,13 +2071,13 @@ struct InteractiveFireSuiteView: View {
                             endPoint: .bottom
                         )
                     )
-                    .frame(width: 420, height: 250)
+                    .frame(width: 350, height: 280) // Made taller to fit seats properly
                     .overlay(
                         RoundedRectangle(cornerRadius: 20)
                             .stroke(Color.white.opacity(0.2), lineWidth: 1)
                     )
                 
-                VStack(spacing: 25) {
+                VStack(spacing: 8) {
                     // Stage
                     HStack {
                         Spacer()
@@ -2070,75 +2093,86 @@ struct InteractiveFireSuiteView: View {
                         Spacer()
                     }
                     
-                    // Fire Suite Layout
-                    VStack(spacing: 8) {
-                        // Top section with side seats and firepit
+                    // Fire Suite Layout with firepit in center - CORRECT seat positions
+                    ZStack {
+                        // Bottom row: Seats 6, 5, 4, 3 (left to right) 
+                        VStack {
+                            Spacer()
+                            HStack(spacing: 6) {
+                                InteractiveSeatView(
+                                    seatNumber: 6,
+                                    seat: concert.seats[5],
+                                    onTap: { selectSeat(5) }
+                                )
+                                InteractiveSeatView(
+                                    seatNumber: 5,
+                                    seat: concert.seats[4],
+                                    onTap: { selectSeat(4) }
+                                )
+                                InteractiveSeatView(
+                                    seatNumber: 4,
+                                    seat: concert.seats[3],
+                                    onTap: { selectSeat(3) }
+                                )
+                                InteractiveSeatView(
+                                    seatNumber: 3,
+                                    seat: concert.seats[2],
+                                    onTap: { selectSeat(2) }
+                                )
+                            }
+                        }
+                        
+                        // Side seats positioned to align with bottom row seats
                         HStack {
-                            // Left side: Seats 8 (top) and 7 (bottom) - aligned with seat 6
-                            VStack(spacing: 25) {
+                            // Left side: Seats 8, 7 aligned above seat 6
+                            VStack(spacing: 6) {
                                 InteractiveSeatView(
                                     seatNumber: 8,
                                     seat: concert.seats[7],
                                     onTap: { selectSeat(7) }
                                 )
+                                .offset(y: -24) // Move seat 8 up for consistent spacing
                                 InteractiveSeatView(
                                     seatNumber: 7,
                                     seat: concert.seats[6],
                                     onTap: { selectSeat(6) }
                                 )
+                                .offset(y: -32) // Move seat 7 up more to prevent text overlap
+                                Spacer()
+                                    .frame(height: 38) // Space for bottom seat alignment
                             }
-                            .frame(width: 50) // Fixed width to align with seat 6 position
+                            .offset(x: 19) // Align with seat 6 position
                             
                             Spacer()
                             
-                            // Center Firepit
-                            DynamicFirepitView(isPulsing: pulseFirepit)
-                            
-                            Spacer()
-                            
-                            // Right side: Seats 1 (top) and 2 (bottom) - aligned with seat 3
-                            VStack(spacing: 25) {
+                            // Right side: Seats 1, 2 aligned above seat 3  
+                            VStack(spacing: 6) {
                                 InteractiveSeatView(
                                     seatNumber: 1,
                                     seat: concert.seats[0],
                                     onTap: { selectSeat(0) }
                                 )
+                                .offset(y: -24) // Move seat 1 up for consistent spacing
                                 InteractiveSeatView(
                                     seatNumber: 2,
                                     seat: concert.seats[1],
                                     onTap: { selectSeat(1) }
                                 )
+                                .offset(y: -32) // Move seat 2 up more to prevent text overlap
+                                Spacer()
+                                    .frame(height: 38) // Space for bottom seat alignment
                             }
-                            .frame(width: 50) // Fixed width to align with seat 3 position
+                            .offset(x: -19) // Align with seat 3 position
                         }
                         
-                        // Bottom row: Seats 3, 4, 5, 6 in line
-                        HStack(spacing: 30) {
-                            InteractiveSeatView(
-                                seatNumber: 6,
-                                seat: concert.seats[5],
-                                onTap: { selectSeat(5) }
-                            )
-                            InteractiveSeatView(
-                                seatNumber: 5,
-                                seat: concert.seats[4],
-                                onTap: { selectSeat(4) }
-                            )
-                            InteractiveSeatView(
-                                seatNumber: 4,
-                                seat: concert.seats[3],
-                                onTap: { selectSeat(3) }
-                            )
-                            InteractiveSeatView(
-                                seatNumber: 3,
-                                seat: concert.seats[2],
-                                onTap: { selectSeat(2) }
-                            )
-                        }
+                        // Firepit centered among all seats
+                        DynamicFirepitView(isPulsing: pulseFirepit)
+                            .scaleEffect(1.3)
+                            .offset(y: -24) // Move firepit up about an inch
                     }
                 }
-                .padding()
-                .offset(y: -36)
+                .padding(20)
+                .offset(y: -20) // Adjusted offset for better centering
             }
             
             // Revenue display
@@ -2210,7 +2244,7 @@ struct InteractiveSeatView: View {
     }
     
     var body: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 3) {
             Button(action: {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
                     isPressed = true
@@ -2225,9 +2259,9 @@ struct InteractiveSeatView: View {
                 ZStack {
                     Circle()
                         .fill(seatColor)
-                        .frame(width: 40, height: 40)
-                        .scaleEffect(isPressed ? 1.2 : 1.0)
-                        .shadow(color: seatColor.opacity(0.5), radius: seat.status != .available ? 8 : 4)
+                        .frame(width: 38, height: 38) // Smaller seats
+                        .scaleEffect(isPressed ? 1.15 : 1.0)
+                        .shadow(color: seatColor.opacity(0.5), radius: seat.status != .available ? 6 : 4)
                     
                     ZStack {
                         // Always show seat number
@@ -2241,9 +2275,9 @@ struct InteractiveSeatView: View {
                                 HStack {
                                     Spacer()
                                     Image(systemName: "checkmark.circle.fill")
-                                        .font(.system(size: 12, weight: .bold))
+                                        .font(.system(size: 10, weight: .bold))
                                         .foregroundColor(.white)
-                                        .background(Circle().fill(Color.green).frame(width: 14, height: 14))
+                                        .background(Circle().fill(Color.green).frame(width: 12, height: 12))
                                 }
                                 Spacer()
                             }
@@ -2252,9 +2286,9 @@ struct InteractiveSeatView: View {
                                 HStack {
                                     Spacer()
                                     Image(systemName: "clock.fill")
-                                        .font(.system(size: 12, weight: .bold))
+                                        .font(.system(size: 10, weight: .bold))
                                         .foregroundColor(.white)
-                                        .background(Circle().fill(Color.orange).frame(width: 14, height: 14))
+                                        .background(Circle().fill(Color.orange).frame(width: 12, height: 12))
                                 }
                                 Spacer()
                             }
@@ -2264,32 +2298,43 @@ struct InteractiveSeatView: View {
             }
             .buttonStyle(PlainButtonStyle())
             
+            // Fixed-height container for text to prevent layout shifts
             VStack(spacing: 1) {
                 if seat.status == .sold {
                     Text(seat.price != nil ? "$\(Int(seat.price!))" : "SOLD")
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
                         .foregroundColor(seat.status.color)
                     
-                    if let source = seat.source {
-                        Text(source.rawValue)
-                            .font(.system(size: 8, weight: .medium, design: .monospaced))
-                            .foregroundColor(seat.status.color.opacity(0.8))
-                            .lineLimit(1)
-                    }
+                    Text(seat.source?.rawValue ?? "")
+                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .foregroundColor(seat.status.color.opacity(0.8))
+                        .lineLimit(1)
+                        .frame(height: 10) // Fixed height for consistent spacing
                 } else if seat.status == .reserved && seat.note != nil {
+                    Text("RESERVED")
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundColor(seat.status.color)
+                    
                     Text(seat.note!)
                         .font(.system(size: 8, weight: .medium, design: .monospaced))
-                        .foregroundColor(seat.status.color)
-                        .lineLimit(2)
+                        .foregroundColor(seat.status.color.opacity(0.8))
+                        .lineLimit(1)
+                        .frame(height: 10) // Fixed height for consistent spacing
                 } else {
                     Text(seat.status.displayText)
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
                         .foregroundColor(seat.status.color)
+                    
+                    // Empty space to maintain consistent height
+                    Text("")
+                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .frame(height: 10)
                 }
             }
-            .frame(width: 50, height: 30)
+            .frame(width: 52, height: 32) // Smaller text area with fixed dimensions
             .multilineTextAlignment(.center)
         }
+        .frame(width: 55, height: 78) // Smaller overall container
     }
 }
 
@@ -2436,30 +2481,6 @@ struct SeatOptionsView: View {
                                     }
                                 }
                                 
-                                // Cost input
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Ticket Cost")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.modernTextSecondary)
-                                    
-                                    HStack {
-                                        Text("$")
-                                            .font(.system(size: 18, weight: .bold))
-                                            .foregroundColor(.modernText)
-                                        
-                                        TextField("25.00", text: $costInput)
-                                            .font(.system(size: 16))
-                                            .foregroundColor(.modernText)
-                                            .padding(16)
-                                            .padding(.leading, -10)
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 12)
-                                                    .fill(Color.modernSecondary)
-                                            )
-                                            .keyboardType(.decimalPad)
-                                    }
-                                }
-                            
                                 // Source dropdown
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text("Ticket Source")
@@ -2521,6 +2542,37 @@ struct SeatOptionsView: View {
                         }
                     
                         Spacer()
+                        
+                        // Cost input (less prominent)
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Ticket Cost")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.modernTextSecondary.opacity(0.7))
+                                
+                                Spacer()
+                                
+                                HStack(spacing: 4) {
+                                    Text("$")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.modernTextSecondary.opacity(0.7))
+                                    
+                                    TextField("25", text: $costInput)
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.modernText)
+                                        .frame(width: 50)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 6)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .fill(Color.modernSecondary.opacity(0.7))
+                                        )
+                                        .keyboardType(.decimalPad)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 8)
                         
                         // Action buttons
                         VStack(spacing: 12) {
