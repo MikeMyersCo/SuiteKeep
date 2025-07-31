@@ -13,18 +13,59 @@ class SettingsManager: ObservableObject {
     @Published var suiteName: String {
         didSet {
             UserDefaults.standard.set(suiteName, forKey: "suiteName")
+            NSUbiquitousKeyValueStore.default.set(suiteName, forKey: "suiteName")
+            NSUbiquitousKeyValueStore.default.synchronize()
         }
     }
     
     @Published var venueLocation: String {
         didSet {
             UserDefaults.standard.set(venueLocation, forKey: "venueLocation")
+            NSUbiquitousKeyValueStore.default.set(venueLocation, forKey: "venueLocation")
+            NSUbiquitousKeyValueStore.default.synchronize()
         }
     }
     
+    private var iCloudObserver: NSObjectProtocol?
+    
     init() {
+        // Load from local first
         self.suiteName = UserDefaults.standard.string(forKey: "suiteName") ?? "Fire Suite"
         self.venueLocation = UserDefaults.standard.string(forKey: "venueLocation") ?? "Ford Amphitheater"
+        
+        // Check iCloud for newer values
+        if let iCloudSuiteName = NSUbiquitousKeyValueStore.default.string(forKey: "suiteName") {
+            self.suiteName = iCloudSuiteName
+        }
+        if let iCloudVenueLocation = NSUbiquitousKeyValueStore.default.string(forKey: "venueLocation") {
+            self.venueLocation = iCloudVenueLocation
+        }
+        
+        // Listen for iCloud changes
+        iCloudObserver = NotificationCenter.default.addObserver(
+            forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
+            object: NSUbiquitousKeyValueStore.default,
+            queue: .main
+        ) { [weak self] _ in
+            self?.syncFromiCloud()
+        }
+        
+        NSUbiquitousKeyValueStore.default.synchronize()
+    }
+    
+    deinit {
+        if let observer = iCloudObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+    
+    private func syncFromiCloud() {
+        if let iCloudSuiteName = NSUbiquitousKeyValueStore.default.string(forKey: "suiteName") {
+            self.suiteName = iCloudSuiteName
+        }
+        if let iCloudVenueLocation = NSUbiquitousKeyValueStore.default.string(forKey: "venueLocation") {
+            self.venueLocation = iCloudVenueLocation
+        }
     }
 }
 
@@ -55,13 +96,200 @@ extension Color {
     static let modernDanger = Color(red: 1.0, green: 0.2, blue: 0.3)
 }
 
+// MARK: - Splash Screen
+struct SplashScreenView: View {
+    @State private var isAnimating = false
+    @State private var showFireEffect = false
+    @State private var titleOpacity = 0.0
+    @State private var subtitleOpacity = 0.0
+    @State private var fireScale = 0.1
+    @State private var particleOffset = CGSize.zero
+    @Binding var isShowingSplash: Bool
+    
+    var body: some View {
+        ZStack {
+            // Gradient background
+            LinearGradient(
+                colors: [
+                    Color(red: 0.05, green: 0.05, blue: 0.1),
+                    Color(red: 0.1, green: 0.05, blue: 0.15),
+                    Color(red: 0.15, green: 0.08, blue: 0.2),
+                    Color(red: 0.2, green: 0.1, blue: 0.15)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            
+            // Fire particles background
+            ForEach(0..<20, id: \.self) { index in
+                FireParticle(delay: Double(index) * 0.1)
+                    .offset(particleOffset)
+            }
+            
+            VStack(spacing: 40) {
+                // Animated fire icon
+                ZStack {
+                    // Outer glow
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    Color.fireOrange.opacity(0.3),
+                                    Color.fireOrange.opacity(0.1),
+                                    Color.clear
+                                ],
+                                center: .center,
+                                startRadius: 50,
+                                endRadius: 150
+                            )
+                        )
+                        .frame(width: 300, height: 300)
+                        .blur(radius: 20)
+                        .scaleEffect(isAnimating ? 1.2 : 0.8)
+                        .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: isAnimating)
+                    
+                    // Fire icon
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 120))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 1.0, green: 0.8, blue: 0.0),
+                                    Color.fireOrange,
+                                    Color(red: 1.0, green: 0.3, blue: 0.0)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .scaleEffect(fireScale)
+                        .rotationEffect(.degrees(isAnimating ? 5 : -5))
+                        .shadow(color: .fireOrange, radius: 30)
+                        .shadow(color: .fireOrange.opacity(0.5), radius: 50)
+                        .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: isAnimating)
+                }
+                
+                VStack(spacing: 16) {
+                    // Main title
+                    Text("Fire Suite")
+                        .font(.system(size: 48, weight: .bold, design: .rounded))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [
+                                    Color.white,
+                                    Color(red: 1.0, green: 0.9, blue: 0.7)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .opacity(titleOpacity)
+                        .shadow(color: .fireOrange.opacity(0.5), radius: 10)
+                    
+                    Text("Management System")
+                        .font(.system(size: 24, weight: .medium, design: .rounded))
+                        .foregroundColor(.white.opacity(0.9))
+                        .opacity(subtitleOpacity)
+                    
+                    // Loading indicator
+                    HStack(spacing: 8) {
+                        ForEach(0..<3, id: \.self) { index in
+                            Circle()
+                                .fill(Color.fireOrange)
+                                .frame(width: 8, height: 8)
+                                .scaleEffect(isAnimating ? 1.0 : 0.5)
+                                .animation(
+                                    .easeInOut(duration: 0.6)
+                                    .repeatForever()
+                                    .delay(Double(index) * 0.2),
+                                    value: isAnimating
+                                )
+                        }
+                    }
+                    .padding(.top, 40)
+                }
+            }
+        }
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.8)) {
+                fireScale = 1.0
+            }
+            
+            withAnimation(.easeOut(duration: 1.0).delay(0.3)) {
+                titleOpacity = 1.0
+            }
+            
+            withAnimation(.easeOut(duration: 1.0).delay(0.6)) {
+                subtitleOpacity = 1.0
+            }
+            
+            withAnimation(.linear(duration: 20).repeatForever(autoreverses: false)) {
+                particleOffset = CGSize(width: 100, height: -1000)
+            }
+            
+            isAnimating = true
+            
+            // Transition to main app
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) {
+                withAnimation(.easeInOut(duration: 0.8)) {
+                    isShowingSplash = false
+                }
+            }
+        }
+    }
+}
+
+// Fire particle effect
+struct FireParticle: View {
+    @State private var offset = CGSize(width: CGFloat.random(in: -200...200), height: 600)
+    let delay: Double
+    
+    var body: some View {
+        Circle()
+            .fill(
+                RadialGradient(
+                    colors: [
+                        Color.fireOrange,
+                        Color.fireOrange.opacity(0.5),
+                        Color.clear
+                    ],
+                    center: .center,
+                    startRadius: 0,
+                    endRadius: 20
+                )
+            )
+            .frame(width: CGFloat.random(in: 4...12), height: CGFloat.random(in: 4...12))
+            .offset(offset)
+            .blur(radius: 1)
+            .onAppear {
+                withAnimation(
+                    .linear(duration: Double.random(in: 8...15))
+                    .repeatForever(autoreverses: false)
+                    .delay(delay)
+                ) {
+                    offset = CGSize(
+                        width: CGFloat.random(in: -200...200),
+                        height: -700
+                    )
+                }
+            }
+    }
+}
+
 struct DynamicFireSuiteApp: View {
     @State private var selectedTab = 0
     @State private var animateFlames = true
+    @State private var isShowingSplash = true
     @StateObject private var concertManager = ConcertDataManager()
     @StateObject private var settingsManager = SettingsManager()
     
     var body: some View {
+        ZStack {
+            if isShowingSplash {
+                SplashScreenView(isShowingSplash: $isShowingSplash)
+                    .transition(.opacity)
+            } else {
         TabView(selection: $selectedTab) {
             DynamicDashboard(concerts: $concertManager.concerts, settingsManager: settingsManager)
                 .tabItem {
@@ -77,14 +305,14 @@ struct DynamicFireSuiteApp: View {
                 }
                 .tag(1)
             
-            DynamicAnalytics()
+            DynamicAnalytics(concerts: $concertManager.concerts)
                 .tabItem {
                     Image(systemName: selectedTab == 2 ? "chart.bar.xaxis" : "chart.bar")
                     Text("Analytics")
                 }
                 .tag(2)
             
-            SettingsView(settingsManager: settingsManager)
+            SettingsView(settingsManager: settingsManager, selectedTab: $selectedTab)
                 .tabItem {
                     Image(systemName: selectedTab == 3 ? "gearshape.fill" : "gearshape")
                     Text("Settings")
@@ -94,6 +322,8 @@ struct DynamicFireSuiteApp: View {
         .accentColor(.modernAccent)
         .onAppear {
             startFlameAnimation()
+        }
+            }
         }
     }
     
@@ -128,7 +358,7 @@ struct DynamicDashboard: View {
                 .ignoresSafeArea()
                 
                 ScrollView {
-                    VStack(spacing: 24) {
+                    VStack(spacing: 16) {
                         // Modern Header Card
                         VStack(spacing: 12) {
                             Text("Dashboard")
@@ -158,8 +388,8 @@ struct DynamicDashboard: View {
                             }
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 20)
-                        .padding(.horizontal, 24)
+                        .padding(.vertical, 16)
+                        .padding(.horizontal, 20)
                         .background(
                             ZStack {
                                 RoundedRectangle(cornerRadius: 20)
@@ -190,9 +420,6 @@ struct DynamicDashboard: View {
                         
                         // Suite Overview Summary
                         SuiteSummaryView(concerts: concerts, settingsManager: settingsManager)
-                        
-                        // Performance Metrics
-                        PerformanceMetricsView(concerts: concerts)
                         
                         // Recent Activity
                         RecentActivityFeed(concerts: concerts)
@@ -229,6 +456,14 @@ struct SuiteSummaryView: View {
         concerts.filter { $0.date >= Date() }.count
     }
     
+    var totalCost: Double {
+        concerts.reduce(0) { $0 + $1.totalCost }
+    }
+    
+    var totalProfit: Double {
+        totalRevenue - totalCost
+    }
+    
     var averageOccupancy: Int {
         guard !concerts.isEmpty else { return 0 }
         let totalOccupancy = concerts.reduce(0) { $0 + $1.ticketsSold }
@@ -239,7 +474,7 @@ struct SuiteSummaryView: View {
         VStack(spacing: 20) {
             
             // Key Metrics Cards with Beautiful Gradients
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 18), count: 2), spacing: 18) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
                 MetricCard(
                     title: "Total Sold",
                     value: "\(totalTicketsSold)",
@@ -257,19 +492,19 @@ struct SuiteSummaryView: View {
                 )
                 
                 MetricCard(
-                    title: "Upcoming",
-                    value: "\(upcomingConcerts)",
-                    subtitle: "concerts scheduled",
+                    title: "Total Cost",
+                    value: "$\(Int(totalCost))",
+                    subtitle: "ticket costs",
                     gradient: Color.cardOrange,
-                    icon: "calendar.badge.plus"
+                    icon: "minus.circle.fill"
                 )
                 
                 MetricCard(
-                    title: "Occupancy",
-                    value: "\(averageOccupancy)%",
-                    subtitle: "average rate",
-                    gradient: Color.cardPurple,
-                    icon: "chart.pie.fill"
+                    title: "Profit",
+                    value: "$\(Int(totalProfit))",
+                    subtitle: "net earnings",
+                    gradient: totalProfit >= 0 ? Color.cardGreen : Color.cardPink,
+                    icon: totalProfit >= 0 ? "arrow.up.circle.fill" : "arrow.down.circle.fill"
                 )
             }
         }
@@ -326,9 +561,9 @@ struct MetricCard: View {
                     .lineLimit(2)
             }
         }
-        .padding(16)
+        .padding(12)
         .frame(maxWidth: .infinity)
-        .frame(height: 120)
+        .frame(height: 90)
         .background(
             ZStack {
                 // Main gradient background
@@ -428,13 +663,13 @@ struct StatusIndicator: View {
                             endPoint: .bottom
                         )
                     )
-                    .frame(width: 350, height: 220)
+                    .frame(width: 350, height: 160)
                     .overlay(
                         RoundedRectangle(cornerRadius: 20)
                             .stroke(Color.white.opacity(0.2), lineWidth: 1)
                     )
                 
-                VStack(spacing: 25) {
+                VStack(spacing: 18) {
                     // Stage
                     HStack {
                         Spacer()
@@ -711,7 +946,7 @@ struct PerformanceMetricsView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.horizontal, 16)
                     }
-                    .frame(height: 100)
+                    .frame(height: 80)
                     
                     // Performance indicators
                     HStack(spacing: 20) {
@@ -1180,12 +1415,14 @@ struct Seat: Codable {
     var price: Double?
     var note: String? // For reserved seats - max 5 words
     var source: TicketSource? // For sold seats - ticket source
+    var cost: Double? // Cost per ticket (default $25)
     
-    init(status: SeatStatus = .available, price: Double? = nil, note: String? = nil, source: TicketSource? = nil) {
+    init(status: SeatStatus = .available, price: Double? = nil, note: String? = nil, source: TicketSource? = nil, cost: Double? = nil) {
         self.status = status
         self.price = price
         self.note = note
         self.source = source
+        self.cost = cost ?? 25.0
     }
 }
 
@@ -1210,6 +1447,16 @@ struct Concert: Identifiable, Codable {
         }.reduce(0, +)
     }
     
+    var totalCost: Double {
+        seats.compactMap { seat in
+            seat.status == .sold ? (seat.cost ?? 25.0) : nil
+        }.reduce(0, +)
+    }
+    
+    var profit: Double {
+        totalRevenue - totalCost
+    }
+    
     // Legacy compatibility for existing data
     var seatsSold: [Bool] {
         seats.map { $0.status == .sold }
@@ -1228,22 +1475,137 @@ class ConcertDataManager: ObservableObject {
     @Published var concerts: [Concert] = []
     
     private let userDefaults = UserDefaults.standard
+    private let iCloudStore = NSUbiquitousKeyValueStore.default
     private let concertsKey = "SavedConcerts"
+    private var iCloudObserver: NSObjectProtocol?
     
     init() {
+        setupiCloudSync()
+        migrateDataIfNeeded()
         loadConcerts()
     }
     
+    private func migrateDataIfNeeded() {
+        let currentVersion = 1 // Increment this when data structure changes
+        let versionKey = "dataVersion"
+        let lastVersion = userDefaults.integer(forKey: versionKey)
+        
+        if lastVersion < currentVersion {
+            print("Migrating data from version \(lastVersion) to \(currentVersion)")
+            
+            // Add migration logic here for future versions
+            switch lastVersion {
+            case 0:
+                // Initial version, no migration needed
+                break
+            default:
+                break
+            }
+            
+            userDefaults.set(currentVersion, forKey: versionKey)
+        }
+    }
+    
+    deinit {
+        if let observer = iCloudObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+    
+    private func setupiCloudSync() {
+        // Listen for iCloud changes
+        iCloudObserver = NotificationCenter.default.addObserver(
+            forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
+            object: iCloudStore,
+            queue: .main
+        ) { [weak self] _ in
+            self?.syncFromiCloud()
+        }
+        
+        // Initial sync
+        iCloudStore.synchronize()
+    }
+    
+    private func syncFromiCloud() {
+        if let iCloudData = iCloudStore.data(forKey: concertsKey),
+           let iCloudConcerts = try? JSONDecoder().decode([Concert].self, from: iCloudData) {
+            // Merge iCloud data with local data (prefer newer data)
+            mergeConcerts(iCloudConcerts)
+        }
+    }
+    
+    private func mergeConcerts(_ iCloudConcerts: [Concert]) {
+        // Simple merge strategy: combine both lists and remove duplicates
+        var mergedConcerts = concerts
+        for iCloudConcert in iCloudConcerts {
+            if !mergedConcerts.contains(where: { $0.id == iCloudConcert.id }) {
+                mergedConcerts.append(iCloudConcert)
+            }
+        }
+        concerts = mergedConcerts.sorted { $0.date > $1.date }
+        saveToLocalStorage()
+    }
+    
     func loadConcerts() {
-        if let data = userDefaults.data(forKey: concertsKey),
-           let decodedConcerts = try? JSONDecoder().decode([Concert].self, from: data) {
-            concerts = decodedConcerts
+        do {
+            if let data = userDefaults.data(forKey: concertsKey) {
+                let decodedConcerts = try JSONDecoder().decode([Concert].self, from: data)
+                concerts = decodedConcerts
+                print("Successfully loaded \(concerts.count) concerts")
+            }
+        } catch {
+            print("Failed to load concerts: \(error)")
+            // Attempt to recover from backup if available
+            loadFromBackup()
         }
     }
     
     func saveConcerts() {
-        if let encoded = try? JSONEncoder().encode(concerts) {
+        do {
+            let encoded = try JSONEncoder().encode(concerts)
+            
+            // Save to local storage
+            saveToLocalStorage()
+            
+            // Save to iCloud
+            saveToiCloud(data: encoded)
+            
+            print("Successfully saved \(concerts.count) concerts")
+        } catch {
+            print("Failed to save concerts: \(error)")
+        }
+    }
+    
+    private func saveToLocalStorage() {
+        do {
+            let encoded = try JSONEncoder().encode(concerts)
             userDefaults.set(encoded, forKey: concertsKey)
+            userDefaults.synchronize() // Force synchronization
+            
+            // Create backup
+            saveBackup(data: encoded)
+        } catch {
+            print("Failed to save to local storage: \(error)")
+        }
+    }
+    
+    private func saveToiCloud(data: Data) {
+        iCloudStore.set(data, forKey: concertsKey)
+        iCloudStore.synchronize()
+    }
+    
+    private func saveBackup(data: Data) {
+        let backupKey = "\(concertsKey)_backup"
+        userDefaults.set(data, forKey: backupKey)
+        userDefaults.set(Date(), forKey: "\(concertsKey)_backup_date")
+    }
+    
+    private func loadFromBackup() {
+        let backupKey = "\(concertsKey)_backup"
+        if let backupData = userDefaults.data(forKey: backupKey),
+           let decodedConcerts = try? JSONDecoder().decode([Concert].self, from: backupData) {
+            concerts = decodedConcerts
+            print("Recovered \(concerts.count) concerts from backup")
         }
     }
     
@@ -1501,8 +1863,11 @@ struct AllConcertsView: View {
                 } else {
                     ScrollView {
                         VStack(spacing: 24) {
-                            // Header
+                            // Header with space for navigation buttons
                             VStack(alignment: .leading, spacing: 8) {
+                                // Spacer for the overlay buttons
+                                Color.clear.frame(height: 44)
+                                
                                 Text("All Concerts")
                                     .font(.system(size: 34, weight: .bold, design: .rounded))
                                     .foregroundColor(.modernText)
@@ -1683,13 +2048,13 @@ struct InteractiveFireSuiteView: View {
                             endPoint: .bottom
                         )
                     )
-                    .frame(width: 350, height: 220)
+                    .frame(width: 350, height: 160)
                     .overlay(
                         RoundedRectangle(cornerRadius: 20)
                             .stroke(Color.white.opacity(0.2), lineWidth: 1)
                     )
                 
-                VStack(spacing: 25) {
+                VStack(spacing: 18) {
                     // Stage
                     HStack {
                         Spacer()
@@ -1913,6 +2278,7 @@ struct SeatOptionsView: View {
     
     @State private var selectedStatus: SeatStatus
     @State private var priceInput: String
+    @State private var costInput: String
     @State private var noteInput: String
     @State private var selectedSource: TicketSource
     
@@ -1922,6 +2288,7 @@ struct SeatOptionsView: View {
         self.onUpdate = onUpdate
         self._selectedStatus = State(initialValue: seat.status)
         self._priceInput = State(initialValue: String(seat.price ?? 25.0))
+        self._costInput = State(initialValue: String(seat.cost ?? 25.0))
         self._noteInput = State(initialValue: seat.note ?? "")
         self._selectedSource = State(initialValue: seat.source ?? .family)
     }
@@ -2044,6 +2411,30 @@ struct SeatOptionsView: View {
                                             .keyboardType(.decimalPad)
                                     }
                                 }
+                                
+                                // Cost input
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Ticket Cost")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.modernTextSecondary)
+                                    
+                                    HStack {
+                                        Text("$")
+                                            .font(.system(size: 18, weight: .bold))
+                                            .foregroundColor(.modernText)
+                                        
+                                        TextField("25.00", text: $costInput)
+                                            .font(.system(size: 16))
+                                            .foregroundColor(.modernText)
+                                            .padding(16)
+                                            .padding(.leading, -10)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .fill(Color.modernSecondary)
+                                            )
+                                            .keyboardType(.decimalPad)
+                                    }
+                                }
                             
                                 // Source dropdown
                                 VStack(alignment: .leading, spacing: 8) {
@@ -2115,16 +2506,19 @@ struct SeatOptionsView: View {
                                 
                                 if selectedStatus == .sold {
                                     updatedSeat.price = Double(priceInput) ?? 25.0
+                                    updatedSeat.cost = Double(costInput) ?? 25.0
                                     updatedSeat.note = nil
                                     updatedSeat.source = selectedSource
                                     // Play ding sound effect
                                     playDingSound()
                                 } else if selectedStatus == .reserved {
                                     updatedSeat.price = nil
+                                    updatedSeat.cost = Double(costInput) ?? 25.0
                                     updatedSeat.note = noteInput.isEmpty ? nil : noteInput
                                     updatedSeat.source = nil
                                 } else {
                                     updatedSeat.price = nil
+                                    updatedSeat.cost = Double(costInput) ?? 25.0
                                     updatedSeat.note = nil
                                     updatedSeat.source = nil
                                 }
@@ -2184,6 +2578,8 @@ struct SeatOptionsView: View {
 }
 
 struct DynamicAnalytics: View {
+    @Binding var concerts: [Concert]
+    
     var body: some View {
         NavigationView {
             ZStack {
@@ -2200,20 +2596,44 @@ struct DynamicAnalytics: View {
                 )
                 .ignoresSafeArea()
                 
-                VStack(spacing: 40) {
-                    VStack(spacing: 8) {
-                        Image(systemName: "chart.line.uptrend.xyaxis")
-                            .font(.system(size: 60))
-                            .foregroundColor(.modernAccent)
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Header
+                        VStack(spacing: 12) {
+                            Text("Analytics")
+                                .font(.system(size: 32, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+                            
+                            Text("Performance insights and trends")
+                                .font(.system(size: 16))
+                                .foregroundColor(.white.opacity(0.8))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .padding(.horizontal, 20)
+                        .background(
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [
+                                                Color(red: 0.3, green: 0.2, blue: 0.9),
+                                                Color(red: 0.5, green: 0.3, blue: 0.95),
+                                                Color(red: 0.7, green: 0.4, blue: 1.0)
+                                            ],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                            }
+                            .shadow(color: .black.opacity(0.15), radius: 15, x: 0, y: 8)
+                        )
+                        .padding(.top, 20)
                         
-                        Text("Analytics Coming Soon")
-                            .font(.system(size: 28, weight: .bold))
-                            .foregroundColor(.modernText)
-                        
-                        Text("Performance insights and trends")
-                            .font(.system(size: 16))
-                            .foregroundColor(.modernTextSecondary)
+                        // Performance Metrics
+                        PerformanceMetricsView(concerts: concerts)
                     }
+                    .padding(.horizontal)
                 }
             }
             .navigationBarHidden(true)
@@ -2238,6 +2658,7 @@ struct DynamicPortfolio: View {
 // MARK: - Settings View
 struct SettingsView: View {
     @ObservedObject var settingsManager: SettingsManager
+    @Binding var selectedTab: Int
     @State private var tempSuiteName: String = ""
     @State private var tempVenueLocation: String = ""
     
@@ -2328,6 +2749,8 @@ struct SettingsView: View {
                         Button(action: {
                             settingsManager.suiteName = tempSuiteName
                             settingsManager.venueLocation = tempVenueLocation
+                            // Navigate back to dashboard
+                            selectedTab = 0
                         }) {
                             Text("Save Changes")
                                 .font(.system(size: 16, weight: .semibold))
@@ -2338,6 +2761,66 @@ struct SettingsView: View {
                                     RoundedRectangle(cornerRadius: 16)
                                         .fill(Color.modernAccent)
                                 )
+                        }
+                        
+                        // Data Storage Section
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("Data Storage")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundColor(.modernText)
+                            
+                            VStack(alignment: .leading, spacing: 12) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Image(systemName: "iphone")
+                                            .foregroundColor(.modernAccent)
+                                        Text("Local Storage")
+                                            .font(.system(size: 16, weight: .medium))
+                                            .foregroundColor(.modernText)
+                                    }
+                                    Text("Your concert data is stored locally on this device using secure UserDefaults with automatic backups")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.modernTextSecondary)
+                                        .multilineTextAlignment(.leading)
+                                }
+                                
+                                Divider()
+                                
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Image(systemName: "icloud")
+                                            .foregroundColor(.blue)
+                                        Text("iCloud Sync")
+                                            .font(.system(size: 16, weight: .medium))
+                                            .foregroundColor(.modernText)
+                                    }
+                                    Text("Data automatically syncs across all your Apple devices using your iCloud account. No data leaves Apple's ecosystem.")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.modernTextSecondary)
+                                        .multilineTextAlignment(.leading)
+                                }
+                                
+                                Divider()
+                                
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Image(systemName: "lock.shield")
+                                            .foregroundColor(.green)
+                                        Text("Privacy & Security")
+                                            .font(.system(size: 16, weight: .medium))
+                                            .foregroundColor(.modernText)
+                                    }
+                                    Text("All data remains private to you. We don't collect, access, or share any of your concert or suite information.")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.modernTextSecondary)
+                                        .multilineTextAlignment(.leading)
+                                }
+                            }
+                            .padding(16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(Color.modernSecondary)
+                            )
                         }
                         
                         // About Section
