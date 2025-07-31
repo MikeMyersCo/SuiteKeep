@@ -1633,11 +1633,7 @@ struct ConcertDetailView: View {
                     .frame(maxWidth: .infinity)
                     .background(
                         RoundedRectangle(cornerRadius: 20)
-                            .fill(Color.modernBackground)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 20)
-                                    .stroke(Color.modernSecondary, lineWidth: 1)
-                            )
+                            .fill(Color.modernSecondary)
                     )
                     
                     // Interactive Fire Suite Layout for seat selection
@@ -2074,8 +2070,7 @@ struct SeatOptionsView: View {
                                         .padding(16)
                                         .background(
                                             RoundedRectangle(cornerRadius: 12)
-                                                .fill(Color.white)
-                                                .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 2)
+                                                .fill(Color.modernSecondary)
                                         )
                                     }
                                 }
