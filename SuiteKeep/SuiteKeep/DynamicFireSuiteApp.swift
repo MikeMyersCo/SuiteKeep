@@ -26,12 +26,24 @@ class SettingsManager: ObservableObject {
         }
     }
     
+    @Published var familyTicketPrice: Double {
+        didSet {
+            UserDefaults.standard.set(familyTicketPrice, forKey: "familyTicketPrice")
+            NSUbiquitousKeyValueStore.default.set(familyTicketPrice, forKey: "familyTicketPrice")
+            NSUbiquitousKeyValueStore.default.synchronize()
+        }
+    }
+    
     private var iCloudObserver: NSObjectProtocol?
     
     init() {
         // Load from local first
         self.suiteName = UserDefaults.standard.string(forKey: "suiteName") ?? "Fire Suite"
         self.venueLocation = UserDefaults.standard.string(forKey: "venueLocation") ?? "Ford Amphitheater"
+        self.familyTicketPrice = UserDefaults.standard.double(forKey: "familyTicketPrice")
+        if self.familyTicketPrice == 0 {
+            self.familyTicketPrice = 50.0 // Default to $50
+        }
         
         // Check iCloud for newer values
         if let iCloudSuiteName = NSUbiquitousKeyValueStore.default.string(forKey: "suiteName") {
@@ -39,6 +51,10 @@ class SettingsManager: ObservableObject {
         }
         if let iCloudVenueLocation = NSUbiquitousKeyValueStore.default.string(forKey: "venueLocation") {
             self.venueLocation = iCloudVenueLocation
+        }
+        let iCloudFamilyPrice = NSUbiquitousKeyValueStore.default.double(forKey: "familyTicketPrice")
+        if iCloudFamilyPrice > 0 {
+            self.familyTicketPrice = iCloudFamilyPrice
         }
         
         // Listen for iCloud changes
@@ -65,6 +81,10 @@ class SettingsManager: ObservableObject {
         }
         if let iCloudVenueLocation = NSUbiquitousKeyValueStore.default.string(forKey: "venueLocation") {
             self.venueLocation = iCloudVenueLocation
+        }
+        let iCloudFamilyPrice = NSUbiquitousKeyValueStore.default.double(forKey: "familyTicketPrice")
+        if iCloudFamilyPrice > 0 {
+            self.familyTicketPrice = iCloudFamilyPrice
         }
     }
 }
@@ -1414,13 +1434,17 @@ struct Seat: Codable {
     var note: String? // For reserved seats - max 5 words
     var source: TicketSource? // For sold seats - ticket source
     var cost: Double? // Cost per ticket (default $25)
+    var dateSold: Date? // Date when ticket was sold
+    var datePaid: Date? // Date when payment was received
     
-    init(status: SeatStatus = .available, price: Double? = nil, note: String? = nil, source: TicketSource? = nil, cost: Double? = nil) {
+    init(status: SeatStatus = .available, price: Double? = nil, note: String? = nil, source: TicketSource? = nil, cost: Double? = nil, dateSold: Date? = nil, datePaid: Date? = nil) {
         self.status = status
         self.price = price
         self.note = note
         self.source = source
         self.cost = cost ?? 25.0
+        self.dateSold = dateSold
+        self.datePaid = datePaid
     }
 }
 
@@ -1441,7 +1465,7 @@ struct Concert: Identifiable, Codable {
     
     var totalRevenue: Double {
         seats.compactMap { seat in
-            seat.status == .sold ? (seat.price ?? 25.0) : nil
+            seat.status == .sold ? seat.price : nil
         }.reduce(0, +)
     }
     
@@ -2212,12 +2236,13 @@ struct InteractiveFireSuiteView: View {
                     }
                 }
             )
+            .environmentObject(settingsManager)
         }
     }
     
     private func selectSeat(_ index: Int) {
         selectedSeatIndex = index
-        priceInput = String(concert.seats[index].price ?? 25.0)
+        priceInput = concert.seats[index].price != nil ? String(concert.seats[index].price!) : ""
         showingSeatOptions = true
         
         // Haptic feedback
@@ -2341,6 +2366,7 @@ struct InteractiveSeatView: View {
 // MARK: - Seat Options View
 struct SeatOptionsView: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var settingsManager: SettingsManager
     let seatNumber: Int
     @State var seat: Seat
     let onUpdate: (Seat) -> Void
@@ -2350,16 +2376,20 @@ struct SeatOptionsView: View {
     @State private var costInput: String
     @State private var noteInput: String
     @State private var selectedSource: TicketSource
+    @State private var dateSold: Date
+    @State private var datePaid: Date
     
     init(seatNumber: Int, seat: Seat, onUpdate: @escaping (Seat) -> Void) {
         self.seatNumber = seatNumber
         self.seat = seat
         self.onUpdate = onUpdate
         self._selectedStatus = State(initialValue: seat.status)
-        self._priceInput = State(initialValue: String(seat.price ?? 25.0))
+        self._priceInput = State(initialValue: seat.price != nil ? String(seat.price!) : "")
         self._costInput = State(initialValue: String(seat.cost ?? 25.0))
         self._noteInput = State(initialValue: seat.note ?? "")
-        self._selectedSource = State(initialValue: seat.source ?? .family)
+        self._selectedSource = State(initialValue: seat.source ?? .facebook)
+        self._dateSold = State(initialValue: seat.dateSold ?? Date())
+        self._datePaid = State(initialValue: seat.datePaid ?? Date())
     }
     
     var body: some View {
@@ -2415,7 +2445,14 @@ struct SeatOptionsView: View {
                             VStack(spacing: 12) {
                                 ForEach(SeatStatus.allCases, id: \.self) { status in
                                     Button(action: {
+                                        let previousStatus = selectedStatus
                                         selectedStatus = status
+                                        
+                                        // Auto-populate dateSold when status changes to sold
+                                        if status == .sold && previousStatus != .sold {
+                                            dateSold = Date()
+                                            datePaid = Date()
+                                        }
                                     }) {
                                         HStack(spacing: 16) {
                                             Circle()
@@ -2468,7 +2505,7 @@ struct SeatOptionsView: View {
                                             .font(.system(size: 18, weight: .bold))
                                             .foregroundColor(.modernText)
                                         
-                                        TextField("25.00", text: $priceInput)
+                                        TextField("", text: $priceInput)
                                             .font(.system(size: 16))
                                             .foregroundColor(.modernText)
                                             .padding(16)
@@ -2487,27 +2524,59 @@ struct SeatOptionsView: View {
                                         .font(.system(size: 14, weight: .medium))
                                         .foregroundColor(.modernTextSecondary)
                                     
-                                    Menu {
+                                    Picker("", selection: $selectedSource) {
                                         ForEach(TicketSource.allCases, id: \.self) { source in
-                                            Button(source.rawValue) {
-                                                selectedSource = source
-                                            }
+                                            Text(source.rawValue)
+                                                .tag(source)
                                         }
-                                    } label: {
-                                        HStack {
-                                            Text(selectedSource.rawValue)
-                                                .font(.system(size: 16))
-                                                .foregroundColor(.modernText)
-                                            Spacer()
-                                            Image(systemName: "chevron.down")
-                                                .font(.system(size: 14))
-                                                .foregroundColor(.modernTextSecondary)
+                                    }
+                                    .pickerStyle(.menu)
+                                    .tint(.modernText)
+                                    .padding(12)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(Color.modernSecondary)
+                                    )
+                                    .onChange(of: selectedSource) { _, newSource in
+                                        // Auto-set price for family tickets
+                                        if newSource == .family {
+                                            priceInput = String(format: "%.0f", settingsManager.familyTicketPrice)
                                         }
-                                        .padding(16)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .fill(Color.modernSecondary)
-                                        )
+                                    }
+                                }
+                                
+                                // Date fields (only for sold status)
+                                VStack(spacing: 16) {
+                                    // Date Sold
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("Date Sold")
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundColor(.modernTextSecondary)
+                                        
+                                        DatePicker("", selection: $dateSold, displayedComponents: .date)
+                                            .datePickerStyle(.compact)
+                                            .colorScheme(.dark)
+                                            .padding(12)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .fill(Color.modernSecondary)
+                                            )
+                                    }
+                                    
+                                    // Date Paid
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("Date Paid")
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundColor(.modernTextSecondary)
+                                        
+                                        DatePicker("", selection: $datePaid, displayedComponents: .date)
+                                            .datePickerStyle(.compact)
+                                            .colorScheme(.dark)
+                                            .padding(12)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .fill(Color.modernSecondary)
+                                            )
                                     }
                                 }
                             }
@@ -2581,10 +2650,12 @@ struct SeatOptionsView: View {
                                 updatedSeat.status = selectedStatus
                                 
                                 if selectedStatus == .sold {
-                                    updatedSeat.price = Double(priceInput) ?? 25.0
+                                    updatedSeat.price = priceInput.isEmpty ? nil : Double(priceInput)
                                     updatedSeat.cost = Double(costInput) ?? 25.0
                                     updatedSeat.note = nil
                                     updatedSeat.source = selectedSource
+                                    updatedSeat.dateSold = dateSold
+                                    updatedSeat.datePaid = datePaid
                                     // Play ding sound effect
                                     playDingSound()
                                 } else if selectedStatus == .reserved {
@@ -2592,11 +2663,15 @@ struct SeatOptionsView: View {
                                     updatedSeat.cost = Double(costInput) ?? 25.0
                                     updatedSeat.note = noteInput.isEmpty ? nil : noteInput
                                     updatedSeat.source = nil
+                                    updatedSeat.dateSold = nil
+                                    updatedSeat.datePaid = nil
                                 } else {
                                     updatedSeat.price = nil
                                     updatedSeat.cost = Double(costInput) ?? 25.0
                                     updatedSeat.note = nil
                                     updatedSeat.source = nil
+                                    updatedSeat.dateSold = nil
+                                    updatedSeat.datePaid = nil
                                 }
                                 
                                 onUpdate(updatedSeat)
@@ -2624,6 +2699,12 @@ struct SeatOptionsView: View {
                 }
             }
             .navigationBarHidden(true)
+            .onAppear {
+                // If seat is sold and source is family, set the price to family ticket price
+                if selectedStatus == .sold && selectedSource == .family && priceInput.isEmpty {
+                    priceInput = String(format: "%.0f", settingsManager.familyTicketPrice)
+                }
+            }
             .overlay(
                 HStack {
                     Spacer()
@@ -2737,6 +2818,7 @@ struct SettingsView: View {
     @Binding var selectedTab: Int
     @State private var tempSuiteName: String = ""
     @State private var tempVenueLocation: String = ""
+    @State private var tempFamilyTicketPrice: String = ""
     
     var body: some View {
         NavigationView {
@@ -2813,6 +2895,41 @@ struct SettingsView: View {
                                             settingsManager.venueLocation = tempVenueLocation
                                         }
                                 }
+                                
+                                // Family Ticket Price
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Family Ticket Price")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.modernTextSecondary)
+                                    
+                                    HStack {
+                                        Text("$")
+                                            .font(.system(size: 16))
+                                            .foregroundColor(.modernTextSecondary)
+                                        
+                                        TextField("50", text: $tempFamilyTicketPrice)
+                                            .font(.system(size: 16))
+                                            .foregroundColor(.modernText)
+                                            .keyboardType(.numberPad)
+                                            .padding(16)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .fill(Color.modernSecondary)
+                                            )
+                                            .onSubmit {
+                                                if let price = Double(tempFamilyTicketPrice), price > 0 {
+                                                    settingsManager.familyTicketPrice = price
+                                                }
+                                            }
+                                            .onChange(of: tempFamilyTicketPrice) { _, newValue in
+                                                // Only allow numeric input
+                                                let filtered = newValue.filter { "0123456789".contains($0) }
+                                                if filtered != newValue {
+                                                    tempFamilyTicketPrice = filtered
+                                                }
+                                            }
+                                    }
+                                }
                             }
                             .padding(20)
                             .background(
@@ -2825,6 +2942,9 @@ struct SettingsView: View {
                         Button(action: {
                             settingsManager.suiteName = tempSuiteName
                             settingsManager.venueLocation = tempVenueLocation
+                            if let price = Double(tempFamilyTicketPrice), price > 0 {
+                                settingsManager.familyTicketPrice = price
+                            }
                             // Navigate back to dashboard
                             selectedTab = 0
                         }) {
@@ -2944,6 +3064,7 @@ struct SettingsView: View {
             .onAppear {
                 tempSuiteName = settingsManager.suiteName
                 tempVenueLocation = settingsManager.venueLocation
+                tempFamilyTicketPrice = String(format: "%.0f", settingsManager.familyTicketPrice)
             }
         }
     }
