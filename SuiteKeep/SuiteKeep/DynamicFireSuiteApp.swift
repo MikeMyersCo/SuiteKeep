@@ -8,6 +8,7 @@
 import SwiftUI
 import AVFoundation
 
+
 // MARK: - Settings Manager
 class SettingsManager: ObservableObject {
     @Published var suiteName: String {
@@ -550,38 +551,37 @@ struct MetricCard: View {
     @State private var animateValue = false
     
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             // Icon with gradient background - centered
             ZStack {
                 Circle()
                     .fill(gradient)
-                    .frame(width: 40, height: 40)
+                    .frame(width: 36, height: 36)
                     .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
                 
                 Image(systemName: icon)
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.white)
             }
             
-            VStack(spacing: 4) {
+            Spacer(minLength: 2)
+            
+            VStack(spacing: 2) {
                 Text(value)
-                    .font(.system(size: 24, weight: .black, design: .rounded))
+                    .font(.system(size: 22, weight: .black, design: .rounded))
                     .foregroundColor(.white)
                     .scaleEffect(animateValue ? 1.05 : 1.0)
                     .animation(.spring(response: 0.6, dampingFraction: 0.8), value: animateValue)
                 
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.white.opacity(0.9))
-                
-                Text(subtitle)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.white.opacity(0.7))
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
             }
+            
+            Spacer(minLength: 6)
         }
-        .padding(12)
+        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
         .frame(maxWidth: .infinity)
         .frame(height: 90)
         .background(
@@ -1025,7 +1025,10 @@ struct RecentActivityFeed: View {
     @State private var animateRows = false
     
     var recentActivities: [(String, String, String, String, LinearGradient)] {
-        let sortedConcerts = concerts.sorted { $0.date > $1.date }.prefix(4)
+        let now = Date()
+        let sortedConcerts = concerts.sorted { 
+            abs($0.date.timeIntervalSince(now)) < abs($1.date.timeIntervalSince(now))
+        }.prefix(4)
         return sortedConcerts.map { concert in
             let timeAgo = timeAgoString(from: concert.date)
             let icon = concert.ticketsSold == 8 ? "checkmark.seal.fill" : (concert.ticketsSold > 0 ? "ticket.fill" : "music.note")
@@ -1451,8 +1454,8 @@ struct Seat: Codable {
 // MARK: - Concert Model
 struct Concert: Identifiable, Codable {
     let id: Int
-    let artist: String
-    let date: Date
+    var artist: String
+    var date: Date
     var seats: [Seat] // Array of 8 seats
     
     var ticketsSold: Int {
@@ -1654,7 +1657,15 @@ struct ConcertRowView: View {
     let concert: Concert
     
     var statusColor: Color {
-        concert.ticketsSold == 8 ? .modernSuccess : (concert.ticketsSold > 0 ? .modernWarning : .modernTextSecondary)
+        if concert.ticketsSold == 8 {
+            return .modernSuccess
+        } else if concert.ticketsSold > 0 {
+            return .modernWarning
+        } else if concert.ticketsReserved > 0 {
+            return .cyan
+        } else {
+            return .modernTextSecondary
+        }
     }
     
     var body: some View {
@@ -1679,13 +1690,26 @@ struct ConcertRowView: View {
                     .font(.system(size: 14))
                     .foregroundColor(.modernTextSecondary)
                 
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(statusColor)
-                        .frame(width: 6, height: 6)
-                    Text("\(concert.ticketsSold)/8 tickets sold")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(statusColor)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(concert.ticketsSold == 8 ? Color.modernSuccess : (concert.ticketsSold > 0 ? Color.modernWarning : Color.modernTextSecondary))
+                            .frame(width: 6, height: 6)
+                        Text("\(concert.ticketsSold)/8 tickets sold")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(concert.ticketsSold == 8 ? .modernSuccess : (concert.ticketsSold > 0 ? .modernWarning : .modernTextSecondary))
+                    }
+                    
+                    if concert.ticketsReserved > 0 {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(Color.cyan)
+                                .frame(width: 6, height: 6)
+                            Text("\(concert.ticketsReserved) reserved")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.cyan)
+                        }
+                    }
                 }
             }
             
@@ -1886,19 +1910,29 @@ struct AllConcertsView: View {
                     ScrollView {
                         VStack(spacing: 24) {
                             // Header with space for navigation buttons
-                            VStack(alignment: .leading, spacing: 8) {
+                            VStack(spacing: 20) {
                                 // Spacer for the overlay buttons (44 + padding)
                                 Color.clear.frame(height: 70)
                                 
-                                Text("All Concerts")
-                                    .font(.system(size: 34, weight: .bold, design: .rounded))
-                                    .foregroundColor(.modernText)
-                                
-                                Text("\(sortedConcerts.count) total concerts")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(.modernTextSecondary)
+                                // Header Card
+                                VStack(spacing: 8) {
+                                    Text("All Concerts")
+                                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                                        .foregroundColor(.modernText)
+                                    
+                                    Text("\(sortedConcerts.count) total concerts")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundColor(.modernTextSecondary)
+                                }
+                                .padding(.vertical, 20)
+                                .padding(.horizontal, 24)
+                                .frame(maxWidth: .infinity)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 20)
+                                        .fill(Color.modernSecondary)
+                                        .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
+                                )
                             }
-                            .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.top, 20)
                             
                             LazyVStack(spacing: 12) {
@@ -1953,6 +1987,9 @@ struct ConcertDetailView: View {
     @ObservedObject var settingsManager: SettingsManager
     @State private var showingAllConcerts = false
     @State private var showingDeleteConfirmation = false
+    @State private var isEditingDetails = false
+    @State private var editedArtist = ""
+    @State private var editedDate = Date()
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -2009,22 +2046,88 @@ struct ConcertDetailView: View {
                     
                     // Concert Header Card
                     VStack(spacing: 16) {
-                        Text(concert.artist)
-                            .font(.system(size: 28, weight: .bold))
-                            .foregroundColor(.modernText)
-                        
-                        VStack(spacing: 8) {
-                            Text(concert.date, style: .date)
-                                .font(.system(size: 16))
-                                .foregroundColor(.modernTextSecondary)
-                            
-                            HStack {
-                                Circle()
-                                    .fill(concert.ticketsSold == 8 ? Color.modernSuccess : Color.modernWarning)
-                                    .frame(width: 8, height: 8)
-                                Text("\(concert.ticketsSold)/8 tickets sold")
+                        HStack {
+                            Spacer()
+                            Button(action: {
+                                if isEditingDetails {
+                                    // Save changes
+                                    concert.artist = editedArtist
+                                    concert.date = editedDate
+                                    concertManager.updateConcert(concert)
+                                    isEditingDetails = false
+                                } else {
+                                    // Enter edit mode
+                                    editedArtist = concert.artist
+                                    editedDate = concert.date
+                                    isEditingDetails = true
+                                }
+                            }) {
+                                Text(isEditingDetails ? "Save" : "Edit")
                                     .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(concert.ticketsSold == 8 ? .modernSuccess : .modernWarning)
+                                    .foregroundColor(.modernAccent)
+                            }
+                            
+                            if isEditingDetails {
+                                Button("Cancel") {
+                                    isEditingDetails = false
+                                    editedArtist = concert.artist
+                                    editedDate = concert.date
+                                }
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.modernTextSecondary)
+                            }
+                        }
+                        
+                        if isEditingDetails {
+                            // Edit mode
+                            VStack(spacing: 16) {
+                                TextField("Artist Name", text: $editedArtist)
+                                    .font(.system(size: 28, weight: .bold))
+                                    .foregroundColor(.modernText)
+                                    .multilineTextAlignment(.center)
+                                    .padding(12)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(Color.black.opacity(0.2))
+                                    )
+                                
+                                DatePicker("", selection: $editedDate, displayedComponents: .date)
+                                    .datePickerStyle(.compact)
+                                    .colorScheme(.dark)
+                                    .labelsHidden()
+                            }
+                        } else {
+                            // Display mode
+                            Text(concert.artist)
+                                .font(.system(size: 28, weight: .bold))
+                                .foregroundColor(.modernText)
+                            
+                            VStack(spacing: 8) {
+                                Text(concert.date, style: .date)
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.modernTextSecondary)
+                                
+                                VStack(spacing: 4) {
+                                    HStack {
+                                        Circle()
+                                            .fill(concert.ticketsSold == 8 ? Color.modernSuccess : Color.modernWarning)
+                                            .frame(width: 8, height: 8)
+                                        Text("\(concert.ticketsSold)/8 tickets sold")
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundColor(concert.ticketsSold == 8 ? .modernSuccess : .modernWarning)
+                                    }
+                                    
+                                    if concert.ticketsReserved > 0 {
+                                        HStack {
+                                            Circle()
+                                                .fill(Color.cyan)
+                                                .frame(width: 8, height: 8)
+                                            Text("\(concert.ticketsReserved) reserved")
+                                                .font(.system(size: 14, weight: .medium))
+                                                .foregroundColor(.cyan)
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -2234,6 +2337,15 @@ struct InteractiveFireSuiteView: View {
                         concert.seats[index] = updatedSeat
                         concertManager.updateConcert(concert)
                     }
+                },
+                onUpdateAll: { templateSeat in
+                    // Apply the template seat to all seats, but keep each seat's original seat number context
+                    for i in 0..<concert.seats.count {
+                        let newSeat = templateSeat
+                        // Each seat should maintain its unique identity for seat-specific tracking
+                        concert.seats[i] = newSeat
+                    }
+                    concertManager.updateConcert(concert)
                 }
             )
             .environmentObject(settingsManager)
@@ -2370,6 +2482,7 @@ struct SeatOptionsView: View {
     let seatNumber: Int
     @State var seat: Seat
     let onUpdate: (Seat) -> Void
+    let onUpdateAll: ((Seat) -> Void)?
     
     @State private var selectedStatus: SeatStatus
     @State private var priceInput: String
@@ -2378,11 +2491,13 @@ struct SeatOptionsView: View {
     @State private var selectedSource: TicketSource
     @State private var dateSold: Date
     @State private var datePaid: Date
+    @State private var applyToAllSeats = false
     
-    init(seatNumber: Int, seat: Seat, onUpdate: @escaping (Seat) -> Void) {
+    init(seatNumber: Int, seat: Seat, onUpdate: @escaping (Seat) -> Void, onUpdateAll: ((Seat) -> Void)? = nil) {
         self.seatNumber = seatNumber
         self.seat = seat
         self.onUpdate = onUpdate
+        self.onUpdateAll = onUpdateAll
         self._selectedStatus = State(initialValue: seat.status)
         self._priceInput = State(initialValue: seat.price != nil ? String(seat.price!) : "")
         self._costInput = State(initialValue: String(seat.cost ?? 25.0))
@@ -2643,6 +2758,35 @@ struct SeatOptionsView: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 8)
                         
+                        // Apply to all seats checkbox
+                        if selectedStatus == .sold || selectedStatus == .reserved {
+                            HStack {
+                                Button(action: {
+                                    applyToAllSeats.toggle()
+                                }) {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: applyToAllSeats ? "checkmark.square.fill" : "square")
+                                            .font(.system(size: 20))
+                                            .foregroundColor(applyToAllSeats ? .modernAccent : .modernTextSecondary)
+                                        
+                                        Text("Apply to all seats")
+                                            .font(.system(size: 16, weight: .medium))
+                                            .foregroundColor(.modernText)
+                                        
+                                        Spacer()
+                                    }
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(Color.modernSecondary.opacity(0.7))
+                                )
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 8)
+                        }
+                        
                         // Action buttons
                         VStack(spacing: 12) {
                             Button("Update Seat") {
@@ -2674,7 +2818,14 @@ struct SeatOptionsView: View {
                                     updatedSeat.datePaid = nil
                                 }
                                 
-                                onUpdate(updatedSeat)
+                                if applyToAllSeats && (selectedStatus == .sold || selectedStatus == .reserved), let updateAllCallback = onUpdateAll {
+                                    // Apply to all seats
+                                    updateAllCallback(updatedSeat)
+                                } else {
+                                    // Apply to current seat only
+                                    onUpdate(updatedSeat)
+                                }
+                                
                                 dismiss()
                             }
                             .font(.system(size: 16, weight: .semibold))
