@@ -349,7 +349,7 @@ struct DynamicFireSuiteApp: View {
                     .transition(.opacity)
             } else {
         TabView(selection: $selectedTab) {
-            DynamicDashboard(concerts: $concertManager.concerts, settingsManager: settingsManager)
+            DynamicDashboard(concerts: $concertManager.concerts, concertManager: concertManager, settingsManager: settingsManager)
                 .tabItem {
                     Image(systemName: selectedTab == 0 ? "house.fill" : "house")
                     Text("Dashboard")
@@ -363,7 +363,7 @@ struct DynamicFireSuiteApp: View {
                 }
                 .tag(1)
             
-            DynamicAnalytics(concerts: $concertManager.concerts)
+            DynamicAnalytics(concerts: $concertManager.concerts, settingsManager: settingsManager)
                 .tabItem {
                     Image(systemName: selectedTab == 2 ? "chart.bar.xaxis" : "chart.bar")
                     Text("Analytics")
@@ -396,7 +396,9 @@ struct DynamicFireSuiteApp: View {
 struct DynamicDashboard: View {
     @State private var pulseFirepit = false
     @State private var rotateValue: Double = 0
+    @State private var selectedConcert: Concert?
     @Binding var concerts: [Concert]
+    @ObservedObject var concertManager: ConcertDataManager
     @ObservedObject var settingsManager: SettingsManager
     
     var body: some View {
@@ -480,12 +482,21 @@ struct DynamicDashboard: View {
                         SuiteSummaryView(concerts: concerts, settingsManager: settingsManager)
                         
                         // Recent Activity
-                        RecentActivityFeed(concerts: concerts)
+                        RecentActivityFeed(concerts: concerts) { concert in
+                            selectedConcert = concert
+                        }
                     }
                     .padding(.horizontal)
                 }
             }
             .navigationBarHidden(true)
+            .sheet(item: $selectedConcert) { concert in
+                ConcertDetailView(
+                    concert: concert,
+                    concertManager: concertManager,
+                    settingsManager: settingsManager
+                )
+            }
         }
     }
     
@@ -1059,9 +1070,10 @@ struct PerformanceMetricsView: View {
 // MARK: - Enhanced Recent Activity Feed
 struct RecentActivityFeed: View {
     let concerts: [Concert]
+    let onConcertTap: (Concert) -> Void
     @State private var animateRows = false
     
-    var recentActivities: [(String, String, String, String, LinearGradient)] {
+    var recentActivities: [(String, String, String, String, LinearGradient, Concert)] {
         let now = Date()
         let sortedConcerts = concerts.sorted { 
             abs($0.date.timeIntervalSince(now)) < abs($1.date.timeIntervalSince(now))
@@ -1072,7 +1084,7 @@ struct RecentActivityFeed: View {
             let subtitle = concert.ticketsSold == 8 ? "Sold out!" : "Tickets sold: \(concert.ticketsSold)/8"
             let gradient: LinearGradient = concert.ticketsSold == 8 ? Color.cardGreen : (concert.ticketsSold > 0 ? Color.cardOrange : Color.cardPink)
             
-            return (icon, concert.artist, subtitle, timeAgo, gradient)
+            return (icon, concert.artist, subtitle, timeAgo, gradient, concert)
         }
     }
     
@@ -1152,7 +1164,8 @@ struct RecentActivityFeed: View {
                             title: activity.1,
                             subtitle: activity.2,
                             time: activity.3,
-                            gradient: activity.4
+                            gradient: activity.4,
+                            onTap: { onConcertTap(activity.5) }
                         )
                         .opacity(animateRows ? 1.0 : 0.0)
                         .offset(y: animateRows ? 0 : 20)
@@ -1193,6 +1206,7 @@ struct EnhancedActivityRow: View {
     let subtitle: String
     let time: String
     let gradient: LinearGradient
+    let onTap: () -> Void
     
     @State private var isPressed = false
     
@@ -1242,6 +1256,9 @@ struct EnhancedActivityRow: View {
         )
         .scaleEffect(isPressed ? 0.98 : 1.0)
         .onTapGesture {
+            // Haptic feedback
+            HapticManager.shared.impact(style: .light)
+            
             withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                 isPressed.toggle()
             }
@@ -1249,6 +1266,7 @@ struct EnhancedActivityRow: View {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                     isPressed.toggle()
                 }
+                onTap()
             }
         }
     }
@@ -3397,6 +3415,10 @@ struct ParkingTicketOptionsView: View {
 
 struct DynamicAnalytics: View {
     @Binding var concerts: [Concert]
+    @ObservedObject var settingsManager: SettingsManager
+    @State private var isGeneratingReport = false
+    @State private var generatedReportURL: URL?
+    @State private var showingShareSheet = false
     
     var body: some View {
         NavigationView {
@@ -3450,13 +3472,245 @@ struct DynamicAnalytics: View {
                         
                         // Performance Metrics
                         PerformanceMetricsView(concerts: concerts)
+                        
+                        // Reporting Section
+                        ReportingView(
+                            concerts: concerts,
+                            settingsManager: settingsManager,
+                            isGenerating: $isGeneratingReport,
+                            generatedReportURL: $generatedReportURL,
+                            showingShareSheet: $showingShareSheet
+                        )
                     }
                     .padding(.horizontal)
                 }
             }
             .navigationBarHidden(true)
+            .sheet(isPresented: $showingShareSheet) {
+                if let reportURL = generatedReportURL {
+                    ShareSheet(activityItems: [reportURL])
+                }
+            }
         }
     }
+}
+
+// MARK: - Reporting View
+struct ReportingView: View {
+    let concerts: [Concert]
+    @ObservedObject var settingsManager: SettingsManager
+    @Binding var isGenerating: Bool
+    @Binding var generatedReportURL: URL?
+    @Binding var showingShareSheet: Bool
+    @State private var animateIcon = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            // Header
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Business Reports")
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundColor(.white)
+                    Text("Comprehensive profit analysis and data export")
+                        .font(.system(size: 14))
+                        .foregroundColor(.white.opacity(0.8))
+                }
+                Spacer()
+                
+                ZStack {
+                    Circle()
+                        .fill(LinearGradient(colors: [.white.opacity(0.2), .white.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .frame(width: 40, height: 40)
+                    Image(systemName: "doc.text.magnifyingglass")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                        .rotationEffect(.degrees(animateIcon ? 360 : 0))
+                        .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: false), value: animateIcon)
+                }
+            }
+            
+            // Report Features
+            VStack(spacing: 16) {
+                ReportFeatureRow(
+                    icon: "chart.line.uptrend.xyaxis",
+                    title: "Profit Analysis",
+                    description: "Detailed revenue, costs, and profit margins"
+                )
+                
+                ReportFeatureRow(
+                    icon: "tablecells",
+                    title: "Concert Data",
+                    description: "Complete seat-by-seat sales information"
+                )
+                
+                ReportFeatureRow(
+                    icon: "trophy",
+                    title: "Performance Rankings",
+                    description: "Top performing concerts and revenue sources"
+                )
+                
+                ReportFeatureRow(
+                    icon: "percent",
+                    title: "Executive Summary",
+                    description: "Key metrics and occupancy statistics"
+                )
+            }
+            
+            // Generate Report Button
+            Button {
+                generateReport()
+            } label: {
+                HStack {
+                    if isGenerating {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                    } else {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    
+                    Text(isGenerating ? "Generating Report..." : "Generate & Share Report")
+                        .font(.system(size: 16, weight: .semibold))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .background(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.2, green: 0.6, blue: 1.0),
+                            Color(red: 0.1, green: 0.4, blue: 0.8),
+                            Color(red: 0.0, green: 0.3, blue: 0.7)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+            }
+            .disabled(isGenerating || concerts.isEmpty)
+            .buttonStyle(HoverableButtonStyle())
+            
+            if concerts.isEmpty {
+                HStack {
+                    Image(systemName: "info.circle")
+                        .foregroundColor(.orange)
+                    Text("Add concerts to generate reports")
+                        .font(.system(size: 14))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+            }
+        }
+        .padding(24)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.2, green: 0.7, blue: 0.4),
+                                Color(red: 0.1, green: 0.5, blue: 0.3),
+                                Color(red: 0.0, green: 0.4, blue: 0.2)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                
+                RoundedRectangle(cornerRadius: 24)
+                    .fill(
+                        LinearGradient(
+                            colors: [.white.opacity(0.05), .clear, .black.opacity(0.1)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+            .shadow(color: .black.opacity(0.15), radius: 15, x: 0, y: 8)
+        )
+        .onAppear {
+            animateIcon = true
+        }
+    }
+    
+    private func generateReport() {
+        guard !concerts.isEmpty else { return }
+        
+        isGenerating = true
+        HapticManager.shared.impact(style: .medium)
+        
+        DispatchQueue.global(qos: .userInitiated).async {
+            let reportFileURL = ReportGenerator.shared.generateComprehensiveReportFile(
+                concerts: concerts,
+                settingsManager: settingsManager
+            )
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { // Small delay for UX
+                self.generatedReportURL = reportFileURL
+                self.isGenerating = false
+                if reportFileURL != nil {
+                    self.showingShareSheet = true
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Report Feature Row
+struct ReportFeatureRow: View {
+    let icon: String
+    let title: String
+    let description: String
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(0.2))
+                    .frame(width: 32, height: 32)
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+            }
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white)
+                Text(description)
+                    .font(.system(size: 12))
+                    .foregroundColor(.white.opacity(0.8))
+            }
+            
+            Spacer()
+        }
+    }
+}
+
+// MARK: - Share Sheet
+struct ShareSheet: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(
+            activityItems: activityItems,
+            applicationActivities: nil
+        )
+        
+        // Configure for better file sharing experience
+        controller.excludedActivityTypes = [
+            .assignToContact,
+            .addToReadingList,
+            .postToFlickr,
+            .postToVimeo
+        ]
+        
+        return controller
+    }
+    
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 struct DynamicPortfolio: View {
@@ -3729,6 +3983,240 @@ struct SettingsView: View {
             }
         }
     }
+}
+
+// MARK: - Report Generator Service
+class ReportGenerator {
+    static let shared = ReportGenerator()
+    
+    private init() {}
+    
+    func generateComprehensiveReportFile(concerts: [Concert], settingsManager: SettingsManager) -> URL? {
+        let csvContent = generateComprehensiveReport(concerts: concerts, settingsManager: settingsManager)
+        
+        // Generate filename with timestamp
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+        let filename = "SuiteKeep_Report_\(formatter.string(from: Date())).csv"
+        
+        // Create temporary file URL
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+        
+        do {
+            try csvContent.write(to: tempURL, atomically: true, encoding: .utf8)
+            return tempURL
+        } catch {
+            print("Failed to write CSV file: \(error)")
+            return nil
+        }
+    }
+    
+    func generateComprehensiveReport(concerts: [Concert], settingsManager: SettingsManager) -> String {
+        var csv = ""
+        
+        // Header with report metadata
+        csv += "SuiteKeep Concert Management Report\n"
+        csv += "Generated: \(DateFormatter.reportHeader.string(from: Date()))\n"
+        csv += "Suite: \(settingsManager.suiteName)\n"
+        csv += "Venue: \(settingsManager.venueLocation)\n\n"
+        
+        // Executive Summary
+        csv += generateExecutiveSummary(concerts: concerts)
+        csv += "\n"
+        
+        // Concert Overview
+        csv += generateConcertOverview(concerts: concerts)
+        csv += "\n"
+        
+        // Detailed Seat Data
+        csv += generateDetailedSeatData(concerts: concerts)
+        csv += "\n"
+        
+        // Profit Analysis
+        csv += generateProfitAnalysis(concerts: concerts)
+        
+        return csv
+    }
+    
+    private func generateExecutiveSummary(concerts: [Concert]) -> String {
+        var csv = "=== EXECUTIVE SUMMARY ===\n"
+        
+        // Filter to only include concerts that have already happened for financial metrics
+        let currentDate = Date()
+        let pastConcerts = concerts.filter { $0.date <= currentDate }
+        
+        // Basic counts include ALL concerts (past and future)
+        let totalConcerts = concerts.count
+        let totalSeats = concerts.reduce(0) { $0 + $1.seats.count }
+        let totalSoldSeats = concerts.reduce(0) { $0 + $1.ticketsSold }
+        let totalReservedSeats = concerts.reduce(0) { $0 + $1.ticketsReserved }
+        
+        let totalRevenue = pastConcerts.reduce(0.0) { total, concert in
+            let seatRevenue = concert.seats.compactMap { $0.price }.reduce(0.0, +)
+            let parkingRevenue = concert.parkingTicket?.price ?? 0.0
+            return total + seatRevenue + parkingRevenue
+        }
+        
+        let totalCosts = pastConcerts.reduce(0.0) { total, concert in
+            let seatCosts = concert.seats.reduce(0.0) { $0 + ($1.cost ?? 0.0) }
+            let parkingCost = concert.parkingTicket?.cost ?? 0.0
+            return total + seatCosts + parkingCost
+        }
+        
+        let netProfit = totalRevenue - totalCosts
+        let occupancyRate = totalSeats > 0 ? Double(totalSoldSeats) / Double(totalSeats) * 100.0 : 0.0
+        let profitMargin = totalCosts > 0 ? (netProfit / totalCosts) * 100.0 : 0.0
+        
+        csv += "Note: Financial metrics (Revenue/Costs/Profit/ROI/Averages) include past concerts only\n"
+        csv += "Seat counts include all scheduled concerts (past and future)\n\n"
+        csv += "Metric,Value\n"
+        csv += "Total Concerts,\(totalConcerts)\n"
+        csv += "Total Seats,\(totalSeats)\n"
+        csv += "Seats Sold,\(totalSoldSeats)\n"
+        csv += "Seats Reserved,\(totalReservedSeats)\n"
+        csv += "Occupancy Rate,\(String(format: "%.1f", occupancyRate))%\n"
+        csv += "Total Revenue,\(formatCurrency(totalRevenue))\n"
+        csv += "Total Costs,\(formatCurrency(totalCosts))\n"
+        csv += "Net Profit,\(formatCurrency(netProfit))\n"
+        csv += "Return on Investment (ROI),\(String(format: "%.1f", profitMargin))%\n"
+        csv += "Average Profit per Concert (Past Shows Only),\(formatCurrency(pastConcerts.count > 0 ? netProfit / Double(pastConcerts.count) : 0.0))\n"
+        
+        return csv
+    }
+    
+    private func generateConcertOverview(concerts: [Concert]) -> String {
+        var csv = "=== CONCERT OVERVIEW ===\n"
+        csv += "Artist,Date,Seats Sold,Seats Reserved,Occupancy Rate,Revenue,Costs,Profit,ROI %\n"
+        
+        let sortedConcerts = concerts.sorted { $0.date < $1.date }
+        
+        for concert in sortedConcerts {
+            let seatRevenue = concert.seats.compactMap { $0.price }.reduce(0.0, +)
+            let parkingRevenue = concert.parkingTicket?.price ?? 0.0
+            let totalRevenue = seatRevenue + parkingRevenue
+            
+            let seatCosts = concert.seats.reduce(0.0) { $0 + ($1.cost ?? 0.0) }
+            let parkingCost = concert.parkingTicket?.cost ?? 0.0
+            let totalCosts = seatCosts + parkingCost
+            
+            let profit = totalRevenue - totalCosts
+            let occupancyRate = Double(concert.ticketsSold) / 8.0 * 100.0
+            let profitMargin = totalCosts > 0 ? (profit / totalCosts) * 100.0 : 0.0
+            
+            csv += "\"\(concert.artist)\",\(DateFormatter.reportDate.string(from: concert.date)),\(concert.ticketsSold),\(concert.ticketsReserved),\(String(format: "%.1f", occupancyRate))%,\(formatCurrency(totalRevenue)),\(formatCurrency(totalCosts)),\(formatCurrency(profit)),\(String(format: "%.1f", profitMargin))%\n"
+        }
+        
+        return csv
+    }
+    
+    private func generateDetailedSeatData(concerts: [Concert]) -> String {
+        var csv = "=== DETAILED SEAT DATA ===\n"
+        csv += "Concert,Date,Seat Number,Status,Price,Cost,Source,Date Sold,Date Paid,Profit\n"
+        
+        let sortedConcerts = concerts.sorted { $0.date < $1.date }
+        
+        for concert in sortedConcerts {
+            for (index, seat) in concert.seats.enumerated() {
+                let seatNumber = index + 1
+                let profit = (seat.price ?? 0.0) - (seat.cost ?? 0.0)
+                let source = seat.source?.rawValue ?? ""
+                let dateSold = seat.dateSold.map { DateFormatter.reportDate.string(from: $0) } ?? ""
+                let datePaid = seat.datePaid.map { DateFormatter.reportDate.string(from: $0) } ?? ""
+                
+                csv += "\"\(concert.artist)\",\(DateFormatter.reportDate.string(from: concert.date)),\(seatNumber),\(seat.status.rawValue.capitalized),\(seat.price.map(formatCurrency) ?? ""),\(formatCurrency(seat.cost ?? 0.0)),\(source),\(dateSold),\(datePaid),\(formatCurrency(profit))\n"
+            }
+            
+            // Add parking ticket data if available
+            if let parking = concert.parkingTicket {
+                let profit = (parking.price ?? 0.0) - (parking.cost ?? 0.0)
+                let dateSold = parking.dateSold.map { DateFormatter.reportDate.string(from: $0) } ?? ""
+                let datePaid = parking.datePaid.map { DateFormatter.reportDate.string(from: $0) } ?? ""
+                
+                csv += "\"\(concert.artist)\",\(DateFormatter.reportDate.string(from: concert.date)),Parking,\(parking.status.rawValue.capitalized),\(parking.price.map(formatCurrency) ?? ""),\(formatCurrency(parking.cost ?? 0.0)),,\(dateSold),\(datePaid),\(formatCurrency(profit))\n"
+            }
+        }
+        
+        return csv
+    }
+    
+    private func generateProfitAnalysis(concerts: [Concert]) -> String {
+        var csv = "=== PROFIT ANALYSIS ===\n"
+        csv += "Note: Analysis includes past concerts only\n\n"
+        
+        // Filter to only include concerts that have already happened
+        let currentDate = Date()
+        let pastConcerts = concerts.filter { $0.date <= currentDate }
+        
+        // Performance rankings
+        var concertPerformance: [(String, Double, Double)] = []
+        
+        for concert in pastConcerts {
+            let seatRevenue = concert.seats.compactMap { $0.price }.reduce(0.0, +)
+            let parkingRevenue = concert.parkingTicket?.price ?? 0.0
+            let totalRevenue = seatRevenue + parkingRevenue
+            
+            let seatCosts = concert.seats.reduce(0.0) { $0 + ($1.cost ?? 0.0) }
+            let parkingCost = concert.parkingTicket?.cost ?? 0.0
+            let totalCosts = seatCosts + parkingCost
+            
+            let profit = totalRevenue - totalCosts
+            let profitMargin = totalCosts > 0 ? (profit / totalCosts) * 100.0 : 0.0
+            
+            concertPerformance.append((concert.artist, profit, profitMargin))
+        }
+        
+        // Top Performers
+        csv += "\nTOP PERFORMING CONCERTS (by Profit):\n"
+        csv += "Rank,Artist,Profit,ROI %\n"
+        let topPerformers = concertPerformance.sorted { $0.1 > $1.1 }.prefix(5)
+        for (index, (artist, profit, margin)) in topPerformers.enumerated() {
+            csv += "\(index + 1),\"\(artist)\",\(formatCurrency(profit)),\(String(format: "%.1f", margin))%\n"
+        }
+        
+        // Revenue Sources Analysis
+        csv += "\nREVENUE SOURCES ANALYSIS:\n"
+        var sourceRevenue: [String: Double] = [:]
+        var sourceCount: [String: Int] = [:]
+        
+        for concert in concerts {
+            for seat in concert.seats {
+                if let source = seat.source, let price = seat.price {
+                    sourceRevenue[source.rawValue, default: 0.0] += price
+                    sourceCount[source.rawValue, default: 0] += 1
+                }
+            }
+        }
+        
+        csv += "Source,Revenue,Count,Average Price\n"
+        for source in sourceRevenue.keys.sorted() {
+            let revenue = sourceRevenue[source] ?? 0.0
+            let count = sourceCount[source] ?? 0
+            let avgPrice = count > 0 ? revenue / Double(count) : 0.0
+            csv += "\(source),\(formatCurrency(revenue)),\(count),\(formatCurrency(avgPrice))\n"
+        }
+        
+        return csv
+    }
+    
+    private func formatCurrency(_ amount: Double) -> String {
+        return String(format: "$%.2f", amount)
+    }
+}
+
+// MARK: - Date Formatters Extension
+extension DateFormatter {
+    static let reportHeader: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .full
+        formatter.timeStyle = .short
+        return formatter
+    }()
+    
+    static let reportDate: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MM/dd/yyyy"
+        return formatter
+    }()
 }
 
 // MARK: - Custom Button Styles
