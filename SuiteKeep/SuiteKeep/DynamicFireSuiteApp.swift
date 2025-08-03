@@ -2517,14 +2517,13 @@ struct InteractiveFireSuiteView: View {
             startPulseAnimation()
         }
         .sheet(isPresented: $showingSeatOptions) {
+            let index = selectedSeatIndex ?? 0
             SeatOptionsView(
-                seatNumber: (selectedSeatIndex ?? 0) + 1,
-                seat: selectedSeatIndex != nil ? concert.seats[selectedSeatIndex!] : Seat(),
+                seatNumber: index + 1,
+                seat: concert.seats[index],
                 onUpdate: { updatedSeat in
-                    if let index = selectedSeatIndex {
-                        concert.seats[index] = updatedSeat
-                        concertManager.updateConcert(concert)
-                    }
+                    concert.seats[index] = updatedSeat
+                    concertManager.updateConcert(concert)
                 },
                 onUpdateAll: { templateSeat in
                     // Apply the template seat to all seats, but keep each seat's original seat number context
@@ -2537,6 +2536,7 @@ struct InteractiveFireSuiteView: View {
                 }
             )
             .environmentObject(settingsManager)
+            .id(UUID()) // Force new instance every time
         }
         .sheet(isPresented: $showingParkingOptions) {
             ParkingTicketOptionsView(
@@ -2727,7 +2727,7 @@ struct SeatOptionsView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var settingsManager: SettingsManager
     let seatNumber: Int
-    @State var seat: Seat
+    let seat: Seat
     let onUpdate: (Seat) -> Void
     let onUpdateAll: ((Seat) -> Void)?
     
