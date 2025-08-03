@@ -35,16 +35,23 @@ class SettingsManager: ObservableObject {
         }
     }
     
+    @Published var isDarkMode: Bool {
+        didSet {
+            UserDefaults.standard.set(isDarkMode, forKey: "isDarkMode")
+            NSUbiquitousKeyValueStore.default.set(isDarkMode, forKey: "isDarkMode")
+            NSUbiquitousKeyValueStore.default.synchronize()
+        }
+    }
+    
     private var iCloudObserver: NSObjectProtocol?
     
     init() {
         // Load from local first
         self.suiteName = UserDefaults.standard.string(forKey: "suiteName") ?? "Fire Suite"
         self.venueLocation = UserDefaults.standard.string(forKey: "venueLocation") ?? "Ford Amphitheater"
-        self.familyTicketPrice = UserDefaults.standard.double(forKey: "familyTicketPrice")
-        if self.familyTicketPrice == 0 {
-            self.familyTicketPrice = 50.0 // Default to $50
-        }
+        let storedFamilyPrice = UserDefaults.standard.double(forKey: "familyTicketPrice")
+        self.familyTicketPrice = storedFamilyPrice == 0 ? 50.0 : storedFamilyPrice // Default to $50
+        self.isDarkMode = UserDefaults.standard.object(forKey: "isDarkMode") as? Bool ?? true
         
         // Check iCloud for newer values
         if let iCloudSuiteName = NSUbiquitousKeyValueStore.default.string(forKey: "suiteName") {
@@ -56,6 +63,9 @@ class SettingsManager: ObservableObject {
         let iCloudFamilyPrice = NSUbiquitousKeyValueStore.default.double(forKey: "familyTicketPrice")
         if iCloudFamilyPrice > 0 {
             self.familyTicketPrice = iCloudFamilyPrice
+        }
+        if let iCloudDarkMode = NSUbiquitousKeyValueStore.default.object(forKey: "isDarkMode") as? Bool {
+            self.isDarkMode = iCloudDarkMode
         }
         
         // Listen for iCloud changes
@@ -86,6 +96,9 @@ class SettingsManager: ObservableObject {
         let iCloudFamilyPrice = NSUbiquitousKeyValueStore.default.double(forKey: "familyTicketPrice")
         if iCloudFamilyPrice > 0 {
             self.familyTicketPrice = iCloudFamilyPrice
+        }
+        if let iCloudDarkMode = NSUbiquitousKeyValueStore.default.object(forKey: "isDarkMode") as? Bool {
+            self.isDarkMode = iCloudDarkMode
         }
     }
 }
@@ -3844,6 +3857,33 @@ struct SettingsView: View {
                                                 }
                                             }
                                     }
+                                }
+                                
+                                // Theme Toggle
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Appearance")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.modernTextSecondary)
+                                    
+                                    HStack {
+                                        Image(systemName: settingsManager.isDarkMode ? "moon.fill" : "sun.max.fill")
+                                            .foregroundColor(settingsManager.isDarkMode ? .purple : .orange)
+                                            .font(.system(size: 16))
+                                        
+                                        Text(settingsManager.isDarkMode ? "Dark Mode" : "Light Mode")
+                                            .font(.system(size: 16))
+                                            .foregroundColor(.modernText)
+                                        
+                                        Spacer()
+                                        
+                                        Toggle("", isOn: $settingsManager.isDarkMode)
+                                            .labelsHidden()
+                                    }
+                                    .padding(16)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(Color.modernSecondary)
+                                    )
                                 }
                             }
                             .padding(20)
