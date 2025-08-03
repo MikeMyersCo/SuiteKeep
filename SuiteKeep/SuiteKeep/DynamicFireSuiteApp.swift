@@ -383,7 +383,7 @@ struct DynamicFireSuiteApp: View {
                 }
                 .tag(2)
             
-            SettingsView(settingsManager: settingsManager, selectedTab: $selectedTab)
+            SettingsView(settingsManager: settingsManager, concertManager: concertManager, selectedTab: $selectedTab)
                 .tabItem {
                     Image(systemName: selectedTab == 3 ? "gearshape.fill" : "gearshape")
                     Text("Settings")
@@ -1604,6 +1604,13 @@ struct Concert: Identifiable, Codable {
     }
 }
 
+// MARK: - Backup Data Structure
+struct BackupData: Codable {
+    let concerts: [Concert]
+    let backupDate: Date
+    let version: String
+}
+
 // MARK: - Concert Data Manager
 class ConcertDataManager: ObservableObject {
     @Published var concerts: [Concert] = []
@@ -1758,6 +1765,80 @@ class ConcertDataManager: ObservableObject {
     func deleteConcert(_ concert: Concert) {
         concerts.removeAll { $0.id == concert.id }
         saveConcerts()
+    }
+    
+    // MARK: - Backup/Restore Functionality
+    
+    func createBackupData() -> Data? {
+        let backupData = BackupData(
+            concerts: concerts,
+            backupDate: Date(),
+            version: "1.0"
+        )
+        
+        do {
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            return try encoder.encode(backupData)
+        } catch {
+            print("Failed to create backup data: \(error)")
+            return nil
+        }
+    }
+    
+    func restoreFromBackupData(_ data: Data) -> Bool {
+        do {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let backupData = try decoder.decode(BackupData.self, from: data)
+            
+            // Validate backup data
+            guard validateBackupData(backupData) else {
+                print("Invalid backup data")
+                return false
+            }
+            
+            // Create backup of current data before restore
+            if let currentBackup = createBackupData() {
+                let emergencyBackupKey = "\(concertsKey)_emergency_backup"
+                userDefaults.set(currentBackup, forKey: emergencyBackupKey)
+                userDefaults.set(Date(), forKey: "\(emergencyBackupKey)_date")
+            }
+            
+            // Restore the data
+            concerts = backupData.concerts
+            saveConcerts()
+            
+            print("Successfully restored \(concerts.count) concerts from backup dated \(backupData.backupDate)")
+            return true
+        } catch {
+            print("Failed to restore from backup: \(error)")
+            return false
+        }
+    }
+    
+    private func validateBackupData(_ backupData: BackupData) -> Bool {
+        // Basic validation
+        guard backupData.version == "1.0" else {
+            print("Unsupported backup version: \(backupData.version)")
+            return false
+        }
+        
+        // Validate each concert has required data
+        for concert in backupData.concerts {
+            if concert.seats.count != 8 {
+                print("Invalid concert data: \(concert.artist) has \(concert.seats.count) seats instead of 8")
+                return false
+            }
+        }
+        
+        return true
+    }
+    
+    func getBackupInfo() -> (count: Int, lastBackupDate: Date?) {
+        let backupDateKey = "\(concertsKey)_backup_date"
+        let lastBackupDate = userDefaults.object(forKey: backupDateKey) as? Date
+        return (concerts.count, lastBackupDate)
     }
 }
 
@@ -2332,17 +2413,75 @@ struct InteractiveFireSuiteView: View {
     @State private var priceInput: String = ""
     @State private var showingParkingOptions = false
     
+    // Batch operation states
+    @State private var isBatchMode = false
+    @State private var selectedSeats = Set<Int>()
+    @State private var showingBatchOptions = false
+    
     var body: some View {
         VStack(spacing: 20) {
-            // Title
-            VStack(spacing: 8) {
-                Text("\(settingsManager.suiteName) Seating")
+            // Title and instructions
+            VStack(spacing: 12) {
+                Text("Seating")
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundColor(.modernText)
                 
-                Text("Tap seats to manage tickets")
+                Text(isBatchMode ? "Select multiple seats for batch operations" : "Tap seats to manage tickets")
                     .font(.system(size: 14))
                     .foregroundColor(.modernTextSecondary)
+                
+                // Batch mode toggle
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            isBatchMode.toggle()
+                            selectedSeats.removeAll()
+                        }
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: isBatchMode ? "checkmark.square.fill" : "square.on.square")
+                                .font(.system(size: 16, weight: .medium))
+                            Text(isBatchMode ? "Exit Batch" : "Batch Mode")
+                                .font(.system(size: 14, weight: .medium))
+                        }
+                        .foregroundColor(isBatchMode ? .blue : .modernTextSecondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(isBatchMode ? Color.blue.opacity(0.1) : Color.clear)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(isBatchMode ? Color.blue.opacity(0.3) : Color.gray.opacity(0.3), lineWidth: 1)
+                                )
+                        )
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    Spacer()
+                }
+                
+                // Batch selection status
+                if isBatchMode && !selectedSeats.isEmpty {
+                    HStack {
+                        Text("\(selectedSeats.count) seat\(selectedSeats.count == 1 ? "" : "s") selected")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.blue)
+                        
+                        Spacer()
+                        
+                        Button("Clear Selection") {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                selectedSeats.removeAll()
+                            }
+                        }
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.red)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.blue.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
+                }
             }
             
             // 3D-like Fire Suite Layout
@@ -2387,22 +2526,30 @@ struct InteractiveFireSuiteView: View {
                                 InteractiveSeatView(
                                     seatNumber: 6,
                                     seat: concert.seats[5],
-                                    onTap: { selectSeat(5) }
+                                    isSelected: selectedSeats.contains(5),
+                                    isBatchMode: isBatchMode,
+                                    onTap: { handleSeatTap(5) }
                                 )
                                 InteractiveSeatView(
                                     seatNumber: 5,
                                     seat: concert.seats[4],
-                                    onTap: { selectSeat(4) }
+                                    isSelected: selectedSeats.contains(4),
+                                    isBatchMode: isBatchMode,
+                                    onTap: { handleSeatTap(4) }
                                 )
                                 InteractiveSeatView(
                                     seatNumber: 4,
                                     seat: concert.seats[3],
-                                    onTap: { selectSeat(3) }
+                                    isSelected: selectedSeats.contains(3),
+                                    isBatchMode: isBatchMode,
+                                    onTap: { handleSeatTap(3) }
                                 )
                                 InteractiveSeatView(
                                     seatNumber: 3,
                                     seat: concert.seats[2],
-                                    onTap: { selectSeat(2) }
+                                    isSelected: selectedSeats.contains(2),
+                                    isBatchMode: isBatchMode,
+                                    onTap: { handleSeatTap(2) }
                                 )
                             }
                         }
@@ -2414,13 +2561,17 @@ struct InteractiveFireSuiteView: View {
                                 InteractiveSeatView(
                                     seatNumber: 8,
                                     seat: concert.seats[7],
-                                    onTap: { selectSeat(7) }
+                                    isSelected: selectedSeats.contains(7),
+                                    isBatchMode: isBatchMode,
+                                    onTap: { handleSeatTap(7) }
                                 )
                                 .offset(y: -24) // Move seat 8 up for consistent spacing
                                 InteractiveSeatView(
                                     seatNumber: 7,
                                     seat: concert.seats[6],
-                                    onTap: { selectSeat(6) }
+                                    isSelected: selectedSeats.contains(6),
+                                    isBatchMode: isBatchMode,
+                                    onTap: { handleSeatTap(6) }
                                 )
                                 .offset(y: -32) // Move seat 7 up more to prevent text overlap
                                 Spacer()
@@ -2435,13 +2586,17 @@ struct InteractiveFireSuiteView: View {
                                 InteractiveSeatView(
                                     seatNumber: 1,
                                     seat: concert.seats[0],
-                                    onTap: { selectSeat(0) }
+                                    isSelected: selectedSeats.contains(0),
+                                    isBatchMode: isBatchMode,
+                                    onTap: { handleSeatTap(0) }
                                 )
                                 .offset(y: -24) // Move seat 1 up for consistent spacing
                                 InteractiveSeatView(
                                     seatNumber: 2,
                                     seat: concert.seats[1],
-                                    onTap: { selectSeat(1) }
+                                    isSelected: selectedSeats.contains(1),
+                                    isBatchMode: isBatchMode,
+                                    onTap: { handleSeatTap(1) }
                                 )
                                 .offset(y: -32) // Move seat 2 up more to prevent text overlap
                                 Spacer()
@@ -2512,6 +2667,103 @@ struct InteractiveFireSuiteView: View {
             }
             .padding()
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+            
+            // Batch operations toolbar
+            if isBatchMode && !selectedSeats.isEmpty {
+                VStack(spacing: 12) {
+                    Text("Batch Operations")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.modernText)
+                    
+                    LazyVGrid(columns: [
+                        GridItem(.flexible()),
+                        GridItem(.flexible())
+                    ], spacing: 12) {
+                        Button(action: {
+                            showingBatchOptions = true
+                        }) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "slider.horizontal.3")
+                                    .font(.system(size: 16, weight: .medium))
+                                Text("Bulk Edit")
+                                    .font(.system(size: 14, weight: .medium))
+                            }
+                            .foregroundColor(.blue)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                            )
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        
+                        Button(action: {
+                            batchSetStatus(.available)
+                        }) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 16, weight: .medium))
+                                Text("Mark Available")
+                                    .font(.system(size: 14, weight: .medium))
+                            }
+                            .foregroundColor(.green)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.green.opacity(0.3), lineWidth: 1)
+                            )
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        
+                        Button(action: {
+                            batchSetStatus(.reserved)
+                        }) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "clock")
+                                    .font(.system(size: 16, weight: .medium))
+                                Text("Mark Reserved")
+                                    .font(.system(size: 14, weight: .medium))
+                            }
+                            .foregroundColor(.orange)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                            )
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        
+                        Button(action: {
+                            batchSetStatus(.sold)
+                        }) {
+                            HStack(spacing: 8) {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 16, weight: .medium))
+                                Text("Mark Sold")
+                                    .font(.system(size: 14, weight: .medium))
+                            }
+                            .foregroundColor(.red)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(Color.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.red.opacity(0.3), lineWidth: 1)
+                            )
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
+                .padding()
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                .transition(.opacity.combined(with: .scale))
+            }
         }
         .onAppear {
             startPulseAnimation()
@@ -2548,16 +2800,68 @@ struct InteractiveFireSuiteView: View {
             )
             .environmentObject(settingsManager)
         }
+        .sheet(isPresented: $showingBatchOptions) {
+            BatchSeatOptionsView(
+                selectedSeats: Array(selectedSeats).sorted(),
+                concert: concert,
+                onUpdate: { updatedSeats in
+                    for (index, seat) in updatedSeats {
+                        concert.seats[index] = seat
+                    }
+                    concertManager.updateConcert(concert)
+                    selectedSeats.removeAll()
+                    isBatchMode = false
+                }
+            )
+            .environmentObject(settingsManager)
+        }
     }
     
-    private func selectSeat(_ index: Int) {
-        selectedSeatIndex = index
-        priceInput = concert.seats[index].price != nil ? String(concert.seats[index].price!) : ""
-        showingSeatOptions = true
-        
-        // Haptic feedback
-        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
-        impactFeedback.impactOccurred()
+    private func handleSeatTap(_ index: Int) {
+        if isBatchMode {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                if selectedSeats.contains(index) {
+                    selectedSeats.remove(index)
+                } else {
+                    selectedSeats.insert(index)
+                }
+            }
+            
+            // Haptic feedback for batch selection
+            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+            impactFeedback.impactOccurred()
+        } else {
+            // Normal single seat selection
+            selectedSeatIndex = index
+            priceInput = concert.seats[index].price != nil ? String(concert.seats[index].price!) : ""
+            showingSeatOptions = true
+            
+            // Haptic feedback
+            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+            impactFeedback.impactOccurred()
+        }
+    }
+    
+    private func batchSetStatus(_ status: SeatStatus) {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            for index in selectedSeats {
+                concert.seats[index].status = status
+                
+                // Clear price and source for available seats
+                if status == .available {
+                    concert.seats[index].price = nil
+                    concert.seats[index].source = nil
+                    concert.seats[index].note = nil
+                }
+            }
+            
+            concertManager.updateConcert(concert)
+            selectedSeats.removeAll()
+            
+            // Haptic feedback for batch operation
+            let impactFeedback = UIImpactFeedbackGenerator(style: .heavy)
+            impactFeedback.impactOccurred()
+        }
     }
     
     private func startPulseAnimation() {
@@ -2571,12 +2875,19 @@ struct InteractiveFireSuiteView: View {
 struct InteractiveSeatView: View {
     let seatNumber: Int
     let seat: Seat
+    let isSelected: Bool
+    let isBatchMode: Bool
     let onTap: () -> Void
     @State private var isPressed = false
     @State private var isAnimating = false
     @State private var isHovering = false
     
     var seatColor: LinearGradient {
+        if isBatchMode && isSelected {
+            // Selected seats in batch mode get a blue gradient
+            return LinearGradient(colors: [Color.blue, Color.blue.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing)
+        }
+        
         switch seat.status {
         case .available:
             return LinearGradient(colors: [Color.seatAvailable, Color.seatAvailable.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -2648,8 +2959,23 @@ struct InteractiveSeatView: View {
                             .font(.system(size: 16, weight: .bold, design: .rounded))
                             .foregroundColor(.white)
                         
-                        // Show status icon in top-right corner for sold/reserved
-                        if seat.status == .sold {
+                        // Show batch selection indicator in top-left corner
+                        if isBatchMode && isSelected {
+                            VStack {
+                                HStack {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 14, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .background(Circle().fill(Color.blue).frame(width: 16, height: 16))
+                                        .scaleEffect(isSelected ? 1.2 : 1.0)
+                                        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isSelected)
+                                    Spacer()
+                                }
+                                Spacer()
+                            }
+                        }
+                        // Show status icon in top-right corner for sold/reserved (only if not in batch mode or not selected)
+                        else if seat.status == .sold {
                             VStack {
                                 HStack {
                                     Spacer()
@@ -3743,6 +4069,7 @@ struct DynamicPortfolio: View {
 // MARK: - Settings View
 struct SettingsView: View {
     @ObservedObject var settingsManager: SettingsManager
+    @ObservedObject var concertManager: ConcertDataManager
     @Binding var selectedTab: Int
     @State private var tempSuiteName: String = ""
     @State private var tempVenueLocation: String = ""
@@ -3973,6 +4300,9 @@ struct SettingsView: View {
                                     .fill(Color.modernSecondary)
                             )
                         }
+                        
+                        // Backup & Restore Section
+                        BackupRestoreSection(concertManager: concertManager)
                         
                         // About Section
                         VStack(alignment: .leading, spacing: 16) {
@@ -4272,6 +4602,418 @@ struct HoverableButtonStyle: ButtonStyle {
                     isHovering = hovering
                 }
             }
+    }
+}
+
+// MARK: - Identifiable URL Wrapper
+struct IdentifiableURL: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+// MARK: - Backup & Restore Section
+struct BackupRestoreSection: View {
+    @ObservedObject var concertManager: ConcertDataManager
+    @State private var showingBackupAlert = false
+    @State private var showingRestoreAlert = false
+    @State private var showingFilePicker = false
+    @State private var backupFileURL: IdentifiableURL?
+    @State private var alertMessage = ""
+    @State private var alertTitle = ""
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Backup & Restore")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundColor(.modernText)
+            
+            VStack(spacing: 16) {
+                // Backup Status
+                let backupInfo = concertManager.getBackupInfo()
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "clock.badge.checkmark")
+                            .foregroundColor(.blue)
+                        Text("Backup Status")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.modernText)
+                    }
+                    
+                    if let lastBackup = backupInfo.lastBackupDate {
+                        Text("Last backup: \(lastBackup, formatter: DateFormatter.backupDate)")
+                            .font(.system(size: 14))
+                            .foregroundColor(.modernTextSecondary)
+                    } else {
+                        Text("No backup found")
+                            .font(.system(size: 14))
+                            .foregroundColor(.modernTextSecondary)
+                    }
+                    
+                    Text("\(backupInfo.count) concerts available for backup")
+                        .font(.system(size: 14))
+                        .foregroundColor(.modernTextSecondary)
+                }
+                
+                Divider()
+                
+                // Backup Actions
+                VStack(spacing: 12) {
+                    // Create Backup Button
+                    Button(action: createBackup) {
+                        HStack {
+                            Image(systemName: "square.and.arrow.up")
+                                .foregroundColor(.white)
+                            Text("Create Backup")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.white)
+                            Spacer()
+                        }
+                        .padding(16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.blue)
+                        )
+                    }
+                    .disabled(backupInfo.count == 0)
+                    
+                    // Restore Backup Button
+                    Button(action: { showingFilePicker = true }) {
+                        HStack {
+                            Image(systemName: "square.and.arrow.down")
+                                .foregroundColor(.white)
+                            Text("Restore from Backup")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.white)
+                            Spacer()
+                        }
+                        .padding(16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.orange)
+                        )
+                    }
+                }
+            }
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.modernSecondary)
+            )
+        }
+        .alert(alertTitle, isPresented: $showingBackupAlert) {
+            Button("OK") { }
+        } message: {
+            Text(alertMessage)
+        }
+        .alert(alertTitle, isPresented: $showingRestoreAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Restore", role: .destructive) {
+                // Restore action handled by file picker
+            }
+        } message: {
+            Text(alertMessage)
+        }
+        .fileImporter(
+            isPresented: $showingFilePicker,
+            allowedContentTypes: [.json],
+            allowsMultipleSelection: false
+        ) { result in
+            handleFileImport(result)
+        }
+        .sheet(item: $backupFileURL) { identifiableURL in
+            ShareSheet(activityItems: [identifiableURL.url])
+        }
+    }
+    
+    private func createBackup() {
+        guard let backupData = concertManager.createBackupData() else {
+            showBackupAlert(title: "Backup Failed", message: "Unable to create backup data. Please try again.")
+            return
+        }
+        
+        // Generate filename with timestamp
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+        let timestamp = dateFormatter.string(from: Date())
+        let filename = "SuiteKeep_Backup_\(timestamp).json"
+        
+        // Save to temporary directory
+        let tempDir = FileManager.default.temporaryDirectory
+        let fileURL = tempDir.appendingPathComponent(filename)
+        
+        do {
+            try backupData.write(to: fileURL)
+            backupFileURL = IdentifiableURL(url: fileURL)
+        } catch {
+            showBackupAlert(title: "Backup Failed", message: "Unable to save backup file: \(error.localizedDescription)")
+        }
+    }
+    
+    private func handleFileImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            
+            do {
+                let data = try Data(contentsOf: url)
+                let success = concertManager.restoreFromBackupData(data)
+                
+                if success {
+                    showBackupAlert(title: "Restore Successful", message: "Your concert data has been restored successfully.")
+                } else {
+                    showBackupAlert(title: "Restore Failed", message: "The backup file is invalid or corrupted. Please check the file and try again.")
+                }
+            } catch {
+                showBackupAlert(title: "Restore Failed", message: "Unable to read backup file: \(error.localizedDescription)")
+            }
+        case .failure(let error):
+            showBackupAlert(title: "File Selection Failed", message: error.localizedDescription)
+        }
+    }
+    
+    private func showBackupAlert(title: String, message: String) {
+        alertTitle = title
+        alertMessage = message
+        showingBackupAlert = true
+    }
+}
+
+
+// MARK: - Date Formatter for Backup
+extension DateFormatter {
+    static let backupDate: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
+}
+
+// MARK: - Batch Seat Options View
+struct BatchSeatOptionsView: View {
+    let selectedSeats: [Int]
+    let concert: Concert
+    let onUpdate: ([(Int, Seat)]) -> Void
+    
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var settingsManager: SettingsManager
+    
+    @State private var selectedStatus: SeatStatus = .available
+    @State private var priceInput: String = ""
+    @State private var selectedSource: TicketSource = .family
+    @State private var noteInput: String = ""
+    @State private var showingAlert = false
+    @State private var alertMessage = ""
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 24) {
+                // Header
+                VStack(spacing: 8) {
+                    Text("Batch Edit Seats")
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(.modernText)
+                    
+                    Text("Editing \(selectedSeats.count) seat\(selectedSeats.count == 1 ? "" : "s"): \(selectedSeats.map { $0 + 1 }.sorted().map(String.init).joined(separator: ", "))")
+                        .font(.system(size: 16))
+                        .foregroundColor(.modernTextSecondary)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.top)
+                
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // Status Selection
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Seat Status")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.modernText)
+                            
+                            LazyVGrid(columns: [
+                                GridItem(.flexible()),
+                                GridItem(.flexible()),
+                                GridItem(.flexible())
+                            ], spacing: 12) {
+                                ForEach([SeatStatus.available, SeatStatus.reserved, SeatStatus.sold], id: \.self) { status in
+                                    Button(action: {
+                                        selectedStatus = status
+                                        if status == .available {
+                                            priceInput = ""
+                                            noteInput = ""
+                                        }
+                                    }) {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: status == .available ? "checkmark.circle" : 
+                                                  status == .reserved ? "clock" : "checkmark.circle.fill")
+                                                .font(.system(size: 16))
+                                            Text(status.displayText)
+                                                .font(.system(size: 14, weight: .medium))
+                                        }
+                                        .foregroundColor(selectedStatus == status ? .white : status.color)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 12)
+                                        .background(
+                                            selectedStatus == status ? status.color : status.color.opacity(0.1),
+                                            in: RoundedRectangle(cornerRadius: 8)
+                                        )
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(status.color.opacity(0.3), lineWidth: 1)
+                                        )
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                }
+                            }
+                        }
+                        .padding()
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                        
+                        // Price Input (for sold seats)
+                        if selectedStatus == .sold {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Price per Seat")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.modernText)
+                                
+                                TextField("Enter price", text: $priceInput)
+                                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                                    .keyboardType(.decimalPad)
+                                    .font(.system(size: 16))
+                            }
+                            .padding()
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                        }
+                        
+                        // Source Selection (for sold seats)
+                        if selectedStatus == .sold {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Ticket Source")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.modernText)
+                                
+                                LazyVGrid(columns: [
+                                    GridItem(.flexible()),
+                                    GridItem(.flexible())
+                                ], spacing: 12) {
+                                    ForEach([TicketSource.family, TicketSource.facebook, TicketSource.stubhub, TicketSource.axs, TicketSource.other], id: \.self) { source in
+                                        Button(action: {
+                                            selectedSource = source
+                                        }) {
+                                            Text(source.rawValue.capitalized)
+                                                .font(.system(size: 14, weight: .medium))
+                                                .foregroundColor(selectedSource == source ? .white : .blue)
+                                                .frame(maxWidth: .infinity)
+                                                .padding(.vertical, 12)
+                                                .background(
+                                                    selectedSource == source ? Color.blue : Color.blue.opacity(0.1),
+                                                    in: RoundedRectangle(cornerRadius: 8)
+                                                )
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 8)
+                                                        .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                                                )
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                    }
+                                }
+                            }
+                            .padding()
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                        }
+                        
+                        // Note Input (for reserved seats)
+                        if selectedStatus == .reserved {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Reservation Note")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.modernText)
+                                
+                                TextField("Enter note (optional)", text: $noteInput)
+                                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                                    .font(.system(size: 16))
+                            }
+                            .padding()
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+                
+                // Action Buttons
+                HStack(spacing: 16) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.red)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 10))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10)
+                            .stroke(Color.red.opacity(0.3), lineWidth: 1)
+                    )
+                    
+                    Button("Apply Changes") {
+                        applyBatchChanges()
+                    }
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(Color.blue, in: RoundedRectangle(cornerRadius: 10))
+                }
+                .padding(.horizontal)
+                .padding(.bottom)
+            }
+            .navigationBarHidden(true)
+        }
+        .alert("Batch Update", isPresented: $showingAlert) {
+            Button("OK") { dismiss() }
+        } message: {
+            Text(alertMessage)
+        }
+    }
+    
+    private func applyBatchChanges() {
+        var updatedSeats: [(Int, Seat)] = []
+        
+        for seatIndex in selectedSeats {
+            var updatedSeat = concert.seats[seatIndex]
+            updatedSeat.status = selectedStatus
+            
+            switch selectedStatus {
+            case .available:
+                updatedSeat.price = nil
+                updatedSeat.source = nil
+                updatedSeat.note = nil
+                updatedSeat.dateSold = nil
+                updatedSeat.datePaid = nil
+                
+            case .reserved:
+                updatedSeat.price = nil
+                updatedSeat.source = nil
+                updatedSeat.note = noteInput.isEmpty ? nil : noteInput
+                updatedSeat.dateSold = nil
+                updatedSeat.datePaid = nil
+                
+            case .sold:
+                if let price = Double(priceInput), price > 0 {
+                    updatedSeat.price = price
+                    updatedSeat.source = selectedSource
+                    updatedSeat.note = nil
+                    updatedSeat.dateSold = Date()
+                } else {
+                    alertMessage = "Please enter a valid price for sold seats."
+                    showingAlert = true
+                    return
+                }
+            }
+            
+            updatedSeats.append((seatIndex, updatedSeat))
+        }
+        
+        onUpdate(updatedSeats)
     }
 }
 
