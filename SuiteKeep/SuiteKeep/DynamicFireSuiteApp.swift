@@ -93,23 +93,24 @@ class SettingsManager: ObservableObject {
 // MARK: - Vibrant Color Theme
 extension Color {
     // Beautiful gradient backgrounds
-    static let primaryGradientStart = Color(red: 0.2, green: 0.1, blue: 0.9) // Deep purple
+    static let primaryGradientStart = Color(red: 0.1, green: 0.4, blue: 0.9) // Deep blue
     static let primaryGradientEnd = Color(red: 0.8, green: 0.2, blue: 0.9) // Magenta
     static let secondaryGradientStart = Color(red: 0.0, green: 0.7, blue: 1.0) // Bright blue
     static let secondaryGradientEnd = Color(red: 0.0, green: 0.9, blue: 0.6) // Teal
     
     // Card gradient colors
-    static let cardPurple = LinearGradient(colors: [Color(red: 0.4, green: 0.2, blue: 0.8), Color(red: 0.6, green: 0.3, blue: 0.9)], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let cardPurple = LinearGradient(colors: [Color(red: 0.1, green: 0.4, blue: 0.9), Color(red: 0.2, green: 0.6, blue: 1.0)], startPoint: .topLeading, endPoint: .bottomTrailing)
     static let cardBlue = LinearGradient(colors: [Color(red: 0.1, green: 0.4, blue: 0.9), Color(red: 0.2, green: 0.6, blue: 1.0)], startPoint: .topLeading, endPoint: .bottomTrailing)
     static let cardTeal = LinearGradient(colors: [Color(red: 0.0, green: 0.7, blue: 0.7), Color(red: 0.1, green: 0.8, blue: 0.8)], startPoint: .topLeading, endPoint: .bottomTrailing)
     static let cardOrange = LinearGradient(colors: [Color(red: 1.0, green: 0.4, blue: 0.1), Color(red: 1.0, green: 0.6, blue: 0.2)], startPoint: .topLeading, endPoint: .bottomTrailing)
     static let cardPink = LinearGradient(colors: [Color(red: 0.9, green: 0.1, blue: 0.5), Color(red: 1.0, green: 0.3, blue: 0.6)], startPoint: .topLeading, endPoint: .bottomTrailing)
     static let cardGreen = LinearGradient(colors: [Color(red: 0.1, green: 0.7, blue: 0.3), Color(red: 0.2, green: 0.8, blue: 0.4)], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let cardIndigo = LinearGradient(colors: [Color(red: 0.2, green: 0.3, blue: 0.8), Color(red: 0.3, green: 0.4, blue: 0.9)], startPoint: .topLeading, endPoint: .bottomTrailing)
     
     // Modern colors (keeping some for compatibility)
     static let modernBackground = Color(red: 0.96, green: 0.97, blue: 1.0)
     static let modernSecondary = Color(red: 0.25, green: 0.25, blue: 0.3)
-    static let modernAccent = Color(red: 0.3, green: 0.2, blue: 0.9)
+    static let modernAccent = Color(red: 0.0, green: 0.7, blue: 1.0) // Bright blue
     static let modernText = Color.white
     static let modernTextSecondary = Color(white: 0.85)
     static let modernSuccess = Color(red: 0.1, green: 0.7, blue: 0.3)
@@ -678,7 +679,7 @@ struct StatusIndicator: View {
                 RoundedRectangle(cornerRadius: 20)
                     .fill(
                         LinearGradient(
-                            colors: [.purple.opacity(0.3), .blue.opacity(0.2)],
+                            colors: [.blue.opacity(0.3), .cyan.opacity(0.2)],
                             startPoint: .top,
                             endPoint: .bottom
                         )
@@ -696,11 +697,11 @@ struct StatusIndicator: View {
                         VStack {
                             Image(systemName: "music.mic")
                                 .font(.title)
-                                .foregroundColor(.purple)
+                                .foregroundColor(.blue)
                             Text("STAGE")
                                 .font(.caption)
                                 .fontWeight(.bold)
-                                .foregroundColor(.purple)
+                                .foregroundColor(.blue)
                         }
                         Spacer()
                     }
@@ -1069,6 +1070,8 @@ struct RecentActivityFeed: View {
                     Text("Latest concert updates")
                         .font(.system(size: 14))
                         .foregroundColor(.white.opacity(0.8))
+                    
+                    // Debug: Show what concerts Recent Activity sees
                 }
                 Spacer()
                 
@@ -1392,7 +1395,7 @@ struct DynamicConcerts: View {
                 }
             }
             .sheet(isPresented: $showingAllConcerts) {
-                AllConcertsView(concertManager: concertManager)
+                AllConcertsView(concertManager: concertManager, settingsManager: settingsManager)
             }
         }
     }
@@ -1451,12 +1454,34 @@ struct Seat: Codable {
     }
 }
 
+// MARK: - Parking Ticket Model
+struct ParkingTicket: Codable {
+    var status: SeatStatus
+    var price: Double?
+    var source: TicketSource?
+    var cost: Double?
+    var dateSold: Date?
+    var datePaid: Date?
+    var note: String?
+    
+    init(status: SeatStatus = .available, price: Double? = nil, source: TicketSource? = nil, cost: Double? = nil, dateSold: Date? = nil, datePaid: Date? = nil, note: String? = nil) {
+        self.status = status
+        self.price = price
+        self.source = source
+        self.cost = cost ?? 0.0
+        self.dateSold = dateSold
+        self.datePaid = datePaid
+        self.note = note
+    }
+}
+
 // MARK: - Concert Model
 struct Concert: Identifiable, Codable {
     let id: Int
     var artist: String
     var date: Date
     var seats: [Seat] // Array of 8 seats
+    var parkingTicket: ParkingTicket? // One parking ticket per show
     
     var ticketsSold: Int {
         seats.filter { $0.status == .sold }.count
@@ -1466,16 +1491,32 @@ struct Concert: Identifiable, Codable {
         seats.filter { $0.status == .reserved }.count
     }
     
+    var parkingTicketSold: Bool {
+        parkingTicket?.status == .sold
+    }
+    
+    var parkingTicketReserved: Bool {
+        parkingTicket?.status == .reserved
+    }
+    
     var totalRevenue: Double {
-        seats.compactMap { seat in
+        let seatRevenue = seats.compactMap { seat in
             seat.status == .sold ? seat.price : nil
         }.reduce(0, +)
+        
+        let parkingRevenue = parkingTicket?.status == .sold ? (parkingTicket?.price ?? 0.0) : 0.0
+        
+        return seatRevenue + parkingRevenue
     }
     
     var totalCost: Double {
-        seats.compactMap { seat in
+        let seatCost = seats.compactMap { seat in
             seat.status == .sold ? (seat.cost ?? 25.0) : nil
         }.reduce(0, +)
+        
+        let parkingCost = parkingTicket?.status == .sold ? (parkingTicket?.cost ?? 0.0) : 0.0
+        
+        return seatCost + parkingCost
     }
     
     var profit: Double {
@@ -1487,11 +1528,12 @@ struct Concert: Identifiable, Codable {
         seats.map { $0.status == .sold }
     }
     
-    init(id: Int, artist: String, date: Date, seats: [Seat] = Array(repeating: Seat(), count: 8)) {
+    init(id: Int, artist: String, date: Date, seats: [Seat] = Array(repeating: Seat(), count: 8), parkingTicket: ParkingTicket? = ParkingTicket()) {
         self.id = id
         self.artist = artist
         self.date = date
         self.seats = seats
+        self.parkingTicket = parkingTicket
     }
 }
 
@@ -1710,6 +1752,27 @@ struct ConcertRowView: View {
                                 .foregroundColor(.cyan)
                         }
                     }
+                    
+                    // Parking ticket status
+                    if concert.parkingTicketSold {
+                        HStack(spacing: 4) {
+                            Image(systemName: "car.fill")
+                                .font(.system(size: 8))
+                                .foregroundColor(.green)
+                            Text("Parking sold")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.green)
+                        }
+                    } else if concert.parkingTicketReserved {
+                        HStack(spacing: 4) {
+                            Image(systemName: "car.fill")
+                                .font(.system(size: 8))
+                                .foregroundColor(.orange)
+                            Text("Parking reserved")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.orange)
+                        }
+                    }
                 }
             }
             
@@ -1853,6 +1916,7 @@ struct AddConcertView: View {
 struct AllConcertsView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject var concertManager: ConcertDataManager
+    @ObservedObject var settingsManager: SettingsManager
     @State private var showingAddConcert = false
     
     var sortedConcerts: [Concert] {
@@ -1923,6 +1987,8 @@ struct AllConcertsView: View {
                                     Text("\(sortedConcerts.count) total concerts")
                                         .font(.system(size: 16, weight: .medium))
                                         .foregroundColor(.modernTextSecondary)
+                                    
+                                    // Debug: Show all concert names and IDs
                                 }
                                 .padding(.vertical, 20)
                                 .padding(.horizontal, 24)
@@ -1936,8 +2002,8 @@ struct AllConcertsView: View {
                             .padding(.top, 20)
                             
                             LazyVStack(spacing: 12) {
-                                ForEach(sortedConcerts) { concert in
-                                    NavigationLink(destination: ConcertDetailView(concert: concert, concertManager: concertManager, settingsManager: SettingsManager())) {
+                                ForEach(Array(sortedConcerts.enumerated()), id: \.offset) { index, concert in
+                                    NavigationLink(destination: ConcertDetailView(concert: concert, concertManager: concertManager, settingsManager: settingsManager)) {
                                         ConcertRowView(concert: concert)
                                     }
                                     .buttonStyle(PlainButtonStyle())
@@ -2146,7 +2212,7 @@ struct ConcertDetailView: View {
         }
         .navigationBarHidden(true)
         .sheet(isPresented: $showingAllConcerts) {
-            AllConcertsView(concertManager: concertManager)
+            AllConcertsView(concertManager: concertManager, settingsManager: settingsManager)
         }
         .confirmationDialog("Delete Concert", isPresented: $showingDeleteConfirmation, titleVisibility: .visible) {
             Button("Delete Concert", role: .destructive) {
@@ -2173,6 +2239,7 @@ struct InteractiveFireSuiteView: View {
     @State private var showingSeatOptions = false
     @State private var selectedSeatIndex: Int?
     @State private var priceInput: String = ""
+    @State private var showingParkingOptions = false
     
     var body: some View {
         VStack(spacing: 20) {
@@ -2193,7 +2260,7 @@ struct InteractiveFireSuiteView: View {
                 RoundedRectangle(cornerRadius: 20)
                     .fill(
                         LinearGradient(
-                            colors: [.purple.opacity(0.3), .blue.opacity(0.2)],
+                            colors: [.blue.opacity(0.3), .cyan.opacity(0.2)],
                             startPoint: .top,
                             endPoint: .bottom
                         )
@@ -2211,11 +2278,11 @@ struct InteractiveFireSuiteView: View {
                         VStack {
                             Image(systemName: "music.mic")
                                 .font(.title)
-                                .foregroundColor(.purple)
+                                .foregroundColor(.blue)
                             Text("STAGE")
                                 .font(.caption)
                                 .fontWeight(.bold)
-                                .foregroundColor(.purple)
+                                .foregroundColor(.blue)
                         }
                         Spacer()
                     }
@@ -2321,6 +2388,36 @@ struct InteractiveFireSuiteView: View {
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.green)
                 }
+                
+                // Parking ticket status - clickable
+                Button(action: {
+                    showingParkingOptions = true
+                }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "car.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(.blue)
+                        
+                        if concert.parkingTicketSold {
+                            Text("Parking: SOLD")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.red)
+                        } else if concert.parkingTicketReserved {
+                            Text("Parking: RESERVED")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.orange)
+                        } else {
+                            Text("Parking: AVAILABLE")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.green)
+                        }
+                        
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 10))
+                            .foregroundColor(.blue.opacity(0.6))
+                    }
+                }
+                .buttonStyle(PlainButtonStyle())
             }
             .padding()
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
@@ -2345,6 +2442,16 @@ struct InteractiveFireSuiteView: View {
                         // Each seat should maintain its unique identity for seat-specific tracking
                         concert.seats[i] = newSeat
                     }
+                    concertManager.updateConcert(concert)
+                }
+            )
+            .environmentObject(settingsManager)
+        }
+        .sheet(isPresented: $showingParkingOptions) {
+            ParkingTicketOptionsView(
+                parkingTicket: concert.parkingTicket ?? ParkingTicket(),
+                onUpdate: { updatedParkingTicket in
+                    concert.parkingTicket = updatedParkingTicket
                     concertManager.updateConcert(concert)
                 }
             )
@@ -2882,6 +2989,286 @@ struct SeatOptionsView: View {
     
     private func playDingSound() {
         AudioServicesPlaySystemSound(1054) // System ding sound
+    }
+}
+
+// MARK: - Parking Ticket Options View
+struct ParkingTicketOptionsView: View {
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject var settingsManager: SettingsManager
+    @State var parkingTicket: ParkingTicket
+    let onUpdate: (ParkingTicket) -> Void
+    
+    @State private var selectedStatus: SeatStatus
+    @State private var priceInput: String
+    @State private var costInput: String
+    @State private var noteInput: String
+    @State private var selectedSource: TicketSource
+    @State private var dateSold: Date
+    @State private var datePaid: Date
+    
+    init(parkingTicket: ParkingTicket, onUpdate: @escaping (ParkingTicket) -> Void) {
+        self.parkingTicket = parkingTicket
+        self.onUpdate = onUpdate
+        self._selectedStatus = State(initialValue: parkingTicket.status)
+        self._priceInput = State(initialValue: parkingTicket.price != nil ? String(parkingTicket.price!) : "")
+        self._costInput = State(initialValue: String(parkingTicket.cost ?? 0.0))
+        self._noteInput = State(initialValue: parkingTicket.note ?? "")
+        self._selectedSource = State(initialValue: parkingTicket.source ?? .facebook)
+        self._dateSold = State(initialValue: parkingTicket.dateSold ?? Date())
+        self._datePaid = State(initialValue: parkingTicket.datePaid ?? Date())
+    }
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                // Consistent dark gradient background
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.1, green: 0.1, blue: 0.15),
+                        Color(red: 0.15, green: 0.12, blue: 0.2),
+                        Color(red: 0.12, green: 0.1, blue: 0.18),
+                        Color(red: 0.08, green: 0.08, blue: 0.16)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Header
+                        VStack(spacing: 16) {
+                            Circle()
+                                .fill(parkingTicket.status.color.opacity(0.1))
+                                .frame(width: 80, height: 80)
+                                .overlay(
+                                    Image(systemName: "car.fill")
+                                        .font(.system(size: 32, weight: .bold))
+                                        .foregroundColor(parkingTicket.status.color)
+                                )
+                            
+                            Text("Parking Ticket")
+                                .font(.system(size: 24, weight: .bold))
+                                .foregroundColor(.modernText)
+                            
+                            HStack {
+                                Circle()
+                                    .fill(parkingTicket.status.color)
+                                    .frame(width: 8, height: 8)
+                                Text(parkingTicket.status.rawValue.capitalized)
+                                    .font(.system(size: 16))
+                                    .foregroundColor(parkingTicket.status.color)
+                            }
+                        }
+                        .padding(.top, 20)
+                    
+                        // Status selection
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("Parking Status")
+                                .font(.system(size: 20, weight: .semibold))
+                                .foregroundColor(.modernText)
+                            
+                            VStack(spacing: 12) {
+                                ForEach(SeatStatus.allCases, id: \.self) { status in
+                                    Button(action: {
+                                        let previousStatus = selectedStatus
+                                        selectedStatus = status
+                                        
+                                        // Auto-populate dateSold when status changes to sold
+                                        if status == .sold && previousStatus != .sold {
+                                            dateSold = Date()
+                                            datePaid = Date()
+                                        }
+                                    }) {
+                                        HStack(spacing: 16) {
+                                            Circle()
+                                                .fill(status.color.opacity(0.1))
+                                                .frame(width: 40, height: 40)
+                                                .overlay(
+                                                    Circle()
+                                                        .fill(status.color)
+                                                        .frame(width: 16, height: 16)
+                                                )
+                                            
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Text(status.rawValue.capitalized)
+                                                    .font(.system(size: 16, weight: .medium))
+                                                    .foregroundColor(.modernText)
+                                            }
+                                            
+                                            Spacer()
+                                            
+                                            if selectedStatus == status {
+                                                Image(systemName: "checkmark")
+                                                    .font(.system(size: 16, weight: .bold))
+                                                    .foregroundColor(status.color)
+                                            }
+                                        }
+                                        .padding(16)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .fill(selectedStatus == status ? status.color.opacity(0.1) : Color.clear)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 12)
+                                                        .stroke(selectedStatus == status ? status.color : Color.white.opacity(0.1), lineWidth: 1)
+                                                )
+                                        )
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                }
+                            }
+                        }
+                        
+                        // Price input (for sold/reserved)
+                        if selectedStatus == .sold || selectedStatus == .reserved {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Price")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.modernText)
+                                
+                                TextField("Enter price", text: $priceInput)
+                                    .keyboardType(.decimalPad)
+                                    .padding(16)
+                                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                                    .foregroundColor(.modernText)
+                            }
+                        }
+                        
+                        // Cost input (for sold)
+                        if selectedStatus == .sold {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Cost (Optional)")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.modernText)
+                                
+                                TextField("Enter cost", text: $costInput)
+                                    .keyboardType(.decimalPad)
+                                    .padding(16)
+                                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                                    .foregroundColor(.modernText)
+                            }
+                        }
+                        
+                        // Note input (for reserved)
+                        if selectedStatus == .reserved {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Note (Max 5 words)")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.modernText)
+                                
+                                TextField("Enter note", text: $noteInput)
+                                    .padding(16)
+                                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                                    .foregroundColor(.modernText)
+                                    .onChange(of: noteInput) { oldValue, newValue in
+                                        let words = newValue.split(separator: " ")
+                                        if words.count > 5 {
+                                            noteInput = words.prefix(5).joined(separator: " ")
+                                        }
+                                    }
+                            }
+                        }
+                        
+                        // Source selection (for sold)
+                        if selectedStatus == .sold {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Ticket Source")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.modernText)
+                                
+                                VStack(spacing: 8) {
+                                    ForEach(TicketSource.allCases, id: \.self) { source in
+                                        Button(action: {
+                                            selectedSource = source
+                                        }) {
+                                            HStack {
+                                                Text(source.rawValue)
+                                                    .font(.system(size: 16))
+                                                    .foregroundColor(.modernText)
+                                                
+                                                Spacer()
+                                                
+                                                if selectedSource == source {
+                                                    Image(systemName: "checkmark")
+                                                        .font(.system(size: 14, weight: .bold))
+                                                        .foregroundColor(.blue)
+                                                }
+                                            }
+                                            .padding(12)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 8)
+                                                    .fill(selectedSource == source ? Color.blue.opacity(0.1) : Color.clear)
+                                                    .overlay(
+                                                        RoundedRectangle(cornerRadius: 8)
+                                                            .stroke(selectedSource == source ? Color.blue : Color.white.opacity(0.1), lineWidth: 1)
+                                                    )
+                                            )
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                    }
+                                }
+                            }
+                        }
+                        
+                        Spacer(minLength: 100)
+                    }
+                    .padding(20)
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(.blue)
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        saveParkingTicket()
+                        dismiss()
+                    }
+                    .foregroundColor(.blue)
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+    }
+    
+    private func saveParkingTicket() {
+        var updatedTicket = parkingTicket
+        updatedTicket.status = selectedStatus
+        
+        // Handle price
+        if selectedStatus == .sold || selectedStatus == .reserved {
+            updatedTicket.price = Double(priceInput)
+        } else {
+            updatedTicket.price = nil
+        }
+        
+        // Handle cost and dates for sold tickets
+        if selectedStatus == .sold {
+            updatedTicket.cost = Double(costInput) ?? 0.0
+            updatedTicket.source = selectedSource
+            updatedTicket.dateSold = dateSold
+            updatedTicket.datePaid = datePaid
+        } else {
+            updatedTicket.cost = nil
+            updatedTicket.source = nil
+            updatedTicket.dateSold = nil
+            updatedTicket.datePaid = nil
+        }
+        
+        // Handle note for reserved tickets
+        if selectedStatus == .reserved {
+            updatedTicket.note = noteInput.isEmpty ? nil : noteInput
+        } else {
+            updatedTicket.note = nil
+        }
+        
+        onUpdate(updatedTicket)
     }
 }
 
