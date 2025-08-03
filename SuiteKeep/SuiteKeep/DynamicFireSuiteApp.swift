@@ -107,15 +107,51 @@ extension Color {
     static let cardGreen = LinearGradient(colors: [Color(red: 0.1, green: 0.7, blue: 0.3), Color(red: 0.2, green: 0.8, blue: 0.4)], startPoint: .topLeading, endPoint: .bottomTrailing)
     static let cardIndigo = LinearGradient(colors: [Color(red: 0.2, green: 0.3, blue: 0.8), Color(red: 0.3, green: 0.4, blue: 0.9)], startPoint: .topLeading, endPoint: .bottomTrailing)
     
-    // Modern colors (keeping some for compatibility)
+    // Modern colors with engagement focus
     static let modernBackground = Color(red: 0.96, green: 0.97, blue: 1.0)
     static let modernSecondary = Color(red: 0.25, green: 0.25, blue: 0.3)
     static let modernAccent = Color(red: 0.0, green: 0.7, blue: 1.0) // Bright blue
     static let modernText = Color.white
     static let modernTextSecondary = Color(white: 0.85)
-    static let modernSuccess = Color(red: 0.1, green: 0.7, blue: 0.3)
-    static let modernWarning = Color(red: 1.0, green: 0.5, blue: 0.0)
-    static let modernDanger = Color(red: 1.0, green: 0.2, blue: 0.3)
+    static let modernSuccess = Color(red: 0.1, green: 0.8, blue: 0.4) // Brighter green
+    static let modernWarning = Color(red: 1.0, green: 0.6, blue: 0.0) // Warmer orange
+    static let modernDanger = Color(red: 1.0, green: 0.3, blue: 0.4) // Softer red
+    
+    // Seat status colors
+    static let seatAvailable = Color(red: 0.2, green: 0.85, blue: 0.5) // Vibrant green
+    static let seatReserved = Color(red: 1.0, green: 0.7, blue: 0.0) // Warm yellow
+    static let seatSold = Color(red: 0.3, green: 0.6, blue: 1.0) // Bright blue
+}
+
+// MARK: - Haptic Feedback Manager
+class HapticManager {
+    static let shared = HapticManager()
+    
+    private init() {}
+    
+    func impact(style: UIImpactFeedbackGenerator.FeedbackStyle) {
+        #if canImport(UIKit)
+        let generator = UIImpactFeedbackGenerator(style: style)
+        generator.prepare()
+        generator.impactOccurred()
+        #endif
+    }
+    
+    func notification(type: UINotificationFeedbackGenerator.FeedbackType) {
+        #if canImport(UIKit)
+        let generator = UINotificationFeedbackGenerator()
+        generator.prepare()
+        generator.notificationOccurred(type)
+        #endif
+    }
+    
+    func selection() {
+        #if canImport(UIKit)
+        let generator = UISelectionFeedbackGenerator()
+        generator.prepare()
+        generator.selectionChanged()
+        #endif
+    }
 }
 
 // MARK: - Splash Screen
@@ -2017,11 +2053,16 @@ struct AllConcertsView: View {
             .navigationBarHidden(true)
             .overlay(
                 HStack {
-                    Button("Done") {
+                    Button {
                         dismiss()
+                    } label: {
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                            Text("Done")
+                        }
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.modernAccent)
                     }
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.modernAccent)
                     
                     Spacer()
                     
@@ -2032,6 +2073,13 @@ struct AllConcertsView: View {
                             .font(.system(size: 24))
                             .foregroundColor(.modernAccent)
                     }
+                    .scaleEffect(1.0)
+                    .onHover { hovering in
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            // Scale effect will be handled by buttonStyle
+                        }
+                    }
+                    .buttonStyle(HoverableButtonStyle())
                 }
                 .padding()
                 .padding(.top, 44)
@@ -2088,15 +2136,21 @@ struct ConcertDetailView: View {
                             }
                             .foregroundColor(.modernAccent)
                         }
+                        .buttonStyle(HoverableButtonStyle())
                         
                         Spacer()
                         
                         HStack(spacing: 12) {
-                            Button("List") {
+                            Button {
                                 showingAllConcerts = true
+                            } label: {
+                                HStack {
+                                    Image(systemName: "list.bullet")
+                                    Text("List")
+                                }
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.modernAccent)
                             }
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.modernAccent)
                             
                             Button(action: {
                                 showingDeleteConfirmation = true
@@ -2105,6 +2159,7 @@ struct ConcertDetailView: View {
                                     .font(.system(size: 16, weight: .medium))
                                     .foregroundColor(.red)
                             }
+                            .buttonStyle(HoverableButtonStyle())
                         }
                     }
                     .padding(.horizontal)
@@ -2134,13 +2189,18 @@ struct ConcertDetailView: View {
                             }
                             
                             if isEditingDetails {
-                                Button("Cancel") {
+                                Button {
                                     isEditingDetails = false
                                     editedArtist = concert.artist
                                     editedDate = concert.date
+                                } label: {
+                                    HStack {
+                                        Image(systemName: "xmark.circle")
+                                        Text("Cancel")
+                                    }
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.modernTextSecondary)
                                 }
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.modernTextSecondary)
                             }
                         }
                         
@@ -2482,30 +2542,74 @@ struct InteractiveSeatView: View {
     let seat: Seat
     let onTap: () -> Void
     @State private var isPressed = false
+    @State private var isAnimating = false
+    @State private var isHovering = false
     
-    var seatColor: Color {
-        seat.status.color
+    var seatColor: LinearGradient {
+        switch seat.status {
+        case .available:
+            return LinearGradient(colors: [Color.seatAvailable, Color.seatAvailable.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .reserved:
+            return LinearGradient(colors: [Color.seatReserved, Color.seatReserved.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .sold:
+            return LinearGradient(colors: [Color.seatSold, Color.seatSold.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing)
+        }
     }
     
     var body: some View {
         VStack(spacing: 3) {
             Button(action: {
+                // Haptic feedback
+                HapticManager.shared.impact(style: .light)
+                
+                // Animate press
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
                     isPressed = true
+                    isAnimating = true
                 }
+                
                 onTap()
+                
+                // Reset animation
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
                         isPressed = false
                     }
                 }
+                
+                // Additional animation for status change
+                withAnimation(.easeInOut(duration: 0.5)) {
+                    isAnimating = false
+                }
             }) {
                 ZStack {
+                    // Background circle with gradient
                     Circle()
                         .fill(seatColor)
-                        .frame(width: 38, height: 38) // Smaller seats
-                        .scaleEffect(isPressed ? 1.15 : 1.0)
-                        .shadow(color: seatColor.opacity(0.5), radius: seat.status != .available ? 6 : 4)
+                        .frame(width: 42, height: 42)
+                        .scaleEffect(isPressed ? 1.2 : (isAnimating ? 1.1 : (isHovering ? 1.05 : 1.0)))
+                        .shadow(
+                            color: seat.status != .available ? Color.black.opacity(0.2) : Color.clear, 
+                            radius: isHovering ? 6 : 4, 
+                            x: 0, 
+                            y: isHovering ? 3 : 2
+                        )
+                        .overlay(
+                            Circle()
+                                .stroke(
+                                    isHovering ? Color.white.opacity(0.6) : Color.white.opacity(0.3), 
+                                    lineWidth: isHovering ? 2 : 1
+                                )
+                                .scaleEffect(isPressed ? 1.2 : (isHovering ? 1.02 : 1.0))
+                        )
+                        .overlay(
+                            // Pulse effect on hover
+                            Circle()
+                                .stroke(Color.white.opacity(isHovering ? 0.4 : 0), lineWidth: 3)
+                                .scaleEffect(isHovering ? 1.3 : 1.0)
+                                .opacity(isHovering ? 0.3 : 0)
+                                .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isHovering)
+                        )
                     
                     ZStack {
                         // Always show seat number
@@ -2541,6 +2645,11 @@ struct InteractiveSeatView: View {
                 }
             }
             .buttonStyle(PlainButtonStyle())
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isHovering = hovering
+                }
+            }
             
             // Fixed-height container for text to prevent layout shifts
             VStack(spacing: 1) {
@@ -2896,7 +3005,7 @@ struct SeatOptionsView: View {
                         
                         // Action buttons
                         VStack(spacing: 12) {
-                            Button("Update Seat") {
+                            Button {
                                 var updatedSeat = seat
                                 updatedSeat.status = selectedStatus
                                 
@@ -2934,23 +3043,33 @@ struct SeatOptionsView: View {
                                 }
                                 
                                 dismiss()
+                            } label: {
+                                HStack {
+                                    Image(systemName: "checkmark.circle.fill")
+                                    Text("Update Seat")
+                                }
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 16)
+                                        .fill(selectedStatus.color)
+                                )
                             }
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(selectedStatus.color)
-                            )
                             
-                            Button("Cancel") {
+                            Button {
                                 dismiss()
+                            } label: {
+                                HStack {
+                                    Image(systemName: "xmark.circle")
+                                    Text("Cancel")
+                                }
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.modernTextSecondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 16)
                             }
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.modernTextSecondary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 16)
                         }
                     }
                     .padding(.horizontal)
@@ -3219,19 +3338,23 @@ struct ParkingTicketOptionsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
+                    Button {
                         dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .foregroundColor(.blue)
                     }
-                    .foregroundColor(.blue)
                 }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
+                    Button {
                         saveParkingTicket()
                         dismiss()
+                    } label: {
+                        Image(systemName: "checkmark")
+                            .foregroundColor(.blue)
+                            .fontWeight(.semibold)
                     }
-                    .foregroundColor(.blue)
-                    .fontWeight(.semibold)
                 }
             }
         }
@@ -3605,6 +3728,22 @@ struct SettingsView: View {
                 tempFamilyTicketPrice = String(format: "%.0f", settingsManager.familyTicketPrice)
             }
         }
+    }
+}
+
+// MARK: - Custom Button Styles
+struct HoverableButtonStyle: ButtonStyle {
+    @State private var isHovering = false
+    
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : (isHovering ? 1.05 : 1.0))
+            .opacity(configuration.isPressed ? 0.8 : 1.0)
+            .onHover { hovering in
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isHovering = hovering
+                }
+            }
     }
 }
 
