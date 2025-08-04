@@ -2402,6 +2402,12 @@ struct ConcertDetailView: View {
     }
 }
 
+// MARK: - Selected Seat Helper
+struct SelectedSeat: Identifiable {
+    let id = UUID()
+    let index: Int
+}
+
 // MARK: - Interactive Fire Suite View
 struct InteractiveFireSuiteView: View {
     @Binding var concert: Concert
@@ -2768,32 +2774,36 @@ struct InteractiveFireSuiteView: View {
         .onAppear {
             startPulseAnimation()
         }
-        .sheet(isPresented: $showingSeatOptions) {
-            if let index = selectedSeatIndex {
-                SeatOptionsView(
-                    seatNumber: index + 1,
-                    seat: concert.seats[index],
-                    onUpdate: { updatedSeat in
-                        concert.seats[index] = updatedSeat
-                        concertManager.updateConcert(concert)
-                    },
-                    onUpdateAll: { templateSeat in
-                        // Apply the template seat to all seats, but keep each seat's original seat number context
-                        for i in 0..<concert.seats.count {
-                            let newSeat = templateSeat
-                            // Each seat should maintain its unique identity for seat-specific tracking
-                            concert.seats[i] = newSeat
-                        }
-                        concertManager.updateConcert(concert)
-                    }
-                )
-                .environmentObject(settingsManager)
-                .id(UUID()) // Force new instance every time
-            } else {
-                // This should never happen, but provide a fallback
-                Text("Error: No seat selected")
-                    .padding()
+        .sheet(item: Binding<SelectedSeat?>(
+            get: { 
+                if let index = selectedSeatIndex {
+                    return SelectedSeat(index: index)
+                }
+                return nil
+            },
+            set: { _ in 
+                selectedSeatIndex = nil
+                showingSeatOptions = false
             }
+        )) { selectedSeat in
+            SeatOptionsView(
+                seatNumber: selectedSeat.index + 1,
+                seat: concert.seats[selectedSeat.index],
+                onUpdate: { updatedSeat in
+                    concert.seats[selectedSeat.index] = updatedSeat
+                    concertManager.updateConcert(concert)
+                },
+                onUpdateAll: { templateSeat in
+                    // Apply the template seat to all seats, but keep each seat's original seat number context
+                    for i in 0..<concert.seats.count {
+                        let newSeat = templateSeat
+                        // Each seat should maintain its unique identity for seat-specific tracking
+                        concert.seats[i] = newSeat
+                    }
+                    concertManager.updateConcert(concert)
+                }
+            )
+            .environmentObject(settingsManager)
         }
         .sheet(isPresented: $showingParkingOptions) {
             ParkingTicketOptionsView(
@@ -2836,14 +2846,9 @@ struct InteractiveFireSuiteView: View {
             let impactFeedback = UIImpactFeedbackGenerator(style: .light)
             impactFeedback.impactOccurred()
         } else {
-            // Normal single seat selection - ensure clean state
+            // Normal single seat selection - the sheet will present automatically when selectedSeatIndex is set
             selectedSeatIndex = index
             priceInput = concert.seats[index].price != nil ? String(concert.seats[index].price!) : ""
-            
-            // Present the sheet only after setting the index
-            DispatchQueue.main.async {
-                showingSeatOptions = true
-            }
             
             // Haptic feedback
             let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
