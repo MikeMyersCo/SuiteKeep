@@ -547,9 +547,11 @@ struct SuiteSummaryView: View {
     }
     
     var averageOccupancy: Int {
-        guard !concerts.isEmpty else { return 0 }
-        let totalOccupancy = concerts.reduce(0) { $0 + $1.ticketsSold }
-        return Int((Double(totalOccupancy) / Double(concerts.count * 8)) * 100)
+        let currentDate = Date()
+        let pastConcerts = concerts.filter { $0.date <= currentDate }
+        guard !pastConcerts.isEmpty else { return 0 }
+        let totalOccupancy = pastConcerts.reduce(0) { $0 + $1.ticketsSold }
+        return Int((Double(totalOccupancy) / Double(pastConcerts.count * 8)) * 100)
     }
     
     var body: some View {
@@ -558,7 +560,7 @@ struct SuiteSummaryView: View {
             // Key Metrics Cards with Beautiful Gradients
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
                 MetricCard(
-                    title: "Total Sold",
+                    title: "Total Tickets Sold",
                     value: "\(totalTicketsSold)",
                     subtitle: "tickets sold",
                     gradient: Color.cardGreen,
@@ -944,7 +946,9 @@ struct PerformanceMetricsView: View {
     @State private var animateBars = false
     
     var chartData: [Double] {
-        let sortedConcerts = concerts.sorted { $0.date < $1.date }
+        let currentDate = Date()
+        let pastConcerts = concerts.filter { $0.date <= currentDate }
+        let sortedConcerts = pastConcerts.sorted { $0.date < $1.date }
         guard sortedConcerts.count > 0 else { 
             return Array(repeating: 0, count: 12)
         }
@@ -1360,7 +1364,7 @@ struct DynamicConcerts: View {
                 ScrollView {
                     VStack(spacing: 24) {
                         // Header
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(spacing: 8) {
                             Text("Concerts")
                                 .font(.system(size: 34, weight: .bold, design: .rounded))
                                 .foregroundColor(.modernText)
@@ -1369,7 +1373,18 @@ struct DynamicConcerts: View {
                                 .font(.system(size: 16, weight: .medium))
                                 .foregroundColor(.modernTextSecondary)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 20)
+                        .padding(.horizontal, 24)
+                        .background(
+                            RoundedRectangle(cornerRadius: 20)
+                                .fill(Color.modernAccent.opacity(0.1))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 20)
+                                        .stroke(Color.modernAccent.opacity(0.3), lineWidth: 1)
+                                )
+                                .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
+                        )
                         .padding(.top, 20)
                         
                         // Action Buttons
@@ -1509,8 +1524,9 @@ struct Seat: Codable {
     var cost: Double? // Cost per ticket (default $25)
     var dateSold: Date? // Date when ticket was sold
     var datePaid: Date? // Date when payment was received
+    var familyPersonName: String? // For family seats - person's name
     
-    init(status: SeatStatus = .available, price: Double? = nil, note: String? = nil, source: TicketSource? = nil, cost: Double? = nil, dateSold: Date? = nil, datePaid: Date? = nil) {
+    init(status: SeatStatus = .available, price: Double? = nil, note: String? = nil, source: TicketSource? = nil, cost: Double? = nil, dateSold: Date? = nil, datePaid: Date? = nil, familyPersonName: String? = nil) {
         self.status = status
         self.price = price
         self.note = note
@@ -1518,6 +1534,7 @@ struct Seat: Codable {
         self.cost = cost ?? 25.0
         self.dateSold = dateSold
         self.datePaid = datePaid
+        self.familyPersonName = familyPersonName
     }
 }
 
@@ -2066,6 +2083,7 @@ struct AllConcertsView: View {
     @ObservedObject var concertManager: ConcertDataManager
     @ObservedObject var settingsManager: SettingsManager
     @State private var showingAddConcert = false
+    @State private var isCalendarView = false
     
     var sortedConcerts: [Concert] {
         concertManager.concerts.sorted { $0.date < $1.date }
@@ -2136,25 +2154,41 @@ struct AllConcertsView: View {
                                         .font(.system(size: 16, weight: .medium))
                                         .foregroundColor(.modernTextSecondary)
                                     
-                                    // Debug: Show all concert names and IDs
+                                    // View mode indicator
+                                    HStack {
+                                        Image(systemName: isCalendarView ? "calendar" : "list.bullet")
+                                        Text(isCalendarView ? "Calendar View" : "List View")
+                                    }
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.modernAccent)
+                                    .padding(.top, 4)
                                 }
                                 .padding(.vertical, 20)
                                 .padding(.horizontal, 24)
                                 .frame(maxWidth: .infinity)
                                 .background(
                                     RoundedRectangle(cornerRadius: 20)
-                                        .fill(Color.modernSecondary)
+                                        .fill(Color.modernAccent.opacity(0.1))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 20)
+                                                .stroke(Color.modernAccent.opacity(0.3), lineWidth: 1)
+                                        )
                                         .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
                                 )
                             }
                             .padding(.top, 20)
                             
-                            LazyVStack(spacing: 12) {
-                                ForEach(Array(sortedConcerts.enumerated()), id: \.offset) { index, concert in
-                                    NavigationLink(destination: ConcertDetailView(concert: concert, concertManager: concertManager, settingsManager: settingsManager)) {
-                                        ConcertRowView(concert: concert)
+                            // Content based on view mode
+                            if isCalendarView {
+                                ConcertCalendarView(concerts: sortedConcerts, concertManager: concertManager, settingsManager: settingsManager)
+                            } else {
+                                LazyVStack(spacing: 12) {
+                                    ForEach(Array(sortedConcerts.enumerated()), id: \.offset) { index, concert in
+                                        NavigationLink(destination: ConcertDetailView(concert: concert, concertManager: concertManager, settingsManager: settingsManager)) {
+                                            ConcertRowView(concert: concert)
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
                                     }
-                                    .buttonStyle(PlainButtonStyle())
                                 }
                             }
                         }
@@ -2177,6 +2211,30 @@ struct AllConcertsView: View {
                     }
                     
                     Spacer()
+                    
+                    // View mode toggle
+                    HStack(spacing: 8) {
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                isCalendarView = false
+                            }
+                        }) {
+                            Image(systemName: isCalendarView ? "list.bullet" : "list.bullet.circle.fill")
+                                .font(.system(size: 20))
+                                .foregroundColor(isCalendarView ? .modernAccent.opacity(0.6) : .modernAccent)
+                        }
+                        
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                isCalendarView = true
+                            }
+                        }) {
+                            Image(systemName: isCalendarView ? "calendar.circle.fill" : "calendar")
+                                .font(.system(size: 20))
+                                .foregroundColor(isCalendarView ? .modernAccent : .modernAccent.opacity(0.6))
+                        }
+                    }
+                    .padding(.horizontal, 8)
                     
                     Button(action: {
                         showingAddConcert = true
@@ -2202,6 +2260,232 @@ struct AllConcertsView: View {
                     concertManager.addConcert(newConcert)
                 }
             }
+        }
+    }
+}
+
+// MARK: - Concert Calendar View
+struct ConcertCalendarView: View {
+    let concerts: [Concert]
+    @ObservedObject var concertManager: ConcertDataManager
+    @ObservedObject var settingsManager: SettingsManager
+    @State private var selectedDate = Date()
+    @State private var currentMonth = Date()
+    
+    private let calendar = Calendar.current
+    private let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM yyyy"
+        return formatter
+    }()
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            // Month Navigation
+            HStack {
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        currentMonth = calendar.date(byAdding: .month, value: -1, to: currentMonth) ?? currentMonth
+                    }
+                }) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.modernAccent)
+                        .padding(8)
+                        .background(Circle().fill(Color.modernAccent.opacity(0.1)))
+                }
+                
+                Spacer()
+                
+                Text(dateFormatter.string(from: currentMonth))
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundColor(.modernText)
+                
+                Spacer()
+                
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        currentMonth = calendar.date(byAdding: .month, value: 1, to: currentMonth) ?? currentMonth
+                    }
+                }) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.modernAccent)
+                        .padding(8)
+                        .background(Circle().fill(Color.modernAccent.opacity(0.1)))
+                }
+            }
+            .padding(.horizontal)
+            
+            // Calendar Grid
+            CalendarGridView(
+                currentMonth: currentMonth,
+                concerts: concerts,
+                concertManager: concertManager,
+                settingsManager: settingsManager
+            )
+        }
+        .padding(.vertical)
+    }
+}
+
+// MARK: - Calendar Grid View
+struct CalendarGridView: View {
+    let currentMonth: Date
+    let concerts: [Concert]
+    @ObservedObject var concertManager: ConcertDataManager
+    @ObservedObject var settingsManager: SettingsManager
+    
+    private let calendar = Calendar.current
+    private let columns = Array(repeating: GridItem(.flexible()), count: 7)
+    
+    private var monthDays: [Date] {
+        guard let monthInterval = calendar.dateInterval(of: .month, for: currentMonth) else { return [] }
+        
+        let firstOfMonth = monthInterval.start
+        let lastOfMonth = monthInterval.end
+        
+        guard let firstWeekday = calendar.dateInterval(of: .weekOfYear, for: firstOfMonth)?.start else { return [] }
+        
+        var days: [Date] = []
+        var currentDate = firstWeekday
+        
+        while currentDate < lastOfMonth {
+            days.append(currentDate)
+            currentDate = calendar.date(byAdding: .day, value: 1, to: currentDate) ?? currentDate
+        }
+        
+        return days
+    }
+    
+    private func concertsForDate(_ date: Date) -> [Concert] {
+        return concerts.filter { concert in
+            calendar.isDate(concert.date, inSameDayAs: date)
+        }
+    }
+    
+    private func isInCurrentMonth(_ date: Date) -> Bool {
+        calendar.isDate(date, equalTo: currentMonth, toGranularity: .month)
+    }
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Weekday headers
+            HStack(spacing: 0) {
+                ForEach(calendar.shortWeekdaySymbols, id: \.self) { weekday in
+                    Text(weekday)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.modernTextSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                }
+            }
+            
+            // Calendar days
+            LazyVGrid(columns: columns, spacing: 2) {
+                ForEach(monthDays, id: \.self) { date in
+                    CalendarDayView(
+                        date: date,
+                        concerts: concertsForDate(date),
+                        isInCurrentMonth: isInCurrentMonth(date),
+                        concertManager: concertManager,
+                        settingsManager: settingsManager
+                    )
+                }
+            }
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.modernAccent.opacity(0.05))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.modernAccent.opacity(0.2), lineWidth: 1)
+                )
+        )
+    }
+}
+
+// MARK: - Calendar Day View
+struct CalendarDayView: View {
+    let date: Date
+    let concerts: [Concert]
+    let isInCurrentMonth: Bool
+    @ObservedObject var concertManager: ConcertDataManager
+    @ObservedObject var settingsManager: SettingsManager
+    
+    private let calendar = Calendar.current
+    private var dayNumber: String {
+        String(calendar.component(.day, from: date))
+    }
+    
+    private var isToday: Bool {
+        calendar.isDateInToday(date)
+    }
+    
+    var body: some View {
+        VStack(spacing: 4) {
+            // Day number
+            Text(dayNumber)
+                .font(.system(size: 14, weight: isToday ? .bold : .medium))
+                .foregroundColor(
+                    isToday ? .white : 
+                    isInCurrentMonth ? .modernText : .modernTextSecondary.opacity(0.5)
+                )
+                .frame(width: 24, height: 24)
+                .background(
+                    Circle().fill(isToday ? Color.modernAccent : Color.clear)
+                )
+            
+            // Concert indicators
+            VStack(spacing: 2) {
+                ForEach(concerts.prefix(3), id: \.id) { concert in
+                    NavigationLink(destination: ConcertDetailView(concert: concert, concertManager: concertManager, settingsManager: settingsManager)) {
+                        HStack(spacing: 2) {
+                            Circle()
+                                .fill(getConcertColor(for: concert))
+                                .frame(width: 4, height: 4)
+                            if concerts.count <= 2 {
+                                Text(concert.artist)
+                                    .font(.system(size: 8, weight: .medium))
+                                    .foregroundColor(.modernText)
+                                    .lineLimit(1)
+                                    .truncationMode(.tail)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+                
+                if concerts.count > 3 {
+                    Text("+\(concerts.count - 3)")
+                        .font(.system(size: 8, weight: .medium))
+                        .foregroundColor(.modernAccent)
+                }
+            }
+        }
+        .frame(height: 60)
+        .frame(maxWidth: .infinity)
+        .padding(4)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(concerts.isEmpty ? Color.clear : Color.modernAccent.opacity(0.05))
+        )
+        .opacity(isInCurrentMonth ? 1.0 : 0.3)
+    }
+    
+    private func getConcertColor(for concert: Concert) -> Color {
+        let occupancyRate = Double(concert.ticketsSold) / 8.0
+        
+        if occupancyRate >= 0.8 {
+            return .green
+        } else if occupancyRate >= 0.5 {
+            return .orange
+        } else if occupancyRate > 0 {
+            return .blue
+        } else {
+            return .gray
         }
     }
 }
@@ -2234,7 +2518,7 @@ struct ConcertDetailView: View {
             .ignoresSafeArea()
             
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: 16) {
                     // Navigation Header
                     HStack {
                         Button(action: {
@@ -2318,12 +2602,12 @@ struct ConcertDetailView: View {
                         
                         if isEditingDetails {
                             // Edit mode
-                            VStack(spacing: 16) {
+                            VStack(spacing: 12) {
                                 TextField("Artist Name", text: $editedArtist)
-                                    .font(.system(size: 28, weight: .bold))
+                                    .font(.system(size: 22, weight: .bold))
                                     .foregroundColor(.modernText)
                                     .multilineTextAlignment(.center)
-                                    .padding(12)
+                                    .padding(10)
                                     .background(
                                         RoundedRectangle(cornerRadius: 12)
                                             .fill(Color.black.opacity(0.2))
@@ -2337,12 +2621,12 @@ struct ConcertDetailView: View {
                         } else {
                             // Display mode
                             Text(concert.artist)
-                                .font(.system(size: 28, weight: .bold))
+                                .font(.system(size: 22, weight: .bold))
                                 .foregroundColor(.modernText)
                             
-                            VStack(spacing: 8) {
+                            VStack(spacing: 6) {
                                 Text(concert.date, style: .date)
-                                    .font(.system(size: 16))
+                                    .font(.system(size: 14))
                                     .foregroundColor(.modernTextSecondary)
                                 
                                 VStack(spacing: 4) {
@@ -2369,10 +2653,10 @@ struct ConcertDetailView: View {
                             }
                         }
                     }
-                    .padding(24)
+                    .padding(16)
                     .frame(maxWidth: .infinity)
                     .background(
-                        RoundedRectangle(cornerRadius: 20)
+                        RoundedRectangle(cornerRadius: 16)
                             .fill(Color.modernSecondary)
                     )
                     
@@ -2380,6 +2664,7 @@ struct ConcertDetailView: View {
                     InteractiveFireSuiteView(concert: $concert, concertManager: concertManager, settingsManager: settingsManager)
                 }
                 .padding(.horizontal)
+                .padding(.top, 8)
             }
         }
         .navigationBarHidden(true)
@@ -2425,7 +2710,7 @@ struct InteractiveFireSuiteView: View {
     @State private var showingBatchOptions = false
     
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 16) {
             // Title and instructions
             VStack(spacing: 12) {
                 Text("Seating")
@@ -3029,7 +3314,7 @@ struct InteractiveSeatView: View {
                         .font(.system(size: 10, weight: .semibold, design: .monospaced))
                         .foregroundColor(seat.status.color)
                     
-                    Text(seat.source?.rawValue ?? "")
+                    Text(displayTextForSeat(seat))
                         .font(.system(size: 8, weight: .medium, design: .monospaced))
                         .foregroundColor(seat.status.color.opacity(0.8))
                         .lineLimit(1)
@@ -3060,6 +3345,13 @@ struct InteractiveSeatView: View {
         }
         .frame(width: 55, height: 78) // Smaller overall container
     }
+    
+    private func displayTextForSeat(_ seat: Seat) -> String {
+        if seat.source == .family, let personName = seat.familyPersonName, !personName.isEmpty {
+            return personName
+        }
+        return seat.source?.rawValue ?? ""
+    }
 }
 
 // MARK: - Seat Options View
@@ -3079,6 +3371,7 @@ struct SeatOptionsView: View {
     @State private var dateSold: Date
     @State private var datePaid: Date
     @State private var applyToAllSeats = false
+    @State private var familyPersonName: String
     
     init(seatNumber: Int, seat: Seat, onUpdate: @escaping (Seat) -> Void, onUpdateAll: ((Seat) -> Void)? = nil) {
         self.seatNumber = seatNumber
@@ -3092,6 +3385,7 @@ struct SeatOptionsView: View {
         self._selectedSource = State(initialValue: seat.source ?? .facebook)
         self._dateSold = State(initialValue: seat.dateSold ?? Date())
         self._datePaid = State(initialValue: seat.datePaid ?? Date())
+        self._familyPersonName = State(initialValue: seat.familyPersonName ?? "")
     }
     
     var body: some View {
@@ -3247,6 +3541,25 @@ struct SeatOptionsView: View {
                                     }
                                 }
                                 
+                                // Family person name field (only for family source)
+                                if selectedSource == .family {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("Person's Name")
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundColor(.modernTextSecondary)
+                                        
+                                        TextField("Enter person's name", text: $familyPersonName)
+                                            .font(.system(size: 16))
+                                            .foregroundColor(.modernText)
+                                            .padding(12)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .fill(Color.modernSecondary)
+                                            )
+                                            .autocapitalization(.words)
+                                    }
+                                }
+                                
                                 // Date fields (only for sold status)
                                 VStack(spacing: 16) {
                                     // Date Sold
@@ -3385,6 +3698,7 @@ struct SeatOptionsView: View {
                                     updatedSeat.cost = Double(costInput) ?? 25.0
                                     updatedSeat.note = nil
                                     updatedSeat.source = selectedSource
+                                    updatedSeat.familyPersonName = selectedSource == .family ? (familyPersonName.isEmpty ? nil : familyPersonName) : nil
                                     updatedSeat.dateSold = dateSold
                                     updatedSeat.datePaid = datePaid
                                     // Play ding sound effect
@@ -3394,6 +3708,7 @@ struct SeatOptionsView: View {
                                     updatedSeat.cost = Double(costInput) ?? 25.0
                                     updatedSeat.note = noteInput.isEmpty ? nil : noteInput
                                     updatedSeat.source = nil
+                                    updatedSeat.familyPersonName = nil
                                     updatedSeat.dateSold = nil
                                     updatedSeat.datePaid = nil
                                 } else {
@@ -3401,6 +3716,7 @@ struct SeatOptionsView: View {
                                     updatedSeat.cost = Double(costInput) ?? 25.0
                                     updatedSeat.note = nil
                                     updatedSeat.source = nil
+                                    updatedSeat.familyPersonName = nil
                                     updatedSeat.dateSold = nil
                                     updatedSeat.datePaid = nil
                                 }
@@ -3501,7 +3817,7 @@ struct ParkingTicketOptionsView: View {
         self.parkingTicket = parkingTicket
         self.onUpdate = onUpdate
         self._selectedStatus = State(initialValue: parkingTicket.status)
-        self._priceInput = State(initialValue: parkingTicket.price != nil ? String(parkingTicket.price!) : "")
+        self._priceInput = State(initialValue: parkingTicket.price != nil ? String(parkingTicket.price!) : "0")
         self._costInput = State(initialValue: String(parkingTicket.cost ?? 0.0))
         self._noteInput = State(initialValue: parkingTicket.note ?? "")
         self._selectedSource = State(initialValue: parkingTicket.source ?? .facebook)
@@ -3857,6 +4173,16 @@ struct ReportingView: View {
     @Binding var showingShareSheet: Bool
     @State private var animateIcon = false
     
+    // Report customization options
+    @State private var includeProfitAnalysis = true
+    @State private var includeConcertData = true
+    @State private var includePerformanceRankings = true
+    @State private var includeExecutiveSummary = true
+    
+    private var hasSelectedElements: Bool {
+        includeProfitAnalysis || includeConcertData || includePerformanceRankings || includeExecutiveSummary
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             // Header
@@ -3883,31 +4209,42 @@ struct ReportingView: View {
                 }
             }
             
-            // Report Features
-            VStack(spacing: 16) {
-                ReportFeatureRow(
-                    icon: "chart.line.uptrend.xyaxis",
-                    title: "Profit Analysis",
-                    description: "Detailed revenue, costs, and profit margins"
-                )
+            // Report Customization
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Report Elements")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.bottom, 8)
                 
-                ReportFeatureRow(
-                    icon: "tablecells",
-                    title: "Concert Data",
-                    description: "Complete seat-by-seat sales information"
-                )
-                
-                ReportFeatureRow(
-                    icon: "trophy",
-                    title: "Performance Rankings",
-                    description: "Top performing concerts and revenue sources"
-                )
-                
-                ReportFeatureRow(
-                    icon: "percent",
-                    title: "Executive Summary",
-                    description: "Key metrics and occupancy statistics"
-                )
+                VStack(spacing: 16) {
+                    CustomizableReportFeatureRow(
+                        icon: "chart.line.uptrend.xyaxis",
+                        title: "Profit Analysis",
+                        description: "Detailed revenue, costs, and profit margins",
+                        isEnabled: $includeProfitAnalysis
+                    )
+                    
+                    CustomizableReportFeatureRow(
+                        icon: "tablecells",
+                        title: "Concert Data",
+                        description: "Complete seat-by-seat sales information",
+                        isEnabled: $includeConcertData
+                    )
+                    
+                    CustomizableReportFeatureRow(
+                        icon: "trophy",
+                        title: "Performance Rankings",
+                        description: "Top performing concerts and revenue sources",
+                        isEnabled: $includePerformanceRankings
+                    )
+                    
+                    CustomizableReportFeatureRow(
+                        icon: "percent",
+                        title: "Executive Summary",
+                        description: "Key metrics and occupancy statistics",
+                        isEnabled: $includeExecutiveSummary
+                    )
+                }
             }
             
             // Generate Report Button
@@ -3943,7 +4280,7 @@ struct ReportingView: View {
                 )
                 .clipShape(RoundedRectangle(cornerRadius: 16))
             }
-            .disabled(isGenerating || concerts.isEmpty)
+            .disabled(isGenerating || concerts.isEmpty || !hasSelectedElements)
             .buttonStyle(HoverableButtonStyle())
             
             if concerts.isEmpty {
@@ -3951,6 +4288,14 @@ struct ReportingView: View {
                     Image(systemName: "info.circle")
                         .foregroundColor(.orange)
                     Text("Add concerts to generate reports")
+                        .font(.system(size: 14))
+                        .foregroundColor(.white.opacity(0.7))
+                }
+            } else if !hasSelectedElements {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundColor(.yellow)
+                    Text("Select at least one report element")
                         .font(.system(size: 14))
                         .foregroundColor(.white.opacity(0.7))
                 }
@@ -3995,9 +4340,17 @@ struct ReportingView: View {
         HapticManager.shared.impact(style: .medium)
         
         DispatchQueue.global(qos: .userInitiated).async {
+            let reportOptions = ReportOptions(
+                includeProfitAnalysis: self.includeProfitAnalysis,
+                includeConcertData: self.includeConcertData,
+                includePerformanceRankings: self.includePerformanceRankings,
+                includeExecutiveSummary: self.includeExecutiveSummary
+            )
+            
             let reportFileURL = ReportGenerator.shared.generateComprehensiveReportFile(
                 concerts: concerts,
-                settingsManager: settingsManager
+                settingsManager: settingsManager,
+                options: reportOptions
             )
             
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { // Small delay for UX
@@ -4039,6 +4392,43 @@ struct ReportFeatureRow: View {
             
             Spacer()
         }
+    }
+}
+
+// MARK: - Customizable Report Feature Row
+struct CustomizableReportFeatureRow: View {
+    let icon: String
+    let title: String
+    let description: String
+    @Binding var isEnabled: Bool
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(isEnabled ? 0.2 : 0.1))
+                    .frame(width: 32, height: 32)
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white.opacity(isEnabled ? 1.0 : 0.5))
+            }
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.white.opacity(isEnabled ? 1.0 : 0.6))
+                Text(description)
+                    .font(.system(size: 12))
+                    .foregroundColor(.white.opacity(isEnabled ? 0.8 : 0.4))
+            }
+            
+            Spacer()
+            
+            Toggle("", isOn: $isEnabled)
+                .toggleStyle(SwitchToggleStyle(tint: Color(red: 0.2, green: 0.6, blue: 1.0)))
+                .scaleEffect(0.8)
+        }
+        .animation(.easeInOut(duration: 0.2), value: isEnabled)
     }
 }
 
@@ -4170,6 +4560,11 @@ struct SettingsView: View {
                                     Text("Family Ticket Price")
                                         .font(.system(size: 14, weight: .medium))
                                         .foregroundColor(.modernTextSecondary)
+                                    
+                                    Text("Default price automatically populated when 'Family' is selected as the ticket sale type")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.modernTextSecondary.opacity(0.8))
+                                        .multilineTextAlignment(.leading)
                                     
                                     HStack {
                                         Text("$")
@@ -4369,14 +4764,29 @@ struct SettingsView: View {
     }
 }
 
+// MARK: - Report Options
+struct ReportOptions {
+    let includeProfitAnalysis: Bool
+    let includeConcertData: Bool
+    let includePerformanceRankings: Bool
+    let includeExecutiveSummary: Bool
+    
+    static let all = ReportOptions(
+        includeProfitAnalysis: true,
+        includeConcertData: true,
+        includePerformanceRankings: true,
+        includeExecutiveSummary: true
+    )
+}
+
 // MARK: - Report Generator Service
 class ReportGenerator {
     static let shared = ReportGenerator()
     
     private init() {}
     
-    func generateComprehensiveReportFile(concerts: [Concert], settingsManager: SettingsManager) -> URL? {
-        let csvContent = generateComprehensiveReport(concerts: concerts, settingsManager: settingsManager)
+    func generateComprehensiveReportFile(concerts: [Concert], settingsManager: SettingsManager, options: ReportOptions = .all) -> URL? {
+        let csvContent = generateComprehensiveReport(concerts: concerts, settingsManager: settingsManager, options: options)
         
         // Generate filename with timestamp
         let formatter = DateFormatter()
@@ -4395,7 +4805,7 @@ class ReportGenerator {
         }
     }
     
-    func generateComprehensiveReport(concerts: [Concert], settingsManager: SettingsManager) -> String {
+    func generateComprehensiveReport(concerts: [Concert], settingsManager: SettingsManager, options: ReportOptions = .all) -> String {
         var csv = ""
         
         // Header with report metadata
@@ -4405,19 +4815,27 @@ class ReportGenerator {
         csv += "Venue: \(settingsManager.venueLocation)\n\n"
         
         // Executive Summary
-        csv += generateExecutiveSummary(concerts: concerts)
-        csv += "\n"
+        if options.includeExecutiveSummary {
+            csv += generateExecutiveSummary(concerts: concerts)
+            csv += "\n"
+        }
         
-        // Concert Overview
-        csv += generateConcertOverview(concerts: concerts)
-        csv += "\n"
+        // Concert Overview / Performance Rankings
+        if options.includePerformanceRankings {
+            csv += generateConcertOverview(concerts: concerts)
+            csv += "\n"
+        }
         
         // Detailed Seat Data
-        csv += generateDetailedSeatData(concerts: concerts)
-        csv += "\n"
+        if options.includeConcertData {
+            csv += generateDetailedSeatData(concerts: concerts)
+            csv += "\n"
+        }
         
         // Profit Analysis
-        csv += generateProfitAnalysis(concerts: concerts)
+        if options.includeProfitAnalysis {
+            csv += generateProfitAnalysis(concerts: concerts)
+        }
         
         return csv
     }
@@ -4435,6 +4853,10 @@ class ReportGenerator {
         let totalSoldSeats = concerts.reduce(0) { $0 + $1.ticketsSold }
         let totalReservedSeats = concerts.reduce(0) { $0 + $1.ticketsReserved }
         
+        // Occupancy calculations use only past concerts
+        let pastTotalSeats = pastConcerts.reduce(0) { $0 + $1.seats.count }
+        let pastTotalSoldSeats = pastConcerts.reduce(0) { $0 + $1.ticketsSold }
+        
         let totalRevenue = pastConcerts.reduce(0.0) { total, concert in
             let seatRevenue = concert.seats.compactMap { $0.price }.reduce(0.0, +)
             let parkingRevenue = concert.parkingTicket?.price ?? 0.0
@@ -4448,10 +4870,10 @@ class ReportGenerator {
         }
         
         let netProfit = totalRevenue - totalCosts
-        let occupancyRate = totalSeats > 0 ? Double(totalSoldSeats) / Double(totalSeats) * 100.0 : 0.0
+        let occupancyRate = pastTotalSeats > 0 ? Double(pastTotalSoldSeats) / Double(pastTotalSeats) * 100.0 : 0.0
         let profitMargin = totalCosts > 0 ? (netProfit / totalCosts) * 100.0 : 0.0
         
-        csv += "Note: Financial metrics (Revenue/Costs/Profit/ROI/Averages) include past concerts only\n"
+        csv += "Note: Financial metrics (Revenue/Costs/Profit/ROI/Averages/Occupancy Rate) include past concerts only\n"
         csv += "Seat counts include all scheduled concerts (past and future)\n\n"
         csv += "Metric,Value\n"
         csv += "Total Concerts,\(totalConcerts)\n"
@@ -4768,6 +5190,16 @@ struct BackupRestoreSection: View {
         case .success(let urls):
             guard let url = urls.first else { return }
             
+            // Access security-scoped resource
+            guard url.startAccessingSecurityScopedResource() else {
+                showBackupAlert(title: "Access Denied", message: "Unable to access the selected file. Please check file permissions.")
+                return
+            }
+            
+            defer {
+                url.stopAccessingSecurityScopedResource()
+            }
+            
             do {
                 let data = try Data(contentsOf: url)
                 let success = concertManager.restoreFromBackupData(data)
@@ -5000,6 +5432,7 @@ struct BatchSeatOptionsView: View {
             case .available:
                 updatedSeat.price = nil
                 updatedSeat.source = nil
+                updatedSeat.familyPersonName = nil
                 updatedSeat.note = nil
                 updatedSeat.dateSold = nil
                 updatedSeat.datePaid = nil
@@ -5007,6 +5440,7 @@ struct BatchSeatOptionsView: View {
             case .reserved:
                 updatedSeat.price = nil
                 updatedSeat.source = nil
+                updatedSeat.familyPersonName = nil
                 updatedSeat.note = noteInput.isEmpty ? nil : noteInput
                 updatedSeat.dateSold = nil
                 updatedSeat.datePaid = nil
@@ -5015,6 +5449,7 @@ struct BatchSeatOptionsView: View {
                 if let price = Double(priceInput), price > 0 {
                     updatedSeat.price = price
                     updatedSeat.source = selectedSource
+                    updatedSeat.familyPersonName = nil // Batch operations don't set individual names for family seats
                     updatedSeat.note = nil
                     updatedSeat.dateSold = Date()
                 } else {
