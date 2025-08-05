@@ -2502,6 +2502,11 @@ struct ConcertDetailView: View {
     @State private var editedDate = Date()
     @Environment(\.dismiss) private var dismiss
     
+    // Batch operation states
+    @State private var isBatchMode = false
+    @State private var selectedSeats = Set<Int>()
+    @State private var showingBatchOptions = false
+    
     var body: some View {
         ZStack {
             // Consistent dark gradient background
@@ -2561,107 +2566,218 @@ struct ConcertDetailView: View {
                     .padding(.horizontal)
                     .padding(.top, 20)
                     
-                    // Concert Header Card
-                    VStack(spacing: 16) {
-                        HStack {
-                            Spacer()
-                            Button(action: {
-                                if isEditingDetails {
-                                    // Save changes
-                                    concert.artist = editedArtist
-                                    concert.date = editedDate
-                                    concertManager.updateConcert(concert)
-                                    isEditingDetails = false
-                                } else {
-                                    // Enter edit mode
-                                    editedArtist = concert.artist
-                                    editedDate = concert.date
-                                    isEditingDetails = true
+                    // Concert Header Card with batch operations overlay
+                    ZStack {
+                        VStack(spacing: 16) {
+                            HStack {
+                                Spacer()
+                                Button(action: {
+                                    if isEditingDetails {
+                                        // Save changes
+                                        concert.artist = editedArtist
+                                        concert.date = editedDate
+                                        concertManager.updateConcert(concert)
+                                        isEditingDetails = false
+                                    } else {
+                                        // Enter edit mode
+                                        editedArtist = concert.artist
+                                        editedDate = concert.date
+                                        isEditingDetails = true
+                                    }
+                                }) {
+                                    Text(isEditingDetails ? "Save" : "Edit")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.modernAccent)
                                 }
-                            }) {
-                                Text(isEditingDetails ? "Save" : "Edit")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.modernAccent)
+                                
+                                if isEditingDetails {
+                                    Button {
+                                        isEditingDetails = false
+                                        editedArtist = concert.artist
+                                        editedDate = concert.date
+                                    } label: {
+                                        HStack {
+                                            Image(systemName: "xmark.circle")
+                                            Text("Cancel")
+                                        }
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.modernTextSecondary)
+                                    }
+                                }
                             }
                             
                             if isEditingDetails {
-                                Button {
-                                    isEditingDetails = false
-                                    editedArtist = concert.artist
-                                    editedDate = concert.date
-                                } label: {
-                                    HStack {
-                                        Image(systemName: "xmark.circle")
-                                        Text("Cancel")
-                                    }
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.modernTextSecondary)
+                                // Edit mode
+                                VStack(spacing: 12) {
+                                    TextField("Artist Name", text: $editedArtist)
+                                        .font(.system(size: 22, weight: .bold))
+                                        .foregroundColor(.modernText)
+                                        .multilineTextAlignment(.center)
+                                        .padding(10)
+                                        .background(
+                                            RoundedRectangle(cornerRadius: 12)
+                                                .fill(Color.black.opacity(0.2))
+                                        )
+                                    
+                                    DatePicker("", selection: $editedDate, displayedComponents: .date)
+                                        .datePickerStyle(.compact)
+                                        .colorScheme(.dark)
+                                        .labelsHidden()
                                 }
-                            }
-                        }
-                        
-                        if isEditingDetails {
-                            // Edit mode
-                            VStack(spacing: 12) {
-                                TextField("Artist Name", text: $editedArtist)
+                            } else {
+                                // Display mode
+                                Text(concert.artist)
                                     .font(.system(size: 22, weight: .bold))
                                     .foregroundColor(.modernText)
-                                    .multilineTextAlignment(.center)
-                                    .padding(10)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .fill(Color.black.opacity(0.2))
-                                    )
                                 
-                                DatePicker("", selection: $editedDate, displayedComponents: .date)
-                                    .datePickerStyle(.compact)
-                                    .colorScheme(.dark)
-                                    .labelsHidden()
-                            }
-                        } else {
-                            // Display mode
-                            Text(concert.artist)
-                                .font(.system(size: 22, weight: .bold))
-                                .foregroundColor(.modernText)
-                            
-                            VStack(spacing: 6) {
-                                Text(concert.date, style: .date)
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.modernTextSecondary)
-                                
-                                VStack(spacing: 4) {
-                                    HStack {
-                                        Circle()
-                                            .fill(concert.ticketsSold == 8 ? Color.modernSuccess : Color.modernWarning)
-                                            .frame(width: 8, height: 8)
-                                        Text("\(concert.ticketsSold)/8 tickets sold")
-                                            .font(.system(size: 14, weight: .medium))
-                                            .foregroundColor(concert.ticketsSold == 8 ? .modernSuccess : .modernWarning)
-                                    }
+                                VStack(spacing: 6) {
+                                    Text(concert.date, style: .date)
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.modernTextSecondary)
                                     
-                                    if concert.ticketsReserved > 0 {
+                                    VStack(spacing: 4) {
                                         HStack {
                                             Circle()
-                                                .fill(Color.cyan)
+                                                .fill(concert.ticketsSold == 8 ? Color.modernSuccess : Color.modernWarning)
                                                 .frame(width: 8, height: 8)
-                                            Text("\(concert.ticketsReserved) reserved")
+                                            Text("\(concert.ticketsSold)/8 tickets sold")
                                                 .font(.system(size: 14, weight: .medium))
-                                                .foregroundColor(.cyan)
+                                                .foregroundColor(concert.ticketsSold == 8 ? .modernSuccess : .modernWarning)
+                                        }
+                                        
+                                        if concert.ticketsReserved > 0 {
+                                            HStack {
+                                                Circle()
+                                                    .fill(Color.cyan)
+                                                    .frame(width: 8, height: 8)
+                                                Text("\(concert.ticketsReserved) reserved")
+                                                    .font(.system(size: 14, weight: .medium))
+                                                    .foregroundColor(.cyan)
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
+                        .padding(16)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(Color.modernSecondary)
+                        )
+                        .opacity(!isEditingDetails && isBatchMode && !selectedSeats.isEmpty ? 0.3 : 1.0)
+                        
+                        // Batch operations overlay (only when not editing and batch mode is active)
+                        if !isEditingDetails && isBatchMode && !selectedSeats.isEmpty {
+                            VStack(spacing: 12) {
+                                Text("Batch Operations")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(.modernText)
+                                
+                                LazyVGrid(columns: [
+                                    GridItem(.flexible()),
+                                    GridItem(.flexible())
+                                ], spacing: 12) {
+                                    Button(action: {
+                                        showingBatchOptions = true
+                                    }) {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "slider.horizontal.3")
+                                                .font(.system(size: 16, weight: .medium))
+                                            Text("Bulk Edit")
+                                                .font(.system(size: 14, weight: .medium))
+                                        }
+                                        .foregroundColor(.blue)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 12)
+                                        .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                                        )
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                    
+                                    Button(action: {
+                                        batchSetStatus(.available)
+                                    }) {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "arrow.clockwise")
+                                                .font(.system(size: 16, weight: .medium))
+                                            Text("Mark Available")
+                                                .font(.system(size: 14, weight: .medium))
+                                        }
+                                        .foregroundColor(.green)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 12)
+                                        .background(Color.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(Color.green.opacity(0.3), lineWidth: 1)
+                                        )
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                    
+                                    Button(action: {
+                                        batchSetStatus(.reserved)
+                                    }) {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "clock")
+                                                .font(.system(size: 16, weight: .medium))
+                                            Text("Mark Reserved")
+                                                .font(.system(size: 14, weight: .medium))
+                                        }
+                                        .foregroundColor(.orange)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 12)
+                                        .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                                        )
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                    
+                                    Button(action: {
+                                        batchSetStatus(.sold)
+                                    }) {
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 16, weight: .medium))
+                                            Text("Mark Sold")
+                                                .font(.system(size: 14, weight: .medium))
+                                        }
+                                        .foregroundColor(.red)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 12)
+                                        .background(Color.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(Color.red.opacity(0.3), lineWidth: 1)
+                                        )
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                }
+                            }
+                            .padding(16)
+                            .frame(maxWidth: .infinity)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(Color.modernSecondary)
+                            )
+                            .transition(.opacity.combined(with: .scale))
+                        }
                     }
-                    .padding(16)
-                    .frame(maxWidth: .infinity)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16)
-                            .fill(Color.modernSecondary)
-                    )
                     
                     // Interactive Fire Suite Layout for seat selection
-                    InteractiveFireSuiteView(concert: $concert, concertManager: concertManager, settingsManager: settingsManager)
+                    InteractiveFireSuiteView(
+                        concert: $concert, 
+                        concertManager: concertManager, 
+                        settingsManager: settingsManager,
+                        isBatchMode: $isBatchMode,
+                        selectedSeats: $selectedSeats,
+                        showingBatchOptions: $showingBatchOptions
+                    )
                 }
                 .padding(.horizontal)
                 .padding(.top, 8)
@@ -2670,6 +2786,19 @@ struct ConcertDetailView: View {
         .navigationBarHidden(true)
         .sheet(isPresented: $showingAllConcerts) {
             AllConcertsView(concertManager: concertManager, settingsManager: settingsManager)
+        }
+        .sheet(isPresented: $showingBatchOptions) {
+            BatchSeatOptionsView(
+                selectedSeats: Array(selectedSeats).sorted(),
+                concert: concert,
+                onUpdate: { updatedSeats in
+                    for (index, seat) in updatedSeats {
+                        concert.seats[index] = seat
+                    }
+                    concertManager.updateConcert(concert)
+                }
+            )
+            .environmentObject(settingsManager)
         }
         .confirmationDialog("Delete Concert", isPresented: $showingDeleteConfirmation, titleVisibility: .visible) {
             Button("Delete Concert", role: .destructive) {
@@ -2684,6 +2813,24 @@ struct ConcertDetailView: View {
     private func deleteConcert() {
         concertManager.deleteConcert(concert)
         dismiss()
+    }
+    
+    private func batchSetStatus(_ status: SeatStatus) {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            for index in selectedSeats {
+                concert.seats[index].status = status
+                
+                // Clear price and source for available seats
+                if status == .available {
+                    concert.seats[index].price = nil
+                    concert.seats[index].source = nil
+                    concert.seats[index].note = nil
+                }
+            }
+            
+            concertManager.updateConcert(concert)
+            selectedSeats.removeAll()
+        }
     }
 }
 
@@ -2704,10 +2851,10 @@ struct InteractiveFireSuiteView: View {
     @State private var priceInput: String = ""
     @State private var showingParkingOptions = false
     
-    // Batch operation states
-    @State private var isBatchMode = false
-    @State private var selectedSeats = Set<Int>()
-    @State private var showingBatchOptions = false
+    // Batch operation states (now bindings from parent)
+    @Binding var isBatchMode: Bool
+    @Binding var selectedSeats: Set<Int>
+    @Binding var showingBatchOptions: Bool
     
     var body: some View {
         VStack(spacing: 16) {
@@ -2958,103 +3105,6 @@ struct InteractiveFireSuiteView: View {
             }
             .padding()
             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-            
-            // Batch operations toolbar
-            if isBatchMode && !selectedSeats.isEmpty {
-                VStack(spacing: 12) {
-                    Text("Batch Operations")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.modernText)
-                    
-                    LazyVGrid(columns: [
-                        GridItem(.flexible()),
-                        GridItem(.flexible())
-                    ], spacing: 12) {
-                        Button(action: {
-                            showingBatchOptions = true
-                        }) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "slider.horizontal.3")
-                                    .font(.system(size: 16, weight: .medium))
-                                Text("Bulk Edit")
-                                    .font(.system(size: 14, weight: .medium))
-                            }
-                            .foregroundColor(.blue)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.blue.opacity(0.3), lineWidth: 1)
-                            )
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        
-                        Button(action: {
-                            batchSetStatus(.available)
-                        }) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "arrow.clockwise")
-                                    .font(.system(size: 16, weight: .medium))
-                                Text("Mark Available")
-                                    .font(.system(size: 14, weight: .medium))
-                            }
-                            .foregroundColor(.green)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color.green.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.green.opacity(0.3), lineWidth: 1)
-                            )
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        
-                        Button(action: {
-                            batchSetStatus(.reserved)
-                        }) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "clock")
-                                    .font(.system(size: 16, weight: .medium))
-                                Text("Mark Reserved")
-                                    .font(.system(size: 14, weight: .medium))
-                            }
-                            .foregroundColor(.orange)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.orange.opacity(0.3), lineWidth: 1)
-                            )
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                        
-                        Button(action: {
-                            batchSetStatus(.sold)
-                        }) {
-                            HStack(spacing: 8) {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 16, weight: .medium))
-                                Text("Mark Sold")
-                                    .font(.system(size: 14, weight: .medium))
-                            }
-                            .foregroundColor(.red)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 12)
-                            .background(Color.red.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .stroke(Color.red.opacity(0.3), lineWidth: 1)
-                            )
-                        }
-                        .buttonStyle(PlainButtonStyle())
-                    }
-                }
-                .padding()
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-                .transition(.opacity.combined(with: .scale))
-            }
         }
         .onAppear {
             startPulseAnimation()
@@ -3100,21 +3150,6 @@ struct InteractiveFireSuiteView: View {
             )
             .environmentObject(settingsManager)
         }
-        .sheet(isPresented: $showingBatchOptions) {
-            BatchSeatOptionsView(
-                selectedSeats: Array(selectedSeats).sorted(),
-                concert: concert,
-                onUpdate: { updatedSeats in
-                    for (index, seat) in updatedSeats {
-                        concert.seats[index] = seat
-                    }
-                    concertManager.updateConcert(concert)
-                    selectedSeats.removeAll()
-                    isBatchMode = false
-                }
-            )
-            .environmentObject(settingsManager)
-        }
     }
     
     private func handleSeatTap(_ index: Int) {
@@ -3141,27 +3176,6 @@ struct InteractiveFireSuiteView: View {
         }
     }
     
-    private func batchSetStatus(_ status: SeatStatus) {
-        withAnimation(.easeInOut(duration: 0.3)) {
-            for index in selectedSeats {
-                concert.seats[index].status = status
-                
-                // Clear price and source for available seats
-                if status == .available {
-                    concert.seats[index].price = nil
-                    concert.seats[index].source = nil
-                    concert.seats[index].note = nil
-                }
-            }
-            
-            concertManager.updateConcert(concert)
-            selectedSeats.removeAll()
-            
-            // Haptic feedback for batch operation
-            let impactFeedback = UIImpactFeedbackGenerator(style: .heavy)
-            impactFeedback.impactOccurred()
-        }
-    }
     
     private func startPulseAnimation() {
         withAnimation(.easeInOut(duration: 3.0).repeatForever()) {
