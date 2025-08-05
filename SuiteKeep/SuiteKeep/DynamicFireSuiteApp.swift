@@ -5246,6 +5246,7 @@ struct BatchSeatOptionsView: View {
     
     @State private var selectedStatus: SeatStatus = .available
     @State private var priceInput: String = ""
+    @State private var costInput: String = "25"
     @State private var selectedSource: TicketSource = .family
     @State private var noteInput: String = ""
     @State private var showingAlert = false
@@ -5381,6 +5382,26 @@ struct BatchSeatOptionsView: View {
                             .padding()
                             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                         }
+                        
+                        // Cost Input (for all seats)
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Cost per Seat")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.modernText)
+                            
+                            HStack {
+                                Text("$")
+                                    .font(.system(size: 16))
+                                    .foregroundColor(.modernTextSecondary)
+                                
+                                TextField("25", text: $costInput)
+                                    .textFieldStyle(RoundedBorderTextFieldStyle())
+                                    .keyboardType(.decimalPad)
+                                    .font(.system(size: 16))
+                            }
+                        }
+                        .padding()
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                     }
                     .padding(.horizontal)
                 }
@@ -5428,6 +5449,9 @@ struct BatchSeatOptionsView: View {
             var updatedSeat = concert.seats[seatIndex]
             updatedSeat.status = selectedStatus
             
+            // Set cost for all statuses
+            updatedSeat.cost = Double(costInput) ?? 25.0
+            
             switch selectedStatus {
             case .available:
                 updatedSeat.price = nil
@@ -5463,6 +5487,7 @@ struct BatchSeatOptionsView: View {
         }
         
         onUpdate(updatedSeats)
+        dismiss()
     }
 }
 
