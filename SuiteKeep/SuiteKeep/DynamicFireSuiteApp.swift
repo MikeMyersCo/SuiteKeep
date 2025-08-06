@@ -105,6 +105,11 @@ class SettingsManager: ObservableObject {
 
 // MARK: - Vibrant Color Theme
 extension Color {
+    // Fire colors for firepit animation
+    // Note: fireOrange is defined in Assets.xcassets
+    static let fireRed = Color(red: 0.9, green: 0.1, blue: 0.0)
+    static let fireYellow = Color(red: 1.0, green: 0.8, blue: 0.0)
+    
     // Beautiful gradient backgrounds
     static let primaryGradientStart = Color(red: 0.1, green: 0.4, blue: 0.9) // Deep blue
     static let primaryGradientEnd = Color(red: 0.8, green: 0.2, blue: 0.9) // Magenta
@@ -5281,6 +5286,7 @@ struct BatchSeatOptionsView: View {
     @State private var costInput: String = "25"
     @State private var selectedSource: TicketSource = .family
     @State private var noteInput: String = ""
+    @State private var familyPersonName: String = ""
     @State private var showingAlert = false
     @State private var alertMessage = ""
     
@@ -5319,6 +5325,15 @@ struct BatchSeatOptionsView: View {
                                         if status == .available {
                                             priceInput = ""
                                             noteInput = ""
+                                            familyPersonName = ""
+                                        } else if status == .sold {
+                                            // Only auto-populate price if Family is selected and price is empty
+                                            if selectedSource == .family && priceInput.isEmpty {
+                                                priceInput = String(format: "%.0f", settingsManager.familyTicketPrice)
+                                            }
+                                        } else if status == .reserved {
+                                            priceInput = ""
+                                            familyPersonName = ""
                                         }
                                     }) {
                                         HStack(spacing: 8) {
@@ -5377,6 +5392,10 @@ struct BatchSeatOptionsView: View {
                                     ForEach([TicketSource.family, TicketSource.facebook, TicketSource.stubhub, TicketSource.axs, TicketSource.other], id: \.self) { source in
                                         Button(action: {
                                             selectedSource = source
+                                            // Auto-populate price for family tickets
+                                            if source == .family && priceInput.isEmpty {
+                                                priceInput = String(format: "%.0f", settingsManager.familyTicketPrice)
+                                            }
                                         }) {
                                             Text(source.rawValue.capitalized)
                                                 .font(.system(size: 14, weight: .medium))
@@ -5398,6 +5417,22 @@ struct BatchSeatOptionsView: View {
                             }
                             .padding()
                             .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                            
+                            // Family Person Name (only when Family source is selected)
+                            if selectedSource == .family {
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("Family Member Name")
+                                        .font(.system(size: 18, weight: .semibold))
+                                        .foregroundColor(.modernText)
+                                    
+                                    TextField("Enter person's name (optional)", text: $familyPersonName)
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                        .font(.system(size: 16))
+                                        .autocapitalization(.words)
+                                }
+                                .padding()
+                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                            }
                         }
                         
                         // Note Input (for reserved seats)
@@ -5505,9 +5540,10 @@ struct BatchSeatOptionsView: View {
                 if let price = Double(priceInput), price > 0 {
                     updatedSeat.price = price
                     updatedSeat.source = selectedSource
-                    updatedSeat.familyPersonName = nil // Batch operations don't set individual names for family seats
+                    updatedSeat.familyPersonName = selectedSource == .family && !familyPersonName.isEmpty ? familyPersonName : nil
                     updatedSeat.note = nil
                     updatedSeat.dateSold = Date()
+                    updatedSeat.datePaid = Date()
                 } else {
                     alertMessage = "Please enter a valid price for sold seats."
                     showingAlert = true
