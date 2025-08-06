@@ -106,7 +106,7 @@ class SettingsManager: ObservableObject {
 // MARK: - Vibrant Color Theme
 extension Color {
     // Fire colors for firepit animation
-    // Note: fireOrange is defined in Assets.xcassets
+    // Note: fireOrange is defined in Assets.xcassets/FireOrange.colorset
     static let fireRed = Color(red: 0.9, green: 0.1, blue: 0.0)
     static let fireYellow = Color(red: 1.0, green: 0.8, blue: 0.0)
     
@@ -1294,7 +1294,8 @@ struct EnhancedActivityRow: View {
                 Text(title)
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.white)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.9)
                 
                 Text(subtitle)
                     .font(.system(size: 14, weight: .medium))
@@ -2194,8 +2195,8 @@ struct AllConcertsView: View {
                         VStack(spacing: 24) {
                             // Header with space for navigation buttons
                             VStack(spacing: 20) {
-                                // Header spacing
-                                Spacer().frame(height: 20)
+                                // Header spacing - increased for button area
+                                Spacer().frame(height: 70)
                                 
                                 // Header Card
                                 VStack(spacing: 8) {
@@ -2290,12 +2291,19 @@ struct AllConcertsView: View {
                     Button {
                         dismiss()
                     } label: {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
+                        HStack(spacing: 6) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 16, weight: .semibold))
                             Text("Done")
+                                .font(.system(size: 17, weight: .semibold))
                         }
-                        .font(.system(size: 16, weight: .medium))
                         .foregroundColor(.modernAccent)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.modernSecondary.opacity(0.8))
+                        )
                     }
                     
                     Spacer()
@@ -2303,20 +2311,23 @@ struct AllConcertsView: View {
                     Button(action: {
                         showingAddConcert = true
                     }) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.system(size: 24))
-                            .foregroundColor(.modernAccent)
-                    }
-                    .scaleEffect(1.0)
-                    .onHover { hovering in
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            // Scale effect will be handled by buttonStyle
+                        HStack(spacing: 6) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 16, weight: .bold))
+                            Text("Add")
+                                .font(.system(size: 17, weight: .semibold))
                         }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.modernAccent)
+                        )
                     }
-                    .buttonStyle(HoverableButtonStyle())
                 }
-                .padding()
-                .padding(.top, 44)
+                .padding(.horizontal, 16)
+                .padding(.top, 50)
                 , alignment: .top
             )
             .sheet(isPresented: $showingAddConcert) {
@@ -2566,6 +2577,9 @@ struct ConcertDetailView: View {
     @State private var editedDate = Date()
     @Environment(\.dismiss) private var dismiss
     
+    // View mode state
+    @State private var isListView = false
+    
     // Batch operation states
     @State private var isBatchMode = false
     @State private var selectedSeats = Set<Int>()
@@ -2605,27 +2619,14 @@ struct ConcertDetailView: View {
                         
                         Spacer()
                         
-                        HStack(spacing: 12) {
-                            Button {
-                                showingAllConcerts = true
-                            } label: {
-                                HStack {
-                                    Image(systemName: "list.bullet")
-                                    Text("List")
-                                }
+                        Button(action: {
+                            showingDeleteConfirmation = true
+                        }) {
+                            Image(systemName: "trash")
                                 .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.modernAccent)
-                            }
-                            
-                            Button(action: {
-                                showingDeleteConfirmation = true
-                            }) {
-                                Image(systemName: "trash")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(.red)
-                            }
-                            .buttonStyle(HoverableButtonStyle())
+                                .foregroundColor(.red)
                         }
+                        .buttonStyle(HoverableButtonStyle())
                     }
                     .padding(.horizontal)
                     .padding(.top, 20)
@@ -2845,15 +2846,70 @@ struct ConcertDetailView: View {
                         }
                     }
                     
-                    // Interactive Fire Suite Layout for seat selection
-                    InteractiveFireSuiteView(
-                        concert: $concert, 
-                        concertManager: concertManager, 
-                        settingsManager: settingsManager,
-                        isBatchMode: $isBatchMode,
-                        selectedSeats: $selectedSeats,
-                        showingBatchOptions: $showingBatchOptions
+                    // View Toggle
+                    HStack(spacing: 0) {
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                isListView = false
+                            }
+                        }) {
+                            Text("Seat View")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(!isListView ? .white : .modernTextSecondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(
+                                    !isListView ? Color.modernAccent : Color.clear
+                                )
+                        }
+                        
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                isListView = true
+                            }
+                        }) {
+                            Text("List View")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(isListView ? .white : .modernTextSecondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(
+                                    isListView ? Color.modernAccent : Color.clear
+                                )
+                        }
+                    }
+                    .background(
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(Color.modernSecondary)
                     )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.modernAccent.opacity(0.3), lineWidth: 1)
+                    )
+                    .padding(.horizontal)
+                    
+                    // Conditional view based on toggle
+                    if isListView {
+                        // List View
+                        SeatListView(
+                            concert: $concert,
+                            concertManager: concertManager,
+                            settingsManager: settingsManager,
+                            isBatchMode: $isBatchMode,
+                            selectedSeats: $selectedSeats,
+                            showingBatchOptions: $showingBatchOptions
+                        )
+                    } else {
+                        // Interactive Fire Suite Layout for seat selection
+                        InteractiveFireSuiteView(
+                            concert: $concert, 
+                            concertManager: concertManager, 
+                            settingsManager: settingsManager,
+                            isBatchMode: $isBatchMode,
+                            selectedSeats: $selectedSeats,
+                            showingBatchOptions: $showingBatchOptions
+                        )
+                    }
                 }
                 .padding(.horizontal)
                 .padding(.top, 8)
@@ -2914,6 +2970,328 @@ struct ConcertDetailView: View {
 struct SelectedSeat: Identifiable {
     let id = UUID()
     let index: Int
+}
+
+// MARK: - Seat List View
+struct SeatListView: View {
+    @Binding var concert: Concert
+    @ObservedObject var concertManager: ConcertDataManager
+    @ObservedObject var settingsManager: SettingsManager
+    @Binding var isBatchMode: Bool
+    @Binding var selectedSeats: Set<Int>
+    @Binding var showingBatchOptions: Bool
+    @State private var showingSeatOptions = false
+    @State private var selectedSeatIndex: Int?
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            // Title and instructions
+            seatListHeader
+            
+            // Seat List
+            seatListContent
+        }
+        .sheet(item: Binding<SelectedSeat?>(
+            get: {
+                if let index = selectedSeatIndex, showingSeatOptions {
+                    return SelectedSeat(index: index)
+                }
+                return nil
+            },
+            set: { newValue in
+                if newValue == nil {
+                    selectedSeatIndex = nil
+                    showingSeatOptions = false
+                }
+            }
+        )) { selectedSeat in
+            SeatOptionsView(
+                seatNumber: selectedSeat.index + 1,
+                seat: concert.seats[selectedSeat.index],
+                onUpdate: { updatedSeat in
+                    concert.seats[selectedSeat.index] = updatedSeat
+                    concertManager.updateConcert(concert)
+                }
+            )
+            .environmentObject(settingsManager)
+        }
+    }
+    
+    private var seatListHeader: some View {
+        VStack(spacing: 12) {
+            Text("Seating List")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundColor(.modernText)
+            
+            Text(isBatchMode ? "Select multiple seats for batch operations" : "Tap seats to manage tickets")
+                .font(.system(size: 14))
+                .foregroundColor(.modernTextSecondary)
+            
+            // Batch mode toggle
+            batchModeToggle
+            
+            // Batch selection status
+            if isBatchMode && !selectedSeats.isEmpty {
+                batchSelectionStatus
+            }
+        }
+        .padding(.horizontal)
+    }
+    
+    private var batchModeToggle: some View {
+        HStack {
+            Spacer()
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    isBatchMode.toggle()
+                    selectedSeats.removeAll()
+                }
+            }) {
+                HStack(spacing: 6) {
+                    Image(systemName: isBatchMode ? "checkmark.square.fill" : "square.on.square")
+                        .font(.system(size: 16, weight: .medium))
+                    Text(isBatchMode ? "Exit Batch" : "Batch Mode")
+                        .font(.system(size: 14, weight: .medium))
+                }
+                .foregroundColor(isBatchMode ? .blue : .modernTextSecondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(batchModeBackground)
+            }
+            .buttonStyle(PlainButtonStyle())
+            Spacer()
+        }
+    }
+    
+    private var batchModeBackground: some View {
+        RoundedRectangle(cornerRadius: 8)
+            .fill(isBatchMode ? Color.blue.opacity(0.1) : Color.clear)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(isBatchMode ? Color.blue.opacity(0.3) : Color.gray.opacity(0.3), lineWidth: 1)
+            )
+    }
+    
+    private var batchSelectionStatus: some View {
+        HStack {
+            Text("\(selectedSeats.count) seat\(selectedSeats.count == 1 ? "" : "s") selected")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.blue)
+            
+            Spacer()
+            
+            Button("Clear Selection") {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    selectedSeats.removeAll()
+                }
+            }
+            .font(.system(size: 12, weight: .medium))
+            .foregroundColor(.red)
+            
+            Button("Edit Selected") {
+                showingBatchOptions = true
+            }
+            .font(.system(size: 12, weight: .medium))
+            .foregroundColor(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+            .background(Color.blue)
+            .cornerRadius(6)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color.blue.opacity(0.05))
+        )
+    }
+    
+    private var seatListContent: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                ForEach(0..<8) { index in
+                    seatRowView(for: index)
+                }
+            }
+            .padding(.horizontal)
+        }
+    }
+    
+    private func seatRowView(for index: Int) -> some View {
+        HStack(spacing: 16) {
+            // Checkbox for batch mode
+            if isBatchMode {
+                batchCheckbox(for: index)
+            }
+            
+            // Seat number badge
+            seatBadge(for: index)
+            
+            // Seat details
+            seatDetails(for: index)
+            
+            Spacer()
+            
+            // Edit button (when not in batch mode)
+            if !isBatchMode {
+                editButton(for: index)
+            }
+        }
+        .padding(16)
+        .background(seatRowBackground(for: index))
+    }
+    
+    private func batchCheckbox(for index: Int) -> some View {
+        Button(action: {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                if selectedSeats.contains(index) {
+                    selectedSeats.remove(index)
+                } else {
+                    selectedSeats.insert(index)
+                }
+            }
+        }) {
+            Image(systemName: selectedSeats.contains(index) ? "checkmark.square.fill" : "square")
+                .font(.system(size: 20))
+                .foregroundColor(selectedSeats.contains(index) ? .blue : .modernTextSecondary)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private func seatBadge(for index: Int) -> some View {
+        ZStack {
+            Circle()
+                .fill(seatColor(for: concert.seats[index].status))
+                .frame(width: 36, height: 36)
+            
+            Text("\(index + 1)")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundColor(.white)
+        }
+    }
+    
+    private func seatDetails(for index: Int) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // Header with seat name and status
+            HStack {
+                Text("Seat \(index + 1)")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.modernText)
+                
+                Spacer()
+                
+                // Status badge
+                statusBadge(for: index)
+            }
+            
+            // Additional details
+            additionalDetails(for: index)
+        }
+    }
+    
+    private func statusBadge(for index: Int) -> some View {
+        Text(concert.seats[index].status.rawValue.capitalized)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundColor(statusTextColor(for: concert.seats[index].status))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(statusBackgroundColor(for: concert.seats[index].status))
+            )
+    }
+    
+    private func additionalDetails(for index: Int) -> some View {
+        HStack(spacing: 16) {
+            if let price = concert.seats[index].price {
+                HStack(spacing: 4) {
+                    Image(systemName: "dollarsign.circle.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.modernTextSecondary)
+                    Text("$\(Int(price))")
+                        .font(.system(size: 14))
+                        .foregroundColor(.modernTextSecondary)
+                }
+            }
+            
+            if let source = concert.seats[index].source {
+                HStack(spacing: 4) {
+                    Image(systemName: "ticket.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.modernTextSecondary)
+                    Text(source.rawValue)
+                        .font(.system(size: 14))
+                        .foregroundColor(.modernTextSecondary)
+                }
+            }
+            
+            if let note = concert.seats[index].note, !note.isEmpty {
+                HStack(spacing: 4) {
+                    Image(systemName: "note.text")
+                        .font(.system(size: 12))
+                        .foregroundColor(.modernTextSecondary)
+                    Text(note)
+                        .font(.system(size: 14))
+                        .foregroundColor(.modernTextSecondary)
+                        .lineLimit(1)
+                }
+            }
+        }
+    }
+    
+    private func editButton(for index: Int) -> some View {
+        Button(action: {
+            selectedSeatIndex = index
+            showingSeatOptions = true
+        }) {
+            Image(systemName: "pencil.circle.fill")
+                .font(.system(size: 24))
+                .foregroundColor(.modernAccent)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private func seatRowBackground(for index: Int) -> some View {
+        RoundedRectangle(cornerRadius: 12)
+            .fill(Color.modernSecondary)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(selectedSeats.contains(index) ? Color.blue.opacity(0.5) : Color.clear, lineWidth: 2)
+            )
+    }
+    
+    private func seatColor(for status: SeatStatus) -> LinearGradient {
+        switch status {
+        case .available:
+            return LinearGradient(colors: [.green, .green.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .reserved:
+            return LinearGradient(colors: [.yellow, .orange], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .sold:
+            return LinearGradient(colors: [.red, .red.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing)
+        }
+    }
+    
+    private func statusTextColor(for status: SeatStatus) -> Color {
+        switch status {
+        case .available:
+            return .green
+        case .reserved:
+            return .orange
+        case .sold:
+            return .red
+        }
+    }
+    
+    private func statusBackgroundColor(for status: SeatStatus) -> Color {
+        switch status {
+        case .available:
+            return .green.opacity(0.2)
+        case .reserved:
+            return .orange.opacity(0.2)
+        case .sold:
+            return .red.opacity(0.2)
+        }
+    }
 }
 
 // MARK: - Interactive Fire Suite View
@@ -3623,7 +4001,7 @@ struct SeatOptionsView: View {
                                         RoundedRectangle(cornerRadius: 12)
                                             .fill(Color.modernSecondary)
                                     )
-                                    .onChange(of: selectedSource) { _, newSource in
+                                    .onChange(of: selectedSource) { newSource in
                                         // Auto-set price for family tickets
                                         if newSource == .family {
                                             priceInput = String(format: "%.0f", settingsManager.familyTicketPrice)
@@ -3706,7 +4084,7 @@ struct SeatOptionsView: View {
                                         RoundedRectangle(cornerRadius: 12)
                                             .fill(Color.modernSecondary)
                                     )
-                                    .onChange(of: noteInput) { _, newValue in
+                                    .onChange(of: noteInput) { newValue in
                                         let words = newValue.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
                                         if words.count > 5 {
                                             noteInput = words.prefix(5).joined(separator: " ")
@@ -4057,7 +4435,7 @@ struct ParkingTicketOptionsView: View {
                                     .padding(16)
                                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                                     .foregroundColor(.modernText)
-                                    .onChange(of: noteInput) { oldValue, newValue in
+                                    .onChange(of: noteInput) { newValue in
                                         let words = newValue.split(separator: " ")
                                         if words.count > 5 {
                                             noteInput = words.prefix(5).joined(separator: " ")
@@ -4129,8 +4507,8 @@ struct ParkingTicketOptionsView: View {
                         dismiss()
                     } label: {
                         Image(systemName: "checkmark")
+                            .font(.system(size: 17, weight: .semibold))
                             .foregroundColor(.blue)
-                            .fontWeight(.semibold)
                     }
                 }
             }
@@ -4611,7 +4989,7 @@ struct SettingsView: View {
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text("Suite Name")
                                         .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.modernTextSecondary)
+                                        .foregroundColor(.cyan)
                                     
                                     TextField("Enter suite name", text: $tempSuiteName)
                                         .font(.system(size: 16))
@@ -4630,7 +5008,7 @@ struct SettingsView: View {
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text("Venue Location")
                                         .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.modernTextSecondary)
+                                        .foregroundColor(.orange)
                                     
                                     TextField("Enter venue location", text: $tempVenueLocation)
                                         .font(.system(size: 16))
@@ -4649,7 +5027,7 @@ struct SettingsView: View {
                                 VStack(alignment: .leading, spacing: 8) {
                                     Text("Family Ticket Price")
                                         .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.modernTextSecondary)
+                                        .foregroundColor(.green)
                                     
                                     Text("Default price automatically populated when 'Family' is selected as the ticket sale type")
                                         .font(.system(size: 12))
@@ -4675,7 +5053,7 @@ struct SettingsView: View {
                                                     settingsManager.familyTicketPrice = price
                                                 }
                                             }
-                                            .onChange(of: tempFamilyTicketPrice) { _, newValue in
+                                            .onChange(of: tempFamilyTicketPrice) { newValue in
                                                 // Only allow numeric input
                                                 let filtered = newValue.filter { "0123456789".contains($0) }
                                                 if filtered != newValue {
