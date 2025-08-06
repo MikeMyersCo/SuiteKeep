@@ -2194,8 +2194,8 @@ struct AllConcertsView: View {
                         VStack(spacing: 24) {
                             // Header with space for navigation buttons
                             VStack(spacing: 20) {
-                                // Spacer for the overlay buttons (44 + padding)
-                                Color.clear.frame(height: 70)
+                                // Header spacing
+                                Spacer().frame(height: 20)
                                 
                                 // Header Card
                                 VStack(spacing: 8) {
@@ -2207,14 +2207,49 @@ struct AllConcertsView: View {
                                         .font(.system(size: 16, weight: .medium))
                                         .foregroundColor(.modernTextSecondary)
                                     
-                                    // View mode indicator
-                                    HStack {
-                                        Image(systemName: isCalendarView ? "calendar" : "list.bullet")
-                                        Text(isCalendarView ? "Calendar View" : "List View")
+                                    // View selector buttons
+                                    HStack(spacing: 16) {
+                                        Button(action: {
+                                            withAnimation(.easeInOut(duration: 0.3)) {
+                                                isCalendarView = false
+                                            }
+                                        }) {
+                                            HStack(spacing: 6) {
+                                                Image(systemName: isCalendarView ? "list.bullet" : "list.bullet.circle.fill")
+                                                    .font(.system(size: 18))
+                                                Text("List")
+                                                    .font(.system(size: 14, weight: .medium))
+                                            }
+                                            .foregroundColor(isCalendarView ? .modernAccent.opacity(0.6) : .modernAccent)
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 10)
+                                                    .fill(isCalendarView ? Color.clear : Color.modernAccent.opacity(0.1))
+                                            )
+                                        }
+                                        
+                                        Button(action: {
+                                            withAnimation(.easeInOut(duration: 0.3)) {
+                                                isCalendarView = true
+                                            }
+                                        }) {
+                                            HStack(spacing: 6) {
+                                                Image(systemName: isCalendarView ? "calendar.circle.fill" : "calendar")
+                                                    .font(.system(size: 18))
+                                                Text("Calendar")
+                                                    .font(.system(size: 14, weight: .medium))
+                                            }
+                                            .foregroundColor(isCalendarView ? .modernAccent : .modernAccent.opacity(0.6))
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 8)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 10)
+                                                    .fill(isCalendarView ? Color.modernAccent.opacity(0.1) : Color.clear)
+                                            )
+                                        }
                                     }
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.modernAccent)
-                                    .padding(.top, 4)
+                                    .padding(.top, 12)
                                 }
                                 .padding(.vertical, 20)
                                 .padding(.horizontal, 24)
@@ -2264,30 +2299,6 @@ struct AllConcertsView: View {
                     }
                     
                     Spacer()
-                    
-                    // View mode toggle
-                    HStack(spacing: 8) {
-                        Button(action: {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                isCalendarView = false
-                            }
-                        }) {
-                            Image(systemName: isCalendarView ? "list.bullet" : "list.bullet.circle.fill")
-                                .font(.system(size: 20))
-                                .foregroundColor(isCalendarView ? .modernAccent.opacity(0.6) : .modernAccent)
-                        }
-                        
-                        Button(action: {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                isCalendarView = true
-                            }
-                        }) {
-                            Image(systemName: isCalendarView ? "calendar.circle.fill" : "calendar")
-                                .font(.system(size: 20))
-                                .foregroundColor(isCalendarView ? .modernAccent : .modernAccent.opacity(0.6))
-                        }
-                    }
-                    .padding(.horizontal, 8)
                     
                     Button(action: {
                         showingAddConcert = true
