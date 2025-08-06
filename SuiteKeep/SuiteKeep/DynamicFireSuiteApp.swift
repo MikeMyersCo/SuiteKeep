@@ -4954,7 +4954,7 @@ class ReportGenerator {
     
     private func generateDetailedSeatData(concerts: [Concert]) -> String {
         var csv = "=== DETAILED SEAT DATA ===\n"
-        csv += "Concert,Date,Seat Number,Status,Price,Cost,Source,Date Sold,Date Paid,Profit\n"
+        csv += "Concert,Date,Seat Number,Status,Price,Cost,Source,Family Member,Date Sold,Date Paid,Profit\n"
         
         let sortedConcerts = concerts.sorted { $0.date < $1.date }
         
@@ -4963,10 +4963,11 @@ class ReportGenerator {
                 let seatNumber = index + 1
                 let profit = (seat.price ?? 0.0) - (seat.cost ?? 0.0)
                 let source = seat.source?.rawValue ?? ""
+                let familyMember = seat.source == .family && seat.familyPersonName != nil ? seat.familyPersonName! : ""
                 let dateSold = seat.dateSold.map { DateFormatter.reportDate.string(from: $0) } ?? ""
                 let datePaid = seat.datePaid.map { DateFormatter.reportDate.string(from: $0) } ?? ""
                 
-                csv += "\"\(concert.artist)\",\(DateFormatter.reportDate.string(from: concert.date)),\(seatNumber),\(seat.status.rawValue.capitalized),\(seat.price.map(formatCurrency) ?? ""),\(formatCurrency(seat.cost ?? 0.0)),\(source),\(dateSold),\(datePaid),\(formatCurrency(profit))\n"
+                csv += "\"\(concert.artist)\",\(DateFormatter.reportDate.string(from: concert.date)),\(seatNumber),\(seat.status.rawValue.capitalized),\(seat.price.map(formatCurrency) ?? ""),\(formatCurrency(seat.cost ?? 0.0)),\(source),\"\(familyMember)\",\(dateSold),\(datePaid),\(formatCurrency(profit))\n"
             }
             
             // Add parking ticket data if available
@@ -4975,7 +4976,7 @@ class ReportGenerator {
                 let dateSold = parking.dateSold.map { DateFormatter.reportDate.string(from: $0) } ?? ""
                 let datePaid = parking.datePaid.map { DateFormatter.reportDate.string(from: $0) } ?? ""
                 
-                csv += "\"\(concert.artist)\",\(DateFormatter.reportDate.string(from: concert.date)),Parking,\(parking.status.rawValue.capitalized),\(parking.price.map(formatCurrency) ?? ""),\(formatCurrency(parking.cost ?? 0.0)),,\(dateSold),\(datePaid),\(formatCurrency(profit))\n"
+                csv += "\"\(concert.artist)\",\(DateFormatter.reportDate.string(from: concert.date)),Parking,\(parking.status.rawValue.capitalized),\(parking.price.map(formatCurrency) ?? ""),\(formatCurrency(parking.cost ?? 0.0)),,,\(dateSold),\(datePaid),\(formatCurrency(profit))\n"
             }
         }
         
