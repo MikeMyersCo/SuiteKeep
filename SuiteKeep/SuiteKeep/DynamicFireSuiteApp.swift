@@ -116,7 +116,7 @@ extension Color {
     static let cardBlue = LinearGradient(colors: [Color(red: 0.1, green: 0.4, blue: 0.9), Color(red: 0.2, green: 0.6, blue: 1.0)], startPoint: .topLeading, endPoint: .bottomTrailing)
     static let cardTeal = LinearGradient(colors: [Color(red: 0.0, green: 0.7, blue: 0.7), Color(red: 0.1, green: 0.8, blue: 0.8)], startPoint: .topLeading, endPoint: .bottomTrailing)
     static let cardOrange = LinearGradient(colors: [Color(red: 1.0, green: 0.4, blue: 0.1), Color(red: 1.0, green: 0.6, blue: 0.2)], startPoint: .topLeading, endPoint: .bottomTrailing)
-    static let cardPink = LinearGradient(colors: [Color(red: 0.9, green: 0.1, blue: 0.5), Color(red: 1.0, green: 0.3, blue: 0.6)], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let cardPink = LinearGradient(colors: [Color(red: 0.4, green: 0.35, blue: 0.45), Color(red: 0.5, green: 0.45, blue: 0.55)], startPoint: .topLeading, endPoint: .bottomTrailing)
     static let cardGreen = LinearGradient(colors: [Color(red: 0.1, green: 0.7, blue: 0.3), Color(red: 0.2, green: 0.8, blue: 0.4)], startPoint: .topLeading, endPoint: .bottomTrailing)
     static let cardIndigo = LinearGradient(colors: [Color(red: 0.2, green: 0.3, blue: 0.8), Color(red: 0.3, green: 0.4, blue: 0.9)], startPoint: .topLeading, endPoint: .bottomTrailing)
     
@@ -1182,6 +1182,7 @@ struct RecentActivityFeed: View {
                             subtitle: activity.2,
                             time: activity.3,
                             gradient: activity.4,
+                            index: index,
                             onTap: { onConcertTap(activity.5) }
                         )
                         .opacity(animateRows ? 1.0 : 0.0)
@@ -1223,6 +1224,7 @@ struct EnhancedActivityRow: View {
     let subtitle: String
     let time: String
     let gradient: LinearGradient
+    let index: Int
     let onTap: () -> Void
     
     @State private var isPressed = false
@@ -1268,7 +1270,11 @@ struct EnhancedActivityRow: View {
         .padding(18)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(LinearGradient(colors: [.white.opacity(0.1), .white.opacity(0.05)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .fill(
+                    index % 2 == 0 
+                    ? LinearGradient(colors: [Color(red: 0.1, green: 0.2, blue: 0.4).opacity(0.3), Color(red: 0.15, green: 0.25, blue: 0.5).opacity(0.2)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    : LinearGradient(colors: [Color(red: 0.9, green: 0.8, blue: 0.3).opacity(0.2), Color(red: 1.0, green: 0.85, blue: 0.4).opacity(0.15)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                )
                 .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
         )
         .scaleEffect(isPressed ? 0.98 : 1.0)
@@ -1499,7 +1505,7 @@ enum SeatStatus: String, Codable, CaseIterable {
     
     var displayText: String {
         switch self {
-        case .available: return ""
+        case .available: return "Avail"
         case .reserved: return "RESERVED"
         case .sold: return "SOLD"
         }
@@ -2653,6 +2659,18 @@ struct ConcertDetailView: View {
                                                 Text("\(concert.ticketsReserved) reserved")
                                                     .font(.system(size: 14, weight: .medium))
                                                     .foregroundColor(.cyan)
+                                            }
+                                        }
+                                        
+                                        let availableSeats = 8 - concert.ticketsSold - concert.ticketsReserved
+                                        if availableSeats > 0 {
+                                            HStack {
+                                                Circle()
+                                                    .fill(Color.green)
+                                                    .frame(width: 8, height: 8)
+                                                Text("\(availableSeats) available")
+                                                    .font(.system(size: 14, weight: .medium))
+                                                    .foregroundColor(.green)
                                             }
                                         }
                                     }
