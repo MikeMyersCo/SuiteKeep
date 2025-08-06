@@ -248,7 +248,7 @@ struct SplashScreenView: View {
                 
                 VStack(spacing: 16) {
                     // Main title
-                    Text("Fire Suite")
+                    Text("SuiteKeep")
                         .font(.system(size: 48, weight: .bold, design: .rounded))
                         .foregroundStyle(
                             LinearGradient(
@@ -263,7 +263,7 @@ struct SplashScreenView: View {
                         .opacity(titleOpacity)
                         .shadow(color: .fireOrange.opacity(0.5), radius: 10)
                     
-                    Text("Management System")
+                    Text("Concert Management")
                         .font(.system(size: 24, weight: .medium, design: .rounded))
                         .foregroundColor(.white.opacity(0.9))
                         .opacity(subtitleOpacity)
@@ -316,40 +316,103 @@ struct SplashScreenView: View {
     }
 }
 
-// Fire particle effect
+// Fire particle effect that transforms into music notes
 struct FireParticle: View {
     @State private var offset = CGSize(width: CGFloat.random(in: -200...200), height: 600)
+    @State private var transformProgress: Double = 0.0
+    @State private var rotation: Double = 0.0
+    @State private var scale: Double = 1.0
     let delay: Double
+    private let animationDuration = Double.random(in: 8...15)
+    
+    // Random music note symbols
+    private let musicNotes = ["♪", "♫", "♬", "𝄞", "𝅘𝅥", "𝅘𝅥𝅮"]
+    private let selectedNote: String
+    
+    init(delay: Double) {
+        self.delay = delay
+        self.selectedNote = musicNotes.randomElement() ?? "♪"
+    }
     
     var body: some View {
-        Circle()
-            .fill(
-                RadialGradient(
-                    colors: [
-                        Color.fireOrange,
-                        Color.fireOrange.opacity(0.5),
-                        Color.clear
-                    ],
-                    center: .center,
-                    startRadius: 0,
-                    endRadius: 20
-                )
-            )
-            .frame(width: CGFloat.random(in: 4...12), height: CGFloat.random(in: 4...12))
-            .offset(offset)
-            .blur(radius: 1)
-            .onAppear {
-                withAnimation(
-                    .linear(duration: Double.random(in: 8...15))
-                    .repeatForever(autoreverses: false)
-                    .delay(delay)
-                ) {
-                    offset = CGSize(
-                        width: CGFloat.random(in: -200...200),
-                        height: -700
+        ZStack {
+            // Ember (visible when transformProgress < 0.6)
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color.fireOrange,
+                            Color.fireOrange.opacity(0.5),
+                            Color.clear
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 20
                     )
-                }
+                )
+                .frame(width: CGFloat.random(in: 4...12), height: CGFloat.random(in: 4...12))
+                .opacity(transformProgress < 0.6 ? 1.0 - (transformProgress / 0.6) : 0.0)
+                .blur(radius: 1)
+            
+            // Music note (visible when transformProgress > 0.4)
+            Text(selectedNote)
+                .font(.system(size: CGFloat.random(in: 16...24)))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [
+                            Color.white,
+                            Color.blue.opacity(0.8),
+                            Color.cyan.opacity(0.6)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .opacity(transformProgress > 0.4 ? (transformProgress - 0.4) / 0.6 : 0.0)
+                .scaleEffect(scale)
+                .rotationEffect(.degrees(rotation))
+                .shadow(color: .blue.opacity(0.3), radius: 3)
+        }
+        .offset(offset)
+        .onAppear {
+            // Main upward movement animation
+            withAnimation(
+                .linear(duration: animationDuration)
+                .repeatForever(autoreverses: false)
+                .delay(delay)
+            ) {
+                offset = CGSize(
+                    width: CGFloat.random(in: -200...200),
+                    height: -700
+                )
             }
+            
+            // Transformation animation (ember to music note)
+            withAnimation(
+                .easeInOut(duration: animationDuration * 0.8)
+                .delay(delay + animationDuration * 0.2)
+            ) {
+                transformProgress = 1.0
+            }
+            
+            // Gentle rotation animation for music notes
+            withAnimation(
+                .linear(duration: animationDuration * 0.5)
+                .repeatForever(autoreverses: true)
+                .delay(delay + animationDuration * 0.5)
+            ) {
+                rotation = Double.random(in: -15...15)
+            }
+            
+            // Gentle scale pulsing for music notes
+            withAnimation(
+                .easeInOut(duration: 2.0)
+                .repeatForever(autoreverses: true)
+                .delay(delay + animationDuration * 0.6)
+            ) {
+                scale = Double.random(in: 0.8...1.2)
+            }
+        }
     }
 }
 
