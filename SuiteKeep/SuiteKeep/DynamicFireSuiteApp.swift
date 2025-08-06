@@ -316,110 +316,82 @@ struct SplashScreenView: View {
     }
 }
 
-// Fire particle effect that transforms into music notes
+// Colorful floating music notes
 struct FireParticle: View {
     @State private var offset: CGSize
-    @State private var showMusicNote = false
     @State private var rotation: Double = 0.0
     @State private var scale: Double = 1.0
     
     let delay: Double
     private let animationDuration: Double
     private let selectedNote: String
-    private let emberSize: CGFloat
     private let noteSize: CGFloat
+    private let noteColor: Color
     private let endPosition: CGSize
     
     init(delay: Double) {
         self.delay = delay
-        self.animationDuration = Double.random(in: 6...10) // Shorter for better visibility
-        self.selectedNote = ["♪", "♫", "♬", "♩", "♭", "♯"].randomElement() ?? "♪"
-        self.emberSize = CGFloat.random(in: 8...14)
-        self.noteSize = CGFloat.random(in: 20...32)
+        self.animationDuration = Double.random(in: 8...15)
+        self.selectedNote = "♪"
+        self.noteSize = CGFloat.random(in: 32...48)
         
-        let startX = CGFloat.random(in: -150...150)
-        let endX = CGFloat.random(in: -150...150)
+        // Ember colors only
+        self.noteColor = .fireOrange
+        
+        let startX = CGFloat.random(in: -200...200)
+        let endX = CGFloat.random(in: -200...200)
         self._offset = State(initialValue: CGSize(width: startX, height: 600))
-        self.endPosition = CGSize(width: endX, height: -800)
+        self.endPosition = CGSize(width: endX, height: -700)
     }
     
     var body: some View {
-        ZStack {
-            // Ember phase
-            if !showMusicNote {
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                Color.fireOrange,
-                                Color.fireOrange.opacity(0.6),
-                                Color.clear
-                            ],
-                            center: .center,
-                            startRadius: 0,
-                            endRadius: 15
-                        )
-                    )
-                    .frame(width: emberSize, height: emberSize)
-                    .blur(radius: 1)
-                    .opacity(showMusicNote ? 0 : 1)
-            }
-            
-            // Music note phase
-            if showMusicNote {
-                Text(selectedNote)
-                    .font(.system(size: noteSize, weight: .bold))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [
-                                Color.white,
-                                Color.blue,
-                                Color.cyan
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .scaleEffect(scale)
-                    .rotationEffect(.degrees(rotation))
-                    .shadow(color: .cyan.opacity(0.6), radius: 6)
-                    .shadow(color: .blue.opacity(0.4), radius: 12)
-                    .opacity(showMusicNote ? 1 : 0)
-            }
-        }
-        .offset(offset)
-        .onAppear {
-            // Start the upward movement immediately
-            withAnimation(
-                .linear(duration: animationDuration)
-                .repeatForever(autoreverses: false)
-                .delay(delay)
-            ) {
-                offset = endPosition
-            }
-            
-            // Transform to music note partway through the journey
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay + animationDuration * 0.3) {
-                withAnimation(.easeInOut(duration: 0.5)) {
-                    showMusicNote = true
+        Text(selectedNote)
+            .font(.system(size: noteSize, weight: .bold))
+            .foregroundStyle(
+                RadialGradient(
+                    colors: [
+                        Color.fireYellow,
+                        Color.fireOrange,
+                        Color.fireRed.opacity(0.8)
+                    ],
+                    center: .center,
+                    startRadius: 5,
+                    endRadius: 25
+                )
+            )
+            .scaleEffect(scale)
+            .rotationEffect(.degrees(rotation))
+            .shadow(color: noteColor.opacity(0.6), radius: 4)
+            .shadow(color: noteColor.opacity(0.3), radius: 8)
+            .offset(offset)
+            .onAppear {
+                // Start the upward movement
+                withAnimation(
+                    .linear(duration: animationDuration)
+                    .repeatForever(autoreverses: false)
+                    .delay(delay)
+                ) {
+                    offset = endPosition
                 }
                 
-                // Start music note animations
+                // Gentle rotation animation
                 withAnimation(
-                    .linear(duration: 2.0)
+                    .linear(duration: Double.random(in: 3...6))
                     .repeatForever(autoreverses: true)
+                    .delay(delay)
                 ) {
-                    rotation = Double.random(in: -15...15)
+                    rotation = Double.random(in: -20...20)
                 }
                 
+                // Gentle scale pulsing
                 withAnimation(
-                    .easeInOut(duration: 1.5)
+                    .easeInOut(duration: Double.random(in: 1.5...3.0))
                     .repeatForever(autoreverses: true)
+                    .delay(delay)
                 ) {
-                    scale = Double.random(in: 0.8...1.2)
+                    scale = Double.random(in: 0.8...1.3)
                 }
             }
-        }
     }
 }
 
