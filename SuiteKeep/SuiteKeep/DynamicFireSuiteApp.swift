@@ -7,6 +7,7 @@
 
 import SwiftUI
 import AVFoundation
+import CloudKit
 
 
 // MARK: - Settings Manager
@@ -35,13 +36,6 @@ class SettingsManager: ObservableObject {
         }
     }
     
-    @Published var isDarkMode: Bool {
-        didSet {
-            UserDefaults.standard.set(isDarkMode, forKey: "isDarkMode")
-            NSUbiquitousKeyValueStore.default.set(isDarkMode, forKey: "isDarkMode")
-            NSUbiquitousKeyValueStore.default.synchronize()
-        }
-    }
     
     private var iCloudObserver: NSObjectProtocol?
     
@@ -51,7 +45,6 @@ class SettingsManager: ObservableObject {
         self.venueLocation = UserDefaults.standard.string(forKey: "venueLocation") ?? "Ford Amphitheater"
         let storedFamilyPrice = UserDefaults.standard.double(forKey: "familyTicketPrice")
         self.familyTicketPrice = storedFamilyPrice == 0 ? 50.0 : storedFamilyPrice // Default to $50
-        self.isDarkMode = UserDefaults.standard.object(forKey: "isDarkMode") as? Bool ?? true
         
         // Check iCloud for newer values
         if let iCloudSuiteName = NSUbiquitousKeyValueStore.default.string(forKey: "suiteName") {
@@ -63,9 +56,6 @@ class SettingsManager: ObservableObject {
         let iCloudFamilyPrice = NSUbiquitousKeyValueStore.default.double(forKey: "familyTicketPrice")
         if iCloudFamilyPrice > 0 {
             self.familyTicketPrice = iCloudFamilyPrice
-        }
-        if let iCloudDarkMode = NSUbiquitousKeyValueStore.default.object(forKey: "isDarkMode") as? Bool {
-            self.isDarkMode = iCloudDarkMode
         }
         
         // Listen for iCloud changes
@@ -97,9 +87,6 @@ class SettingsManager: ObservableObject {
         if iCloudFamilyPrice > 0 {
             self.familyTicketPrice = iCloudFamilyPrice
         }
-        if let iCloudDarkMode = NSUbiquitousKeyValueStore.default.object(forKey: "isDarkMode") as? Bool {
-            self.isDarkMode = iCloudDarkMode
-        }
     }
 }
 
@@ -125,15 +112,42 @@ extension Color {
     static let cardGreen = LinearGradient(colors: [Color(red: 0.1, green: 0.7, blue: 0.3), Color(red: 0.2, green: 0.8, blue: 0.4)], startPoint: .topLeading, endPoint: .bottomTrailing)
     static let cardIndigo = LinearGradient(colors: [Color(red: 0.2, green: 0.3, blue: 0.8), Color(red: 0.3, green: 0.4, blue: 0.9)], startPoint: .topLeading, endPoint: .bottomTrailing)
     
-    // Modern colors with engagement focus
-    static let modernBackground = Color(red: 0.96, green: 0.97, blue: 1.0)
-    static let modernSecondary = Color(red: 0.25, green: 0.25, blue: 0.3)
+    // Modern colors with engagement focus - now adaptive to light/dark mode
+    static let modernBackground = Color(.systemBackground)
+    static let modernSecondary = Color(.secondarySystemBackground)
     static let modernAccent = Color(red: 0.0, green: 0.7, blue: 1.0) // Bright blue
-    static let modernText = Color.white
-    static let modernTextSecondary = Color(white: 0.85)
+    static let modernText = Color(.label)
+    static let modernTextSecondary = Color(.secondaryLabel)
     static let modernSuccess = Color(red: 0.1, green: 0.8, blue: 0.4) // Brighter green
     static let modernWarning = Color(red: 1.0, green: 0.6, blue: 0.0) // Warmer orange
     static let modernDanger = Color(red: 1.0, green: 0.3, blue: 0.4) // Softer red
+    
+    // Dynamic background gradient function that adapts to light/dark mode
+    static func dynamicGradient(for colorScheme: ColorScheme) -> LinearGradient {
+        if colorScheme == .dark {
+            return LinearGradient(
+                colors: [
+                    Color(red: 0.1, green: 0.1, blue: 0.15),
+                    Color(red: 0.15, green: 0.12, blue: 0.2),
+                    Color(red: 0.12, green: 0.1, blue: 0.18),
+                    Color(red: 0.08, green: 0.08, blue: 0.16)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        } else {
+            return LinearGradient(
+                colors: [
+                    Color(red: 0.95, green: 0.95, blue: 0.97),
+                    Color(red: 0.98, green: 0.98, blue: 1.0),
+                    Color(red: 0.96, green: 0.97, blue: 0.99),
+                    Color(red: 0.94, green: 0.95, blue: 0.98)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
     
     // Seat status colors
     static let seatAvailable = Color(red: 0.2, green: 0.85, blue: 0.5) // Vibrant green
@@ -399,8 +413,9 @@ struct DynamicFireSuiteApp: View {
     @State private var selectedTab = 0
     @State private var animateFlames = true
     @State private var isShowingSplash = true
-    @StateObject private var concertManager = ConcertDataManager()
+    @StateObject private var sharedSuiteManager = SharedSuiteManager()
     @StateObject private var settingsManager = SettingsManager()
+    @StateObject private var concertManager = ConcertDataManager()
     
     var body: some View {
         ZStack {
@@ -409,7 +424,7 @@ struct DynamicFireSuiteApp: View {
                     .transition(.opacity)
             } else {
         TabView(selection: $selectedTab) {
-            DynamicDashboard(concerts: $concertManager.concerts, concertManager: concertManager, settingsManager: settingsManager)
+            DynamicDashboard(concerts: $concertManager.concerts, concertManager: concertManager, settingsManager: settingsManager, sharedSuiteManager: sharedSuiteManager)
                 .tabItem {
                     Image(systemName: selectedTab == 0 ? "house.fill" : "house")
                     Text("Dashboard")
@@ -430,7 +445,7 @@ struct DynamicFireSuiteApp: View {
                 }
                 .tag(2)
             
-            SettingsView(settingsManager: settingsManager, concertManager: concertManager, selectedTab: $selectedTab)
+            SettingsView(settingsManager: settingsManager, concertManager: concertManager, sharedSuiteManager: sharedSuiteManager, selectedTab: $selectedTab)
                 .tabItem {
                     Image(systemName: selectedTab == 3 ? "gearshape.fill" : "gearshape")
                     Text("Settings")
@@ -440,6 +455,8 @@ struct DynamicFireSuiteApp: View {
         .accentColor(.modernAccent)
         .onAppear {
             startFlameAnimation()
+            // Connect SharedSuiteManager to ConcertDataManager
+            concertManager.sharedSuiteManager = sharedSuiteManager
         }
             }
         }
@@ -454,27 +471,20 @@ struct DynamicFireSuiteApp: View {
 
 // MARK: - Dynamic Dashboard
 struct DynamicDashboard: View {
+    @Environment(\.colorScheme) var colorScheme
     @State private var pulseFirepit = false
     @State private var rotateValue: Double = 0
     @State private var selectedConcert: Concert?
     @Binding var concerts: [Concert]
     @ObservedObject var concertManager: ConcertDataManager
     @ObservedObject var settingsManager: SettingsManager
+    @ObservedObject var sharedSuiteManager: SharedSuiteManager
     
     var body: some View {
         NavigationView {
             ZStack {
-                // Consistent dark gradient background
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.1, green: 0.1, blue: 0.15),
-                        Color(red: 0.15, green: 0.12, blue: 0.2),
-                        Color(red: 0.12, green: 0.1, blue: 0.18),
-                        Color(red: 0.08, green: 0.08, blue: 0.16)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                // Dynamic background that adapts to light/dark mode
+                Color(.systemBackground)
                 .ignoresSafeArea()
                 
                 ScrollView {
@@ -505,6 +515,7 @@ struct DynamicDashboard: View {
                                 Text(settingsManager.venueLocation)
                                     .font(.system(size: 16, weight: .semibold))
                                     .foregroundColor(.white)
+                                
                             }
                         }
                         .frame(maxWidth: .infinity)
@@ -1388,6 +1399,7 @@ struct ActivityRow: View {
 
 // MARK: - Concert Management
 struct DynamicConcerts: View {
+    @Environment(\.colorScheme) var colorScheme
     @ObservedObject var concertManager: ConcertDataManager
     @ObservedObject var settingsManager: SettingsManager
     @State private var showingAddConcert = false
@@ -1402,17 +1414,8 @@ struct DynamicConcerts: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Consistent dark gradient background
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.1, green: 0.1, blue: 0.15),
-                        Color(red: 0.15, green: 0.12, blue: 0.2),
-                        Color(red: 0.12, green: 0.1, blue: 0.18),
-                        Color(red: 0.08, green: 0.08, blue: 0.16)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                // Dynamic background that adapts to light/dark mode
+                Color(.systemBackground)
                 .ignoresSafeArea()
                 
                 ScrollView {
@@ -1569,6 +1572,206 @@ enum TicketSource: String, Codable, CaseIterable {
     case other = "Other"
 }
 
+// MARK: - Multi-User Sharing Models
+
+enum UserRole: String, Codable, CaseIterable {
+    case owner = "owner"
+    case editor = "editor"
+    case viewer = "viewer"
+    
+    var displayName: String {
+        switch self {
+        case .owner: return "Owner"
+        case .editor: return "Editor"
+        case .viewer: return "Viewer"
+        }
+    }
+    
+    var canEdit: Bool {
+        switch self {
+        case .owner, .editor: return true
+        case .viewer: return false
+        }
+    }
+    
+    var canManageUsers: Bool {
+        return self == .owner
+    }
+}
+
+struct SharedSuiteInfo: Codable {
+    let suiteId: String
+    let suiteName: String
+    let venueLocation: String
+    let ownerId: String
+    let createdDate: Date
+    var members: [SuiteMember]
+    var lastModified: Date
+    
+    init(suiteId: String, suiteName: String, venueLocation: String, ownerId: String) {
+        self.suiteId = suiteId
+        self.suiteName = suiteName
+        self.venueLocation = venueLocation
+        self.ownerId = ownerId
+        self.createdDate = Date()
+        self.members = []
+        self.lastModified = Date()
+    }
+}
+
+struct SuiteMember: Codable, Identifiable {
+    let id: String
+    let userId: String
+    let displayName: String
+    let role: UserRole
+    let joinedDate: Date
+    var lastActive: Date
+    
+    init(userId: String, displayName: String, role: UserRole) {
+        self.id = UUID().uuidString
+        self.userId = userId
+        self.displayName = displayName
+        self.role = role
+        self.joinedDate = Date()
+        self.lastActive = Date()
+    }
+}
+
+struct SeatModification: Codable {
+    let userId: String
+    let userName: String
+    let timestamp: Date
+    let previousStatus: SeatStatus
+    let newStatus: SeatStatus
+    
+    init(userId: String, userName: String, previousStatus: SeatStatus, newStatus: SeatStatus) {
+        self.userId = userId
+        self.userName = userName
+        self.timestamp = Date()
+        self.previousStatus = previousStatus
+        self.newStatus = newStatus
+    }
+}
+
+// MARK: - CloudKit Record Types
+
+enum CloudKitRecordType {
+    static let sharedSuite = "SharedSuite"
+    static let concert = "Concert"
+    static let suiteMember = "SuiteMember"
+}
+
+// Extensions to convert models to/from CloudKit records
+extension SharedSuiteInfo {
+    func toCloudKitRecord() -> CKRecord {
+        let record = CKRecord(recordType: CloudKitRecordType.sharedSuite, recordID: CKRecord.ID(recordName: suiteId))
+        record["suiteName"] = suiteName
+        record["venueLocation"] = venueLocation
+        record["ownerId"] = ownerId
+        record["createdDate"] = createdDate
+        record["lastModified"] = lastModified
+        
+        // Store members as JSON data
+        if let membersData = try? JSONEncoder().encode(members) {
+            record["membersData"] = membersData
+        }
+        
+        return record
+    }
+    
+    static func fromCloudKitRecord(_ record: CKRecord) -> SharedSuiteInfo? {
+        guard let suiteName = record["suiteName"] as? String,
+              let venueLocation = record["venueLocation"] as? String,
+              let ownerId = record["ownerId"] as? String,
+              let createdDate = record["createdDate"] as? Date,
+              let lastModified = record["lastModified"] as? Date else {
+            return nil
+        }
+        
+        var suiteInfo = SharedSuiteInfo(
+            suiteId: record.recordID.recordName,
+            suiteName: suiteName,
+            venueLocation: venueLocation,
+            ownerId: ownerId
+        )
+        suiteInfo.lastModified = lastModified
+        
+        // Decode members from JSON data
+        if let membersData = record["membersData"] as? Data,
+           let members = try? JSONDecoder().decode([SuiteMember].self, from: membersData) {
+            suiteInfo.members = members
+        }
+        
+        return suiteInfo
+    }
+}
+
+extension Concert {
+    func toCloudKitRecord(suiteRecord: CKRecord? = nil) -> CKRecord {
+        let recordID = CKRecord.ID(recordName: "concert_\(id)")
+        let record = CKRecord(recordType: CloudKitRecordType.concert, recordID: recordID)
+        
+        record["concertId"] = Int64(id)
+        record["artist"] = artist
+        record["date"] = date
+        record["createdBy"] = createdBy
+        record["lastModifiedBy"] = lastModifiedBy
+        record["lastModifiedDate"] = lastModifiedDate
+        record["sharedVersion"] = Int64(sharedVersion ?? 1)
+        
+        // Store seats and parking ticket as JSON data
+        if let seatsData = try? JSONEncoder().encode(seats) {
+            record["seatsData"] = seatsData
+        }
+        
+        if let parkingTicket = parkingTicket,
+           let parkingData = try? JSONEncoder().encode(parkingTicket) {
+            record["parkingTicketData"] = parkingData
+        }
+        
+        // Reference to suite if provided
+        if let suiteRecord = suiteRecord {
+            record["suite"] = CKRecord.Reference(record: suiteRecord, action: .deleteSelf)
+        }
+        
+        return record
+    }
+    
+    static func fromCloudKitRecord(_ record: CKRecord) -> Concert? {
+        guard let concertId = record["concertId"] as? Int64,
+              let artist = record["artist"] as? String,
+              let date = record["date"] as? Date else {
+            return nil
+        }
+        
+        var seats: [Seat] = []
+        if let seatsData = record["seatsData"] as? Data,
+           let decodedSeats = try? JSONDecoder().decode([Seat].self, from: seatsData) {
+            seats = decodedSeats
+        } else {
+            seats = Array(repeating: Seat(), count: 8)
+        }
+        
+        var parkingTicket: ParkingTicket?
+        if let parkingData = record["parkingTicketData"] as? Data {
+            parkingTicket = try? JSONDecoder().decode(ParkingTicket.self, from: parkingData)
+        }
+        
+        return Concert(
+            id: Int(concertId),
+            artist: artist,
+            date: date,
+            seats: seats,
+            parkingTicket: parkingTicket,
+            suiteId: record["suite"] != nil ? "shared" : nil,
+            createdBy: record["createdBy"] as? String,
+            lastModifiedBy: record["lastModifiedBy"] as? String,
+            lastModifiedDate: record["lastModifiedDate"] as? Date,
+            sharedVersion: record["sharedVersion"] as? Int
+        )
+    }
+}
+
 // MARK: - Seat Model
 struct Seat: Codable {
     var status: SeatStatus
@@ -1580,7 +1783,13 @@ struct Seat: Codable {
     var datePaid: Date? // Date when payment was received
     var familyPersonName: String? // For family seats - person's name
     
-    init(status: SeatStatus = .available, price: Double? = nil, note: String? = nil, source: TicketSource? = nil, cost: Double? = nil, dateSold: Date? = nil, datePaid: Date? = nil, familyPersonName: String? = nil) {
+    // Multi-user sharing properties
+    var lastModifiedBy: String? // User ID who last modified this seat
+    var lastModifiedDate: Date? // When this seat was last modified
+    var modificationHistory: [SeatModification]? // History of changes for conflict resolution
+    var conflictResolutionVersion: Int? // Version number for conflict resolution
+    
+    init(status: SeatStatus = .available, price: Double? = nil, note: String? = nil, source: TicketSource? = nil, cost: Double? = nil, dateSold: Date? = nil, datePaid: Date? = nil, familyPersonName: String? = nil, lastModifiedBy: String? = nil, lastModifiedDate: Date? = nil, modificationHistory: [SeatModification]? = nil, conflictResolutionVersion: Int? = nil) {
         self.status = status
         self.price = price
         self.note = note
@@ -1589,6 +1798,29 @@ struct Seat: Codable {
         self.dateSold = dateSold
         self.datePaid = datePaid
         self.familyPersonName = familyPersonName
+        self.lastModifiedBy = lastModifiedBy
+        self.lastModifiedDate = lastModifiedDate
+        self.modificationHistory = modificationHistory ?? []
+        self.conflictResolutionVersion = conflictResolutionVersion ?? 1
+    }
+    
+    // Helper method to record a modification
+    mutating func recordModification(by userId: String, userName: String, previousStatus: SeatStatus) {
+        let modification = SeatModification(
+            userId: userId,
+            userName: userName,
+            previousStatus: previousStatus,
+            newStatus: self.status
+        )
+        
+        if modificationHistory == nil {
+            modificationHistory = []
+        }
+        modificationHistory?.append(modification)
+        
+        lastModifiedBy = userId
+        lastModifiedDate = Date()
+        conflictResolutionVersion = (conflictResolutionVersion ?? 1) + 1
     }
 }
 
@@ -1620,6 +1852,13 @@ struct Concert: Identifiable, Codable {
     var date: Date
     var seats: [Seat] // Array of 8 seats
     var parkingTicket: ParkingTicket? // One parking ticket per show
+    
+    // Multi-user sharing properties
+    var suiteId: String? // ID of the shared suite this concert belongs to
+    var createdBy: String? // User ID who created this concert
+    var lastModifiedBy: String? // User ID who last modified this concert
+    var lastModifiedDate: Date? // When this concert was last modified
+    var sharedVersion: Int? // Version number for conflict resolution
     
     var ticketsSold: Int {
         seats.filter { $0.status == .sold }.count
@@ -1666,12 +1905,24 @@ struct Concert: Identifiable, Codable {
         seats.map { $0.status == .sold }
     }
     
-    init(id: Int, artist: String, date: Date, seats: [Seat] = Array(repeating: Seat(), count: 8), parkingTicket: ParkingTicket? = ParkingTicket()) {
+    init(id: Int, artist: String, date: Date, seats: [Seat] = Array(repeating: Seat(), count: 8), parkingTicket: ParkingTicket? = ParkingTicket(), suiteId: String? = nil, createdBy: String? = nil, lastModifiedBy: String? = nil, lastModifiedDate: Date? = nil, sharedVersion: Int? = nil) {
         self.id = id
         self.artist = artist
         self.date = date
         self.seats = seats
         self.parkingTicket = parkingTicket
+        self.suiteId = suiteId
+        self.createdBy = createdBy
+        self.lastModifiedBy = lastModifiedBy
+        self.lastModifiedDate = lastModifiedDate
+        self.sharedVersion = sharedVersion ?? 1
+    }
+    
+    // Helper method to record a modification
+    mutating func recordModification(by userId: String) {
+        lastModifiedBy = userId
+        lastModifiedDate = Date()
+        sharedVersion = (sharedVersion ?? 1) + 1
     }
 }
 
@@ -1682,23 +1933,356 @@ struct BackupData: Codable {
     let version: String
 }
 
-// MARK: - Concert Data Manager
-class ConcertDataManager: ObservableObject {
-    @Published var concerts: [Concert] = []
+// MARK: - Shared Suite Manager
+class SharedSuiteManager: ObservableObject {
+    @Published var currentSuiteInfo: SharedSuiteInfo?
+    @Published var userRole: UserRole = .owner
+    @Published var currentUserId: String = ""
+    @Published var currentUserName: String = ""
+    @Published var isSharedSuite: Bool = false
+    @Published var cloudKitStatus: String = "Ready"
+    @Published var isCloudKitAvailable: Bool = false
+    @Published var isSyncing: Bool = false
     
     private let userDefaults = UserDefaults.standard
     private let iCloudStore = NSUbiquitousKeyValueStore.default
+    private let cloudKitContainer = CKContainer.default()
+    private var cloudKitDatabase: CKDatabase { cloudKitContainer.privateCloudDatabase }
+    
+    private let suiteInfoKey = "SharedSuiteInfo"
+    private let userIdKey = "CurrentUserId"
+    private let userNameKey = "CurrentUserName"
+    
+    var isInSharedSuite: Bool {
+        return currentSuiteInfo != nil
+    }
+    
+    init() {
+        loadUserInfo()
+        loadSuiteInfo()
+        checkCloudKitAvailability()
+    }
+    
+    private func loadUserInfo() {
+        // Generate or load user ID
+        if let existingUserId = userDefaults.string(forKey: userIdKey) {
+            currentUserId = existingUserId
+        } else {
+            currentUserId = UUID().uuidString
+            userDefaults.set(currentUserId, forKey: userIdKey)
+        }
+        
+        // Load user name (default to device name)
+        if let existingUserName = userDefaults.string(forKey: userNameKey) {
+            currentUserName = existingUserName
+        } else {
+            #if canImport(UIKit)
+            currentUserName = UIDevice.current.name
+            #else
+            currentUserName = "Unknown User"
+            #endif
+            userDefaults.set(currentUserName, forKey: userNameKey)
+        }
+    }
+    
+    private func loadSuiteInfo() {
+        if let data = userDefaults.data(forKey: suiteInfoKey),
+           let suiteInfo = try? JSONDecoder().decode(SharedSuiteInfo.self, from: data) {
+            currentSuiteInfo = suiteInfo
+            isSharedSuite = true
+            
+            // Determine user role
+            if suiteInfo.ownerId == currentUserId {
+                userRole = .owner
+            } else if let member = suiteInfo.members.first(where: { $0.userId == currentUserId }) {
+                userRole = member.role
+            } else {
+                userRole = .viewer
+            }
+        }
+    }
+    
+    private func saveSuiteInfo() {
+        guard let suiteInfo = currentSuiteInfo else { return }
+        
+        do {
+            let data = try JSONEncoder().encode(suiteInfo)
+            userDefaults.set(data, forKey: suiteInfoKey)
+            
+            // Also save to iCloud for sharing
+            iCloudStore.set(data, forKey: suiteInfoKey)
+            iCloudStore.synchronize()
+        } catch {
+            print("Failed to save suite info: \(error)")
+        }
+    }
+    
+    // MARK: - Suite Management
+    
+    func createSharedSuite(suiteName: String, venueLocation: String) {
+        let suiteId = UUID().uuidString
+        let suiteInfo = SharedSuiteInfo(
+            suiteId: suiteId,
+            suiteName: suiteName,
+            venueLocation: venueLocation,
+            ownerId: currentUserId
+        )
+        
+        currentSuiteInfo = suiteInfo
+        userRole = .owner
+        isSharedSuite = true
+        saveSuiteInfo()
+    }
+    
+    func joinSharedSuite(_ suiteInfo: SharedSuiteInfo, as role: UserRole = .viewer) {
+        // Add current user as a member
+        let member = SuiteMember(
+            userId: currentUserId,
+            displayName: currentUserName,
+            role: role
+        )
+        
+        var updatedSuiteInfo = suiteInfo
+        updatedSuiteInfo.members.append(member)
+        updatedSuiteInfo.lastModified = Date()
+        
+        currentSuiteInfo = updatedSuiteInfo
+        userRole = role
+        isSharedSuite = true
+        saveSuiteInfo()
+    }
+    
+    func leaveSharedSuite() {
+        currentSuiteInfo = nil
+        userRole = .owner
+        isSharedSuite = false
+        userDefaults.removeObject(forKey: suiteInfoKey)
+        iCloudStore.removeObject(forKey: suiteInfoKey)
+    }
+    
+    func updateUserRole(for userId: String, to newRole: UserRole) {
+        guard var suiteInfo = currentSuiteInfo,
+              userRole.canManageUsers,
+              let memberIndex = suiteInfo.members.firstIndex(where: { $0.userId == userId }) else {
+            return
+        }
+        
+        var updatedMember = suiteInfo.members[memberIndex]
+        updatedMember = SuiteMember(
+            userId: updatedMember.userId,
+            displayName: updatedMember.displayName,
+            role: newRole
+        )
+        
+        suiteInfo.members[memberIndex] = updatedMember
+        suiteInfo.lastModified = Date()
+        currentSuiteInfo = suiteInfo
+        saveSuiteInfo()
+    }
+    
+    func removeMember(userId: String) {
+        guard var suiteInfo = currentSuiteInfo,
+              userRole.canManageUsers else {
+            return
+        }
+        
+        suiteInfo.members.removeAll { $0.userId == userId }
+        suiteInfo.lastModified = Date()
+        currentSuiteInfo = suiteInfo
+        saveSuiteInfo()
+    }
+    
+    // MARK: - Permission Checking
+    
+    func canModifySeats() -> Bool {
+        return !isSharedSuite || userRole.canEdit
+    }
+    
+    func canManageMembers() -> Bool {
+        return !isSharedSuite || userRole.canManageUsers
+    }
+    
+    func canDeleteConcerts() -> Bool {
+        return !isSharedSuite || userRole.canEdit
+    }
+    
+    // MARK: - CloudKit Integration
+    
+    private func checkCloudKitAvailability() {
+        cloudKitContainer.accountStatus { [weak self] status, error in
+            DispatchQueue.main.async {
+                switch status {
+                case .available:
+                    self?.isCloudKitAvailable = true
+                    self?.cloudKitStatus = "Ready"
+                case .noAccount:
+                    self?.isCloudKitAvailable = false
+                    self?.cloudKitStatus = "No iCloud account"
+                case .couldNotDetermine:
+                    self?.isCloudKitAvailable = false
+                    self?.cloudKitStatus = "Could not determine status"
+                case .restricted:
+                    self?.isCloudKitAvailable = false
+                    self?.cloudKitStatus = "Restricted"
+                @unknown default:
+                    self?.isCloudKitAvailable = false
+                    self?.cloudKitStatus = "Unknown status"
+                }
+            }
+        }
+    }
+    
+    func createSharedSuiteInCloud(suiteName: String, venueLocation: String) async throws -> String {
+        guard isCloudKitAvailable else {
+            throw CloudKitError.notAvailable
+        }
+        
+        cloudKitStatus = "Creating shared suite..."
+        
+        let suiteInfo = SharedSuiteInfo(
+            suiteId: UUID().uuidString,
+            suiteName: suiteName,
+            venueLocation: venueLocation,
+            ownerId: currentUserId
+        )
+        
+        let record = suiteInfo.toCloudKitRecord()
+        
+        do {
+            let savedRecord = try await cloudKitDatabase.save(record)
+            
+            // Update local state
+            await MainActor.run {
+                currentSuiteInfo = SharedSuiteInfo.fromCloudKitRecord(savedRecord)
+                isSharedSuite = true
+                userRole = .owner
+                cloudKitStatus = "Suite created successfully"
+                saveSuiteInfo()
+            }
+            
+            return savedRecord.recordID.recordName
+        } catch {
+            await MainActor.run {
+                cloudKitStatus = "Failed to create suite: \(error.localizedDescription)"
+            }
+            throw error
+        }
+    }
+    
+    func joinSharedSuiteFromCloud(suiteId: String) async throws {
+        guard isCloudKitAvailable else {
+            throw CloudKitError.notAvailable
+        }
+        
+        cloudKitStatus = "Joining shared suite..."
+        
+        let recordID = CKRecord.ID(recordName: suiteId)
+        
+        do {
+            let record = try await cloudKitDatabase.record(for: recordID)
+            
+            if var suiteInfo = SharedSuiteInfo.fromCloudKitRecord(record) {
+                // Add current user as member
+                let member = SuiteMember(
+                    userId: currentUserId,
+                    displayName: currentUserName,
+                    role: .viewer // Default role for new members
+                )
+                suiteInfo.members.append(member)
+                suiteInfo.lastModified = Date()
+                
+                // Save updated suite info to CloudKit
+                let updatedRecord = suiteInfo.toCloudKitRecord()
+                _ = try await cloudKitDatabase.save(updatedRecord)
+                
+                // Update local state
+                await MainActor.run {
+                    currentSuiteInfo = suiteInfo
+                    isSharedSuite = true
+                    userRole = .viewer
+                    cloudKitStatus = "Joined suite successfully"
+                    saveSuiteInfo()
+                }
+            }
+        } catch {
+            await MainActor.run {
+                cloudKitStatus = "Failed to join suite: \(error.localizedDescription)"
+            }
+            throw error
+        }
+    }
+    
+    func generateSharingLink() -> String? {
+        guard let suiteInfo = currentSuiteInfo else { return nil }
+        return "suitekeeper://join/\(suiteInfo.suiteId)"
+    }
+    
+    func syncWithCloudKit() async {
+        guard isCloudKitAvailable, let suiteInfo = currentSuiteInfo else { return }
+        
+        cloudKitStatus = "Syncing with CloudKit..."
+        
+        do {
+            let recordID = CKRecord.ID(recordName: suiteInfo.suiteId)
+            let record = try await cloudKitDatabase.record(for: recordID)
+            
+            if let updatedSuiteInfo = SharedSuiteInfo.fromCloudKitRecord(record) {
+                await MainActor.run {
+                    currentSuiteInfo = updatedSuiteInfo
+                    cloudKitStatus = "Sync complete"
+                    saveSuiteInfo()
+                }
+            }
+        } catch {
+            await MainActor.run {
+                cloudKitStatus = "Sync failed: \(error.localizedDescription)"
+            }
+        }
+    }
+}
+
+enum CloudKitError: Error, LocalizedError {
+    case notAvailable
+    case recordNotFound
+    case permissionDenied
+    
+    var errorDescription: String? {
+        switch self {
+        case .notAvailable:
+            return "CloudKit is not available. Please ensure you're signed into iCloud."
+        case .recordNotFound:
+            return "The requested suite could not be found."
+        case .permissionDenied:
+            return "You don't have permission to access this suite."
+        }
+    }
+}
+
+// MARK: - Concert Data Manager
+class ConcertDataManager: ObservableObject {
+    @Published var concerts: [Concert] = []
+    @Published var syncStatus: String = "Ready"
+    @Published var lastSyncDate: Date?
+    
+    private let userDefaults = UserDefaults.standard
+    private let iCloudStore = NSUbiquitousKeyValueStore.default
+    private let cloudKitContainer = CKContainer.default()
+    private var cloudKitDatabase: CKDatabase { cloudKitContainer.privateCloudDatabase }
     private let concertsKey = "SavedConcerts"
     private var iCloudObserver: NSObjectProtocol?
     
-    init() {
+    // Multi-user sharing support
+    weak var sharedSuiteManager: SharedSuiteManager?
+    
+    init(sharedSuiteManager: SharedSuiteManager? = nil) {
+        self.sharedSuiteManager = sharedSuiteManager
         setupiCloudSync()
         migrateDataIfNeeded()
         loadConcerts()
     }
     
     private func migrateDataIfNeeded() {
-        let currentVersion = 1 // Increment this when data structure changes
+        let currentVersion = 2 // Increment this when data structure changes (Phase 1 = version 2)
         let versionKey = "dataVersion"
         let lastVersion = userDefaults.integer(forKey: versionKey)
         
@@ -1710,11 +2294,56 @@ class ConcertDataManager: ObservableObject {
             case 0:
                 // Initial version, no migration needed
                 break
+            case 1:
+                // Migration to Phase 1 multi-user structure
+                migrateToMultiUserData()
+                break
             default:
                 break
             }
             
             userDefaults.set(currentVersion, forKey: versionKey)
+        }
+    }
+    
+    private func migrateToMultiUserData() {
+        print("Migrating existing data to support multi-user sharing")
+        
+        // Load existing concerts and update them with default sharing metadata
+        do {
+            if let data = userDefaults.data(forKey: concertsKey) {
+                var concerts = try JSONDecoder().decode([Concert].self, from: data)
+                
+                // Update each concert with default sharing properties
+                for i in 0..<concerts.count {
+                    // Only update if sharing properties are nil (backward compatibility)
+                    if concerts[i].suiteId == nil {
+                        concerts[i].suiteId = nil // Will remain nil for non-shared suites
+                        concerts[i].createdBy = sharedSuiteManager?.currentUserId
+                        concerts[i].lastModifiedBy = sharedSuiteManager?.currentUserId
+                        concerts[i].lastModifiedDate = Date()
+                        concerts[i].sharedVersion = 1
+                    }
+                    
+                    // Update seats with sharing metadata
+                    for j in 0..<concerts[i].seats.count {
+                        if concerts[i].seats[j].lastModifiedBy == nil {
+                            concerts[i].seats[j].lastModifiedBy = sharedSuiteManager?.currentUserId
+                            concerts[i].seats[j].lastModifiedDate = Date()
+                            concerts[i].seats[j].modificationHistory = []
+                            concerts[i].seats[j].conflictResolutionVersion = 1
+                        }
+                    }
+                }
+                
+                // Save the updated data
+                let encodedData = try JSONEncoder().encode(concerts)
+                userDefaults.set(encodedData, forKey: concertsKey)
+                
+                print("Successfully migrated \(concerts.count) concerts to multi-user format")
+            }
+        } catch {
+            print("Failed to migrate data to multi-user format: \(error)")
         }
     }
     
@@ -1782,6 +2411,9 @@ class ConcertDataManager: ObservableObject {
             // Save to iCloud
             saveToiCloud(data: encoded)
             
+            // Sync to CloudKit if in shared suite
+            syncToCloudKitAfterSave()
+            
             print("Successfully saved \(concerts.count) concerts")
         } catch {
             print("Failed to save concerts: \(error)")
@@ -1822,19 +2454,80 @@ class ConcertDataManager: ObservableObject {
     }
     
     func addConcert(_ concert: Concert) {
-        concerts.append(concert)
+        var updatedConcert = concert
+        
+        // Add sharing metadata if we're in a shared suite
+        if let sharedSuiteManager = sharedSuiteManager,
+           let suiteInfo = sharedSuiteManager.currentSuiteInfo {
+            updatedConcert.suiteId = suiteInfo.suiteId
+            updatedConcert.createdBy = sharedSuiteManager.currentUserId
+            updatedConcert.lastModifiedBy = sharedSuiteManager.currentUserId
+            updatedConcert.lastModifiedDate = Date()
+            updatedConcert.sharedVersion = 1
+        } else if let sharedSuiteManager = sharedSuiteManager {
+            // Non-shared suite, just track the user
+            updatedConcert.createdBy = sharedSuiteManager.currentUserId
+            updatedConcert.lastModifiedBy = sharedSuiteManager.currentUserId
+            updatedConcert.lastModifiedDate = Date()
+        }
+        
+        concerts.append(updatedConcert)
         saveConcerts()
     }
     
     func updateConcert(_ concert: Concert) {
         if let index = concerts.firstIndex(where: { $0.id == concert.id }) {
-            concerts[index] = concert
+            var updatedConcert = concert
+            
+            // Update sharing metadata
+            if let sharedSuiteManager = sharedSuiteManager {
+                updatedConcert.recordModification(by: sharedSuiteManager.currentUserId)
+            }
+            
+            concerts[index] = updatedConcert
             saveConcerts()
         }
     }
     
     func deleteConcert(_ concert: Concert) {
+        // Check permissions before deleting
+        guard sharedSuiteManager?.canDeleteConcerts() ?? true else {
+            print("User does not have permission to delete concerts")
+            return
+        }
+        
         concerts.removeAll { $0.id == concert.id }
+        saveConcerts()
+    }
+    
+    // Helper method to update a seat with sharing metadata
+    func updateSeat(concertId: Int, seatIndex: Int, updatedSeat: Seat) {
+        guard let concertIndex = concerts.firstIndex(where: { $0.id == concertId }),
+              seatIndex >= 0 && seatIndex < concerts[concertIndex].seats.count else {
+            return
+        }
+        
+        // Check permissions
+        guard sharedSuiteManager?.canModifySeats() ?? true else {
+            print("User does not have permission to modify seats")
+            return
+        }
+        
+        let previousStatus = concerts[concertIndex].seats[seatIndex].status
+        var newSeat = updatedSeat
+        
+        // Add sharing metadata
+        if let sharedSuiteManager = sharedSuiteManager {
+            newSeat.recordModification(
+                by: sharedSuiteManager.currentUserId,
+                userName: sharedSuiteManager.currentUserName,
+                previousStatus: previousStatus
+            )
+        }
+        
+        concerts[concertIndex].seats[seatIndex] = newSeat
+        concerts[concertIndex].recordModification(by: sharedSuiteManager?.currentUserId ?? "")
+        
         saveConcerts()
     }
     
@@ -1910,6 +2603,128 @@ class ConcertDataManager: ObservableObject {
         let backupDateKey = "\(concertsKey)_backup_date"
         let lastBackupDate = userDefaults.object(forKey: backupDateKey) as? Date
         return (concerts.count, lastBackupDate)
+    }
+    
+    // MARK: - CloudKit Sync
+    
+    func syncWithCloudKit() async {
+        guard let sharedSuiteManager = sharedSuiteManager,
+              sharedSuiteManager.isSharedSuite,
+              sharedSuiteManager.isCloudKitAvailable else {
+            return
+        }
+        
+        await MainActor.run {
+            syncStatus = "Syncing with CloudKit..."
+            sharedSuiteManager.isSyncing = true
+        }
+        
+        do {
+            // Fetch all concerts from CloudKit for this shared suite
+            let predicate = NSPredicate(format: "suite != nil")
+            let query = CKQuery(recordType: CloudKitRecordType.concert, predicate: predicate)
+            
+            let records = try await cloudKitDatabase.records(matching: query)
+            var cloudKitConcerts: [Concert] = []
+            
+            for (_, record) in records.matchResults {
+                switch record {
+                case .success(let record):
+                    if let concert = Concert.fromCloudKitRecord(record) {
+                        cloudKitConcerts.append(concert)
+                    }
+                case .failure(let error):
+                    print("Failed to process record: \(error)")
+                }
+            }
+            
+            // Merge with local concerts
+            let mergedConcerts = mergeCloudKitConcerts(cloudKitConcerts)
+            
+            await MainActor.run {
+                concerts = mergedConcerts.sorted { $0.date > $1.date }
+                syncStatus = "Sync complete"
+                lastSyncDate = Date()
+                sharedSuiteManager.isSyncing = false
+                saveToLocalStorage()
+            }
+            
+        } catch {
+            await MainActor.run {
+                syncStatus = "Sync failed: \(error.localizedDescription)"
+                sharedSuiteManager.isSyncing = false
+            }
+        }
+    }
+    
+    private func mergeCloudKitConcerts(_ cloudKitConcerts: [Concert]) -> [Concert] {
+        var mergedConcerts = concerts
+        
+        for cloudConcert in cloudKitConcerts {
+            if let existingIndex = mergedConcerts.firstIndex(where: { $0.id == cloudConcert.id }) {
+                // Use the concert with the latest modification date
+                let existingConcert = mergedConcerts[existingIndex]
+                
+                let cloudModified = cloudConcert.lastModifiedDate ?? Date.distantPast
+                let localModified = existingConcert.lastModifiedDate ?? Date.distantPast
+                
+                if cloudModified > localModified {
+                    mergedConcerts[existingIndex] = cloudConcert
+                }
+            } else {
+                // New concert from CloudKit
+                mergedConcerts.append(cloudConcert)
+            }
+        }
+        
+        return mergedConcerts
+    }
+    
+    func syncConcertToCloudKit(_ concert: Concert) async {
+        guard let sharedSuiteManager = sharedSuiteManager,
+              sharedSuiteManager.isSharedSuite,
+              sharedSuiteManager.isCloudKitAvailable,
+              let suiteInfo = sharedSuiteManager.currentSuiteInfo else {
+            return
+        }
+        
+        do {
+            // Create suite record reference
+            let suiteRecord = suiteInfo.toCloudKitRecord()
+            let concertRecord = concert.toCloudKitRecord(suiteRecord: suiteRecord)
+            
+            _ = try await cloudKitDatabase.save(concertRecord)
+            
+            await MainActor.run {
+                syncStatus = "Concert synced"
+                lastSyncDate = Date()
+            }
+        } catch {
+            await MainActor.run {
+                syncStatus = "Sync failed: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    // Update the existing saveConcerts method to include CloudKit sync
+    private func syncToCloudKitAfterSave() {
+        // If we're in a shared suite, sync to CloudKit
+        if let sharedSuiteManager = sharedSuiteManager,
+           sharedSuiteManager.isSharedSuite {
+            Task {
+                await MainActor.run {
+                    sharedSuiteManager.isSyncing = true
+                }
+                
+                for concert in concerts {
+                    await syncConcertToCloudKit(concert)
+                }
+                
+                await MainActor.run {
+                    sharedSuiteManager.isSyncing = false
+                }
+            }
+        }
     }
 }
 
@@ -2021,17 +2836,8 @@ struct AddConcertView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Consistent dark gradient background
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.1, green: 0.1, blue: 0.15),
-                        Color(red: 0.15, green: 0.12, blue: 0.2),
-                        Color(red: 0.12, green: 0.1, blue: 0.18),
-                        Color(red: 0.08, green: 0.08, blue: 0.16)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                // Dynamic background that adapts to light/dark mode
+                Color(.systemBackground)
                 .ignoresSafeArea()
                 
                 VStack(spacing: 24) {
@@ -2146,17 +2952,8 @@ struct AllConcertsView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Consistent dark gradient background
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.1, green: 0.1, blue: 0.15),
-                        Color(red: 0.15, green: 0.12, blue: 0.2),
-                        Color(red: 0.12, green: 0.1, blue: 0.18),
-                        Color(red: 0.08, green: 0.08, blue: 0.16)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                // Dynamic background that adapts to light/dark mode
+                Color(.systemBackground)
                 .ignoresSafeArea()
                 
                 if concertManager.concerts.isEmpty {
@@ -2567,6 +3364,7 @@ struct CalendarDayView: View {
 
 // MARK: - Concert Detail View
 struct ConcertDetailView: View {
+    @Environment(\.colorScheme) var colorScheme
     @State var concert: Concert
     @ObservedObject var concertManager: ConcertDataManager
     @ObservedObject var settingsManager: SettingsManager
@@ -2587,17 +3385,8 @@ struct ConcertDetailView: View {
     
     var body: some View {
         ZStack {
-            // Consistent dark gradient background
-            LinearGradient(
-                colors: [
-                    Color(red: 0.1, green: 0.1, blue: 0.15),
-                    Color(red: 0.15, green: 0.12, blue: 0.2),
-                    Color(red: 0.12, green: 0.1, blue: 0.18),
-                    Color(red: 0.08, green: 0.08, blue: 0.16)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            // Dynamic background that adapts to light/dark mode
+            Color(.systemBackground)
             .ignoresSafeArea()
             
             ScrollView {
@@ -3859,17 +4648,8 @@ struct SeatOptionsView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Consistent dark gradient background
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.1, green: 0.1, blue: 0.15),
-                        Color(red: 0.15, green: 0.12, blue: 0.2),
-                        Color(red: 0.12, green: 0.1, blue: 0.18),
-                        Color(red: 0.08, green: 0.08, blue: 0.16)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                // Dynamic background that adapts to light/dark mode
+                Color(.systemBackground)
                 .ignoresSafeArea()
                 
                 ScrollView {
@@ -4229,6 +5009,7 @@ struct SeatOptionsView: View {
                     }
                     .padding(.horizontal)
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
             .navigationBarHidden(true)
             .onAppear {
@@ -4296,17 +5077,8 @@ struct ParkingTicketOptionsView: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Consistent dark gradient background
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.1, green: 0.1, blue: 0.15),
-                        Color(red: 0.15, green: 0.12, blue: 0.2),
-                        Color(red: 0.12, green: 0.1, blue: 0.18),
-                        Color(red: 0.08, green: 0.08, blue: 0.16)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                // Dynamic background that adapts to light/dark mode
+                Color(.systemBackground)
                 .ignoresSafeArea()
                 
                 ScrollView {
@@ -4489,6 +5261,7 @@ struct ParkingTicketOptionsView: View {
                     }
                     .padding(20)
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -4560,17 +5333,8 @@ struct DynamicAnalytics: View {
     var body: some View {
         NavigationView {
             ZStack {
-                // Consistent dark gradient background
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.1, green: 0.1, blue: 0.15),
-                        Color(red: 0.15, green: 0.12, blue: 0.2),
-                        Color(red: 0.12, green: 0.1, blue: 0.18),
-                        Color(red: 0.08, green: 0.08, blue: 0.16)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                // Dynamic background that adapts to light/dark mode
+                Color(.systemBackground)
                 .ignoresSafeArea()
                 
                 ScrollView {
@@ -4942,25 +5706,21 @@ struct DynamicPortfolio: View {
 struct SettingsView: View {
     @ObservedObject var settingsManager: SettingsManager
     @ObservedObject var concertManager: ConcertDataManager
+    @ObservedObject var sharedSuiteManager: SharedSuiteManager
     @Binding var selectedTab: Int
     @State private var tempSuiteName: String = ""
     @State private var tempVenueLocation: String = ""
     @State private var tempFamilyTicketPrice: String = ""
+    @State private var showingSharingSheet = false
+    @State private var showingJoinSheet = false
+    @State private var showingMemberManagement = false
+    @State private var joinSuiteId: String = ""
     
     var body: some View {
         NavigationView {
             ZStack {
-                // Consistent dark gradient background
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.1, green: 0.1, blue: 0.15),
-                        Color(red: 0.15, green: 0.12, blue: 0.2),
-                        Color(red: 0.12, green: 0.1, blue: 0.18),
-                        Color(red: 0.08, green: 0.08, blue: 0.16)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                // Dynamic background that adapts to light/dark mode
+                Color(.systemBackground)
                 .ignoresSafeArea()
                 
                 ScrollView {
@@ -4998,6 +5758,10 @@ struct SettingsView: View {
                                         .background(
                                             RoundedRectangle(cornerRadius: 12)
                                                 .fill(Color.modernSecondary)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 12)
+                                                        .stroke(Color.cyan.opacity(0.3), lineWidth: 1)
+                                                )
                                         )
                                         .onSubmit {
                                             settingsManager.suiteName = tempSuiteName
@@ -5017,6 +5781,10 @@ struct SettingsView: View {
                                         .background(
                                             RoundedRectangle(cornerRadius: 12)
                                                 .fill(Color.modernSecondary)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 12)
+                                                        .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                                                )
                                         )
                                         .onSubmit {
                                             settingsManager.venueLocation = tempVenueLocation
@@ -5047,6 +5815,10 @@ struct SettingsView: View {
                                             .background(
                                                 RoundedRectangle(cornerRadius: 12)
                                                     .fill(Color.modernSecondary)
+                                                    .overlay(
+                                                        RoundedRectangle(cornerRadius: 12)
+                                                            .stroke(Color.green.opacity(0.3), lineWidth: 1)
+                                                    )
                                             )
                                             .onSubmit {
                                                 if let price = Double(tempFamilyTicketPrice), price > 0 {
@@ -5063,32 +5835,6 @@ struct SettingsView: View {
                                     }
                                 }
                                 
-                                // Theme Toggle
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Appearance")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.modernTextSecondary)
-                                    
-                                    HStack {
-                                        Image(systemName: settingsManager.isDarkMode ? "moon.fill" : "sun.max.fill")
-                                            .foregroundColor(settingsManager.isDarkMode ? .purple : .orange)
-                                            .font(.system(size: 16))
-                                        
-                                        Text(settingsManager.isDarkMode ? "Dark Mode" : "Light Mode")
-                                            .font(.system(size: 16))
-                                            .foregroundColor(.modernText)
-                                        
-                                        Spacer()
-                                        
-                                        Toggle("", isOn: $settingsManager.isDarkMode)
-                                            .labelsHidden()
-                                    }
-                                    .padding(16)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .fill(Color.modernSecondary)
-                                    )
-                                }
                             }
                             .padding(20)
                             .background(
@@ -5117,6 +5863,70 @@ struct SettingsView: View {
                                         .fill(Color.modernAccent)
                                 )
                         }
+                        
+                        // Suite Sharing Section - Coming Soon
+                        VStack(alignment: .leading, spacing: 20) {
+                            HStack {
+                                Text("Suite Sharing")
+                                    .font(.system(size: 20, weight: .semibold))
+                                    .foregroundColor(.modernText)
+                                
+                                Spacer()
+                                
+                                // Coming Soon Badge
+                                Text("Coming Soon")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .fill(Color.orange)
+                                    )
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Multi-investor collaboration")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.modernText)
+                                
+                                Text("Share your fire suite with co-investors, business partners, or investment group members. Coordinate ticket sales, track revenue distribution, and manage seat allocations across your investor network in real-time.")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.modernTextSecondary)
+                                    .multilineTextAlignment(.leading)
+                                
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(.green)
+                                        Text("Real-time revenue tracking across all devices")
+                                            .font(.system(size: 14))
+                                            .foregroundColor(.modernTextSecondary)
+                                    }
+                                    
+                                    HStack {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(.green)
+                                        Text("Investor permissions (Owner, Partner, Viewer)")
+                                            .font(.system(size: 14))
+                                            .foregroundColor(.modernTextSecondary)
+                                    }
+                                    
+                                    HStack {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(.green)
+                                        Text("Secure investment data with iCloud protection")
+                                            .font(.system(size: 14))
+                                            .foregroundColor(.modernTextSecondary)
+                                    }
+                                }
+                            }
+                        }
+                        .padding(20)
+                        .background(
+                            RoundedRectangle(cornerRadius: 20)
+                                .fill(Color.modernSecondary)
+                        )
                         
                         // Data Storage Section
                         VStack(alignment: .leading, spacing: 16) {
@@ -5227,6 +6037,467 @@ struct SettingsView: View {
                 tempSuiteName = settingsManager.suiteName
                 tempVenueLocation = settingsManager.venueLocation
                 tempFamilyTicketPrice = String(format: "%.0f", settingsManager.familyTicketPrice)
+            }
+            .sheet(isPresented: $showingSharingSheet) {
+                CreateSharedSuiteView(sharedSuiteManager: sharedSuiteManager, settingsManager: settingsManager)
+            }
+            .sheet(isPresented: $showingJoinSheet) {
+                JoinSharedSuiteView(sharedSuiteManager: sharedSuiteManager)
+            }
+            .sheet(isPresented: $showingMemberManagement) {
+                MemberManagementView(sharedSuiteManager: sharedSuiteManager)
+            }
+        }
+    }
+}
+
+// MARK: - Sharing Views
+
+struct CreateSharedSuiteView: View {
+    @ObservedObject var sharedSuiteManager: SharedSuiteManager
+    @ObservedObject var settingsManager: SettingsManager
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var suiteName: String = ""
+    @State private var venueLocation: String = ""
+    @State private var isCreating = false
+    @State private var errorMessage: String = ""
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                // Background gradient
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.1, green: 0.1, blue: 0.15),
+                        Color(red: 0.15, green: 0.12, blue: 0.2)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+                
+                VStack(spacing: 24) {
+                    // Header
+                    VStack(spacing: 12) {
+                        Image(systemName: "person.3.sequence")
+                            .font(.system(size: 48))
+                            .foregroundColor(.blue)
+                        
+                        Text("Create Shared Suite")
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundColor(.modernText)
+                        
+                        Text("Share your suite with family, friends, or colleagues for collaborative booking management.")
+                            .font(.system(size: 16))
+                            .foregroundColor(.modernTextSecondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(.top, 20)
+                    
+                    // Form
+                    VStack(spacing: 20) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Suite Name")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.modernText)
+                            
+                            TextField("Enter suite name", text: $suiteName)
+                                .font(.system(size: 16))
+                                .foregroundColor(.modernText)
+                                .padding(16)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(Color.modernSecondary)
+                                )
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Venue Location")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.modernText)
+                            
+                            TextField("Enter venue location", text: $venueLocation)
+                                .font(.system(size: 16))
+                                .foregroundColor(.modernText)
+                                .padding(16)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .fill(Color.modernSecondary)
+                                )
+                        }
+                    }
+                    .padding(20)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color.modernSecondary.opacity(0.3))
+                    )
+                    
+                    if !errorMessage.isEmpty {
+                        Text(errorMessage)
+                            .font(.system(size: 14))
+                            .foregroundColor(.red)
+                            .padding()
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color.red.opacity(0.1))
+                            )
+                    }
+                    
+                    Spacer()
+                    
+                    // Create Button
+                    Button(action: {
+                        createSharedSuite()
+                    }) {
+                        HStack {
+                            if isCreating {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                    .tint(.white)
+                            }
+                            
+                            Text(isCreating ? "Creating..." : "Create Shared Suite")
+                                .font(.system(size: 16, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(canCreate ? Color.blue : Color.gray)
+                        )
+                    }
+                    .disabled(!canCreate || isCreating)
+                }
+                .padding(.horizontal)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(.modernTextSecondary)
+                }
+            }
+        }
+        .onAppear {
+            suiteName = settingsManager.suiteName
+            venueLocation = settingsManager.venueLocation
+        }
+    }
+    
+    private var canCreate: Bool {
+        !suiteName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !venueLocation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        sharedSuiteManager.isCloudKitAvailable
+    }
+    
+    private func createSharedSuite() {
+        isCreating = true
+        errorMessage = ""
+        
+        Task {
+            do {
+                _ = try await sharedSuiteManager.createSharedSuiteInCloud(
+                    suiteName: suiteName.trimmingCharacters(in: .whitespacesAndNewlines),
+                    venueLocation: venueLocation.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+                
+                await MainActor.run {
+                    dismiss()
+                }
+            } catch {
+                await MainActor.run {
+                    isCreating = false
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+}
+
+struct JoinSharedSuiteView: View {
+    @ObservedObject var sharedSuiteManager: SharedSuiteManager
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var suiteId: String = ""
+    @State private var isJoining = false
+    @State private var errorMessage: String = ""
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                // Background gradient
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.1, green: 0.1, blue: 0.15),
+                        Color(red: 0.15, green: 0.12, blue: 0.2)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+                
+                VStack(spacing: 24) {
+                    // Header
+                    VStack(spacing: 12) {
+                        Image(systemName: "person.badge.plus")
+                            .font(.system(size: 48))
+                            .foregroundColor(.green)
+                        
+                        Text("Join Shared Suite")
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundColor(.modernText)
+                        
+                        Text("Enter the suite ID or paste a sharing link to join an existing shared suite.")
+                            .font(.system(size: 16))
+                            .foregroundColor(.modernTextSecondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(.top, 20)
+                    
+                    // Form
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Suite ID or Sharing Link")
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.modernText)
+                        
+                        TextField("Enter suite ID or paste link", text: $suiteId)
+                            .font(.system(size: 16))
+                            .foregroundColor(.modernText)
+                            .padding(16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color.modernSecondary)
+                            )
+                            .onChange(of: suiteId) { newValue in
+                                // Extract suite ID from sharing link if needed
+                                if newValue.hasPrefix("suitekeeper://join/") {
+                                    suiteId = String(newValue.dropFirst("suitekeeper://join/".count))
+                                }
+                            }
+                    }
+                    .padding(20)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16)
+                            .fill(Color.modernSecondary.opacity(0.3))
+                    )
+                    
+                    if !errorMessage.isEmpty {
+                        Text(errorMessage)
+                            .font(.system(size: 14))
+                            .foregroundColor(.red)
+                            .padding()
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color.red.opacity(0.1))
+                            )
+                    }
+                    
+                    Spacer()
+                    
+                    // Join Button
+                    Button(action: {
+                        joinSharedSuite()
+                    }) {
+                        HStack {
+                            if isJoining {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                    .tint(.white)
+                            }
+                            
+                            Text(isJoining ? "Joining..." : "Join Suite")
+                                .font(.system(size: 16, weight: .semibold))
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(canJoin ? Color.green : Color.gray)
+                        )
+                    }
+                    .disabled(!canJoin || isJoining)
+                }
+                .padding(.horizontal)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                    .foregroundColor(.modernTextSecondary)
+                }
+            }
+        }
+    }
+    
+    private var canJoin: Bool {
+        !suiteId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        sharedSuiteManager.isCloudKitAvailable
+    }
+    
+    private func joinSharedSuite() {
+        isJoining = true
+        errorMessage = ""
+        
+        Task {
+            do {
+                try await sharedSuiteManager.joinSharedSuiteFromCloud(
+                    suiteId: suiteId.trimmingCharacters(in: .whitespacesAndNewlines)
+                )
+                
+                await MainActor.run {
+                    dismiss()
+                }
+            } catch {
+                await MainActor.run {
+                    isJoining = false
+                    errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+}
+
+struct MemberManagementView: View {
+    @ObservedObject var sharedSuiteManager: SharedSuiteManager
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                // Background gradient
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.1, green: 0.1, blue: 0.15),
+                        Color(red: 0.15, green: 0.12, blue: 0.2)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
+                
+                VStack(spacing: 20) {
+                    if let suiteInfo = sharedSuiteManager.currentSuiteInfo {
+                        // Header
+                        VStack(spacing: 8) {
+                            Text("Manage Members")
+                                .font(.system(size: 28, weight: .bold))
+                                .foregroundColor(.modernText)
+                            
+                            Text(suiteInfo.suiteName)
+                                .font(.system(size: 18, weight: .medium))
+                                .foregroundColor(.modernTextSecondary)
+                        }
+                        .padding(.top, 20)
+                        
+                        // Members List
+                        ScrollView {
+                            LazyVStack(spacing: 12) {
+                                // Owner (current user if they're the owner)
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("Owner")
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundColor(.modernText)
+                                    
+                                    HStack {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(suiteInfo.ownerId == sharedSuiteManager.currentUserId ? "You" : "Owner")
+                                                .font(.system(size: 16, weight: .medium))
+                                                .foregroundColor(.modernText)
+                                            
+                                            Text("Full access")
+                                                .font(.system(size: 14))
+                                                .foregroundColor(.modernTextSecondary)
+                                        }
+                                        
+                                        Spacer()
+                                        
+                                        Image(systemName: "crown.fill")
+                                            .foregroundColor(.yellow)
+                                    }
+                                    .padding(16)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(Color.modernSecondary)
+                                    )
+                                }
+                                
+                                // Members
+                                if !suiteInfo.members.isEmpty {
+                                    VStack(alignment: .leading, spacing: 12) {
+                                        Text("Members")
+                                            .font(.system(size: 16, weight: .semibold))
+                                            .foregroundColor(.modernText)
+                                        
+                                        ForEach(suiteInfo.members) { member in
+                                            HStack {
+                                                VStack(alignment: .leading, spacing: 4) {
+                                                    Text(member.displayName)
+                                                        .font(.system(size: 16, weight: .medium))
+                                                        .foregroundColor(.modernText)
+                                                    
+                                                    Text(member.role.displayName)
+                                                        .font(.system(size: 14))
+                                                        .foregroundColor(.modernTextSecondary)
+                                                }
+                                                
+                                                Spacer()
+                                                
+                                                if sharedSuiteManager.canManageMembers() {
+                                                    Menu {
+                                                        Button("Change to Editor") {
+                                                            sharedSuiteManager.updateUserRole(for: member.userId, to: .editor)
+                                                        }
+                                                        
+                                                        Button("Change to Viewer") {
+                                                            sharedSuiteManager.updateUserRole(for: member.userId, to: .viewer)
+                                                        }
+                                                        
+                                                        Divider()
+                                                        
+                                                        Button("Remove from Suite", role: .destructive) {
+                                                            sharedSuiteManager.removeMember(userId: member.userId)
+                                                        }
+                                                    } label: {
+                                                        Image(systemName: "ellipsis.circle")
+                                                            .foregroundColor(.modernTextSecondary)
+                                                    }
+                                                }
+                                            }
+                                            .padding(16)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .fill(Color.modernSecondary)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        Spacer()
+                    } else {
+                        Text("No suite information available")
+                            .font(.system(size: 16))
+                            .foregroundColor(.modernTextSecondary)
+                    }
+                }
+                .padding(.horizontal)
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(.modernTextSecondary)
+                }
             }
         }
     }
