@@ -36,6 +36,14 @@ class SettingsManager: ObservableObject {
         }
     }
     
+    @Published var defaultSeatCost: Double {
+        didSet {
+            UserDefaults.standard.set(defaultSeatCost, forKey: "defaultSeatCost")
+            NSUbiquitousKeyValueStore.default.set(defaultSeatCost, forKey: "defaultSeatCost")
+            NSUbiquitousKeyValueStore.default.synchronize()
+        }
+    }
+    
     
     private var iCloudObserver: NSObjectProtocol?
     
@@ -45,6 +53,11 @@ class SettingsManager: ObservableObject {
         self.venueLocation = UserDefaults.standard.string(forKey: "venueLocation") ?? "Ford Amphitheater"
         let storedFamilyPrice = UserDefaults.standard.double(forKey: "familyTicketPrice")
         self.familyTicketPrice = storedFamilyPrice == 0 ? 50.0 : storedFamilyPrice // Default to $50
+        if let storedDefaultCost = UserDefaults.standard.object(forKey: "defaultSeatCost") as? Double {
+            self.defaultSeatCost = storedDefaultCost // Use stored value (including 0)
+        } else {
+            self.defaultSeatCost = 25.0 // Default to $25 only if no value was ever set
+        }
         
         // Check iCloud for newer values
         if let iCloudSuiteName = NSUbiquitousKeyValueStore.default.string(forKey: "suiteName") {
@@ -56,6 +69,9 @@ class SettingsManager: ObservableObject {
         let iCloudFamilyPrice = NSUbiquitousKeyValueStore.default.double(forKey: "familyTicketPrice")
         if iCloudFamilyPrice > 0 {
             self.familyTicketPrice = iCloudFamilyPrice
+        }
+        if let iCloudDefaultCost = NSUbiquitousKeyValueStore.default.object(forKey: "defaultSeatCost") as? Double {
+            self.defaultSeatCost = iCloudDefaultCost // Use iCloud value (including 0)
         }
         
         // Listen for iCloud changes
@@ -183,6 +199,280 @@ class HapticManager {
         generator.prepare()
         generator.selectionChanged()
         #endif
+    }
+}
+
+// MARK: - Consistent UI Components
+
+// Standardized sheet presentation types
+enum SheetType: Identifiable {
+    case addConcert
+    case editConcert(Concert)
+    case allConcerts
+    case concertDetails(Concert)
+    case settings
+    case analytics
+    case shareSheet
+    case joinSuite
+    case memberManagement
+    
+    var id: String {
+        switch self {
+        case .addConcert: return "addConcert"
+        case .editConcert(let concert): return "editConcert-\(concert.id)"
+        case .allConcerts: return "allConcerts"
+        case .concertDetails(let concert): return "concertDetails-\(concert.id)"
+        case .settings: return "settings"
+        case .analytics: return "analytics"
+        case .shareSheet: return "shareSheet"
+        case .joinSuite: return "joinSuite"
+        case .memberManagement: return "memberManagement"
+        }
+    }
+}
+
+// Consistent card component
+struct ConsistentCard<Content: View>: View {
+    @Environment(\.colorScheme) var colorScheme
+    let content: Content
+    var padding: CGFloat = 20
+    
+    init(padding: CGFloat = 20, @ViewBuilder content: () -> Content) {
+        self.padding = padding
+        self.content = content()
+    }
+    
+    var body: some View {
+        content
+            .padding(padding)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.modernSecondary)
+                    .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+            )
+    }
+}
+
+// Consistent primary button style
+struct PrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) var isEnabled
+    
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundColor(.white)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(isEnabled ? Color.modernAccent : Color.gray.opacity(0.5))
+                    .shadow(color: .black.opacity(0.15), radius: configuration.isPressed ? 2 : 4, x: 0, y: configuration.isPressed ? 1 : 2)
+            )
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+// Consistent secondary button style
+struct SecondaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) var isEnabled
+    
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 16, weight: .medium))
+            .foregroundColor(Color.modernAccent)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.modernAccent, lineWidth: 2)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.modernSecondary.opacity(configuration.isPressed ? 0.3 : 0.1))
+                    )
+            )
+            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+    }
+}
+
+// Consistent toolbar button
+struct ToolbarButton: View {
+    let title: String
+    let systemImage: String
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.system(size: 16, weight: .medium))
+        }
+        .buttonStyle(PlainButtonStyle())
+        .foregroundColor(.modernAccent)
+    }
+}
+
+// Consistent empty state view
+struct EmptyStateView: View {
+    let title: String
+    let message: String
+    let systemImage: String
+    let actionTitle: String?
+    let action: (() -> Void)?
+    
+    init(title: String, message: String, systemImage: String, actionTitle: String? = nil, action: (() -> Void)? = nil) {
+        self.title = title
+        self.message = message
+        self.systemImage = systemImage
+        self.actionTitle = actionTitle
+        self.action = action
+    }
+    
+    var body: some View {
+        VStack(spacing: 24) {
+            Image(systemName: systemImage)
+                .font(.system(size: 64))
+                .foregroundColor(.modernAccent.opacity(0.6))
+            
+            VStack(spacing: 12) {
+                Text(title)
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundColor(.modernText)
+                
+                Text(message)
+                    .font(.system(size: 16))
+                    .foregroundColor(.modernTextSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            }
+            
+            if let actionTitle = actionTitle, let action = action {
+                Button(action: action) {
+                    Text(actionTitle)
+                }
+                .buttonStyle(PrimaryButtonStyle())
+            }
+        }
+        .padding(40)
+    }
+}
+
+// Consistent section header
+struct SectionHeader: View {
+    let title: String
+    let actionTitle: String?
+    let action: (() -> Void)?
+    
+    init(_ title: String, actionTitle: String? = nil, action: (() -> Void)? = nil) {
+        self.title = title
+        self.actionTitle = actionTitle
+        self.action = action
+    }
+    
+    var body: some View {
+        HStack {
+            Text(title)
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundColor(.modernText)
+            
+            Spacer()
+            
+            if let actionTitle = actionTitle, let action = action {
+                Button(action: action) {
+                    Text(actionTitle)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.modernAccent)
+                }
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+    }
+}
+
+// Consistent loading view
+struct LoadingView: View {
+    let message: String
+    
+    init(_ message: String = "Loading...") {
+        self.message = message
+    }
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            ProgressView()
+                .scaleEffect(1.5)
+                .progressViewStyle(CircularProgressViewStyle(tint: .modernAccent))
+            
+            Text(message)
+                .font(.system(size: 16))
+                .foregroundColor(.modernTextSecondary)
+        }
+        .padding(40)
+    }
+}
+
+// Consistent settings field component
+struct SettingsField: View {
+    let title: String
+    let subtitle: String?
+    let placeholder: String
+    @Binding var text: String
+    var keyboardType: UIKeyboardType = .default
+    var prefix: String? = nil
+    var showBorder: Bool = true
+    var actionButton: (() -> AnyView)? = nil
+    var onSubmit: () -> Void = {}
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Title
+            Text(title)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(.modernText)
+                .textCase(.uppercase)
+            
+            // Subtitle if provided
+            if let subtitle = subtitle {
+                Text(subtitle)
+                    .font(.system(size: 12))
+                    .foregroundColor(.modernTextSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            
+            // Input field with optional action button
+            HStack(spacing: 8) {
+                HStack(spacing: 12) {
+                    if let prefix = prefix {
+                        Text(prefix)
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.modernTextSecondary)
+                            .padding(.leading, 16)
+                    }
+                    
+                    TextField(placeholder, text: $text)
+                        .font(.system(size: 16))
+                        .foregroundColor(.modernText)
+                        .keyboardType(keyboardType)
+                        .padding(.vertical, 16)
+                        .padding(.horizontal, prefix != nil ? 8 : 16)
+                        .onSubmit(onSubmit)
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.modernSecondary)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(showBorder ? Color.modernAccent.opacity(0.2) : Color.clear, lineWidth: 1)
+                        )
+                )
+                
+                // Action button if provided
+                if let actionButton = actionButton {
+                    actionButton()
+                }
+            }
+        }
     }
 }
 
@@ -475,6 +765,7 @@ struct DynamicDashboard: View {
     @State private var pulseFirepit = false
     @State private var rotateValue: Double = 0
     @State private var selectedConcert: Concert?
+    @State private var activeSheet: SheetType?
     @Binding var concerts: [Concert]
     @ObservedObject var concertManager: ConcertDataManager
     @ObservedObject var settingsManager: SettingsManager
@@ -561,12 +852,23 @@ struct DynamicDashboard: View {
                 }
             }
             .navigationBarHidden(true)
-            .sheet(item: $selectedConcert) { concert in
-                ConcertDetailView(
-                    concert: concert,
-                    concertManager: concertManager,
-                    settingsManager: settingsManager
-                )
+            .sheet(item: $activeSheet) { sheetType in
+                switch sheetType {
+                case .concertDetails(let concert):
+                    ConcertDetailView(
+                        concert: concert,
+                        concertManager: concertManager,
+                        settingsManager: settingsManager
+                    )
+                default:
+                    EmptyView()
+                }
+            }
+            .onChange(of: selectedConcert) { newValue in
+                if let concert = newValue {
+                    activeSheet = .concertDetails(concert)
+                    selectedConcert = nil
+                }
             }
         }
     }
@@ -1402,8 +1704,7 @@ struct DynamicConcerts: View {
     @Environment(\.colorScheme) var colorScheme
     @ObservedObject var concertManager: ConcertDataManager
     @ObservedObject var settingsManager: SettingsManager
-    @State private var showingAddConcert = false
-    @State private var showingAllConcerts = false
+    @State private var activeSheet: SheetType?
     
     var upcomingConcerts: [Concert] {
         let twoWeeksFromNow = Calendar.current.date(byAdding: .day, value: 14, to: Date()) ?? Date()
@@ -1447,50 +1748,28 @@ struct DynamicConcerts: View {
                         // Action Buttons
                         HStack(spacing: 12) {
                             Button(action: {
-                                showingAddConcert = true
+                                activeSheet = .addConcert
                             }) {
                                 HStack {
                                     Image(systemName: "plus.circle.fill")
                                     Text("Add Concert")
-                                        .font(.system(size: 16, weight: .semibold))
                                 }
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .fill(Color.modernAccent)
-                                )
                             }
+                            .buttonStyle(PrimaryButtonStyle())
                             
                             Button(action: {
-                                showingAllConcerts = true
+                                activeSheet = .allConcerts
                             }) {
                                 HStack {
                                     Image(systemName: "list.bullet")
                                     Text("View All")
-                                        .font(.system(size: 16, weight: .semibold))
                                 }
-                                .foregroundColor(.modernAccent)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .stroke(Color.modernAccent, lineWidth: 2)
-                                )
                             }
+                            .buttonStyle(SecondaryButtonStyle())
                         }
                         
                         // Section Header
-                        HStack {
-                            Text("Next 2 Weeks")
-                                .font(.system(size: 20, weight: .semibold))
-                                .foregroundColor(.modernText)
-                            Spacer()
-                            Text("\(upcomingConcerts.count) concerts")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.modernTextSecondary)
-                        }
+                        SectionHeader("Next 2 Weeks", actionTitle: "\(upcomingConcerts.count) concerts")
                         
                         // Upcoming Concerts
                         if upcomingConcerts.isEmpty {
@@ -1528,13 +1807,17 @@ struct DynamicConcerts: View {
                 }
             }
             .navigationBarHidden(true)
-            .sheet(isPresented: $showingAddConcert) {
-                AddConcertView { newConcert in
-                    concertManager.addConcert(newConcert)
+            .sheet(item: $activeSheet) { sheetType in
+                switch sheetType {
+                case .addConcert:
+                    AddConcertView(settingsManager: settingsManager) { newConcert in
+                        concertManager.addConcert(newConcert)
+                    }
+                case .allConcerts:
+                    AllConcertsView(concertManager: concertManager, settingsManager: settingsManager)
+                default:
+                    EmptyView()
                 }
-            }
-            .sheet(isPresented: $showingAllConcerts) {
-                AllConcertsView(concertManager: concertManager, settingsManager: settingsManager)
             }
         }
     }
@@ -1637,7 +1920,7 @@ struct SuiteMember: Codable, Identifiable {
     }
 }
 
-struct SeatModification: Codable {
+struct SeatModification: Codable, Equatable {
     let userId: String
     let userName: String
     let timestamp: Date
@@ -1773,7 +2056,7 @@ extension Concert {
 }
 
 // MARK: - Seat Model
-struct Seat: Codable {
+struct Seat: Codable, Equatable {
     var status: SeatStatus
     var price: Double?
     var note: String? // For reserved seats - max 5 words
@@ -1794,7 +2077,7 @@ struct Seat: Codable {
         self.price = price
         self.note = note
         self.source = source
-        self.cost = cost ?? 25.0
+        self.cost = cost
         self.dateSold = dateSold
         self.datePaid = datePaid
         self.familyPersonName = familyPersonName
@@ -1825,7 +2108,7 @@ struct Seat: Codable {
 }
 
 // MARK: - Parking Ticket Model
-struct ParkingTicket: Codable {
+struct ParkingTicket: Codable, Equatable {
     var status: SeatStatus
     var price: Double?
     var source: TicketSource?
@@ -1846,7 +2129,7 @@ struct ParkingTicket: Codable {
 }
 
 // MARK: - Concert Model
-struct Concert: Identifiable, Codable {
+struct Concert: Identifiable, Codable, Equatable {
     let id: Int
     var artist: String
     var date: Date
@@ -1888,7 +2171,7 @@ struct Concert: Identifiable, Codable {
     
     var totalCost: Double {
         let seatCost = seats.compactMap { seat in
-            seat.status == .sold ? (seat.cost ?? 25.0) : nil
+            seat.status == .sold ? (seat.cost ?? 0.0) : nil
         }.reduce(0, +)
         
         let parkingCost = parkingTicket?.status == .sold ? (parkingTicket?.cost ?? 0.0) : 0.0
@@ -2831,6 +3114,7 @@ struct AddConcertView: View {
     @State private var artist = ""
     @State private var selectedDate = Date()
     
+    let settingsManager: SettingsManager
     let onSave: (Concert) -> Void
     
     var body: some View {
@@ -2898,10 +3182,12 @@ struct AddConcertView: View {
                     // Action Buttons
                     VStack(spacing: 12) {
                         Button(action: {
+                            let defaultSeats = Array(repeating: Seat(cost: settingsManager.defaultSeatCost), count: 8)
                             let newConcert = Concert(
                                 id: Int.random(in: 1000...9999),
                                 artist: artist,
-                                date: selectedDate
+                                date: selectedDate,
+                                seats: defaultSeats
                             )
                             onSave(newConcert)
                             dismiss()
@@ -3128,7 +3414,7 @@ struct AllConcertsView: View {
                 , alignment: .top
             )
             .sheet(isPresented: $showingAddConcert) {
-                AddConcertView { newConcert in
+                AddConcertView(settingsManager: settingsManager) { newConcert in
                     concertManager.addConcert(newConcert)
                 }
             }
@@ -4637,7 +4923,8 @@ struct SeatOptionsView: View {
         self.onUpdateAll = onUpdateAll
         self._selectedStatus = State(initialValue: seat.status)
         self._priceInput = State(initialValue: seat.price != nil ? String(seat.price!) : "")
-        self._costInput = State(initialValue: String(seat.cost ?? 25.0))
+        // Use the seat's actual cost, or fallback to 0.0 if nil (for older seats)
+        self._costInput = State(initialValue: String(seat.cost ?? 0.0))
         self._noteInput = State(initialValue: seat.note ?? "")
         self._selectedSource = State(initialValue: seat.source ?? .facebook)
         self._dateSold = State(initialValue: seat.dateSold ?? Date())
@@ -4943,7 +5230,7 @@ struct SeatOptionsView: View {
                                 
                                 if selectedStatus == .sold {
                                     updatedSeat.price = priceInput.isEmpty ? nil : Double(priceInput)
-                                    updatedSeat.cost = Double(costInput) ?? 25.0
+                                    updatedSeat.cost = Double(costInput) ?? settingsManager.defaultSeatCost
                                     updatedSeat.note = nil
                                     updatedSeat.source = selectedSource
                                     updatedSeat.familyPersonName = selectedSource == .family ? (familyPersonName.isEmpty ? nil : familyPersonName) : nil
@@ -4953,7 +5240,7 @@ struct SeatOptionsView: View {
                                     playDingSound()
                                 } else if selectedStatus == .reserved {
                                     updatedSeat.price = nil
-                                    updatedSeat.cost = Double(costInput) ?? 25.0
+                                    updatedSeat.cost = Double(costInput) ?? settingsManager.defaultSeatCost
                                     updatedSeat.note = noteInput.isEmpty ? nil : noteInput
                                     updatedSeat.source = nil
                                     updatedSeat.familyPersonName = nil
@@ -4961,7 +5248,7 @@ struct SeatOptionsView: View {
                                     updatedSeat.datePaid = nil
                                 } else {
                                     updatedSeat.price = nil
-                                    updatedSeat.cost = Double(costInput) ?? 25.0
+                                    updatedSeat.cost = Double(costInput) ?? settingsManager.defaultSeatCost
                                     updatedSeat.note = nil
                                     updatedSeat.source = nil
                                     updatedSeat.familyPersonName = nil
@@ -5001,7 +5288,7 @@ struct SeatOptionsView: View {
                                     Text("Cancel")
                                 }
                                 .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.modernTextSecondary)
+                                .foregroundColor(.red)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 16)
                             }
@@ -5026,7 +5313,7 @@ struct SeatOptionsView: View {
                     }) {
                         Image(systemName: "xmark")
                             .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.modernTextSecondary)
+                            .foregroundColor(.black)
                             .frame(width: 32, height: 32)
                             .background(
                                 Circle()
@@ -5328,7 +5615,7 @@ struct DynamicAnalytics: View {
     @ObservedObject var settingsManager: SettingsManager
     @State private var isGeneratingReport = false
     @State private var generatedReportURL: URL?
-    @State private var showingShareSheet = false
+    @State private var activeSheet: SheetType?
     
     var body: some View {
         NavigationView {
@@ -5380,16 +5667,21 @@ struct DynamicAnalytics: View {
                             settingsManager: settingsManager,
                             isGenerating: $isGeneratingReport,
                             generatedReportURL: $generatedReportURL,
-                            showingShareSheet: $showingShareSheet
+                            activeSheet: $activeSheet
                         )
                     }
                     .padding(.horizontal)
                 }
             }
             .navigationBarHidden(true)
-            .sheet(isPresented: $showingShareSheet) {
-                if let reportURL = generatedReportURL {
-                    ShareSheet(activityItems: [reportURL])
+            .sheet(item: $activeSheet) { sheetType in
+                switch sheetType {
+                case .shareSheet:
+                    if let reportURL = generatedReportURL {
+                        ShareSheet(activityItems: [reportURL])
+                    }
+                default:
+                    EmptyView()
                 }
             }
         }
@@ -5402,7 +5694,7 @@ struct ReportingView: View {
     @ObservedObject var settingsManager: SettingsManager
     @Binding var isGenerating: Bool
     @Binding var generatedReportURL: URL?
-    @Binding var showingShareSheet: Bool
+    @Binding var activeSheet: SheetType?
     @State private var animateIcon = false
     
     // Report customization options
@@ -5589,7 +5881,7 @@ struct ReportingView: View {
                 self.generatedReportURL = reportFileURL
                 self.isGenerating = false
                 if reportFileURL != nil {
-                    self.showingShareSheet = true
+                    self.activeSheet = .shareSheet
                 }
             }
         }
@@ -5711,9 +6003,8 @@ struct SettingsView: View {
     @State private var tempSuiteName: String = ""
     @State private var tempVenueLocation: String = ""
     @State private var tempFamilyTicketPrice: String = ""
-    @State private var showingSharingSheet = false
-    @State private var showingJoinSheet = false
-    @State private var showingMemberManagement = false
+    @State private var tempDefaultSeatCost: String = ""
+    @State private var activeSheet: SheetType?
     @State private var joinSuiteId: String = ""
     
     var body: some View {
@@ -5740,107 +6031,113 @@ struct SettingsView: View {
                         
                         // Suite Customization Section
                         VStack(alignment: .leading, spacing: 20) {
-                            Text("Suite Information")
-                                .font(.system(size: 20, weight: .semibold))
-                                .foregroundColor(.modernText)
+                            SectionHeader("Suite Information")
                             
-                            VStack(spacing: 20) {
+                            ConsistentCard(padding: 24) {
+                                VStack(spacing: 24) {
                                 // Suite Name
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Suite Name")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.cyan)
-                                    
-                                    TextField("Enter suite name", text: $tempSuiteName)
-                                        .font(.system(size: 16))
-                                        .foregroundColor(.modernText)
-                                        .padding(16)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .fill(Color.modernSecondary)
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: 12)
-                                                        .stroke(Color.cyan.opacity(0.3), lineWidth: 1)
-                                                )
-                                        )
-                                        .onSubmit {
-                                            settingsManager.suiteName = tempSuiteName
-                                        }
+                                SettingsField(
+                                    title: "Suite Name",
+                                    subtitle: nil,
+                                    placeholder: "Enter suite name",
+                                    text: $tempSuiteName
+                                ) {
+                                    settingsManager.suiteName = tempSuiteName
                                 }
                                 
                                 // Venue Location
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Venue Location")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.orange)
-                                    
-                                    TextField("Enter venue location", text: $tempVenueLocation)
-                                        .font(.system(size: 16))
-                                        .foregroundColor(.modernText)
-                                        .padding(16)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 12)
-                                                .fill(Color.modernSecondary)
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: 12)
-                                                        .stroke(Color.orange.opacity(0.3), lineWidth: 1)
-                                                )
-                                        )
-                                        .onSubmit {
-                                            settingsManager.venueLocation = tempVenueLocation
-                                        }
+                                SettingsField(
+                                    title: "Venue Location",
+                                    subtitle: nil,
+                                    placeholder: "Enter venue location",
+                                    text: $tempVenueLocation
+                                ) {
+                                    settingsManager.venueLocation = tempVenueLocation
                                 }
                                 
                                 // Family Ticket Price
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Family Ticket Price")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.green)
-                                    
-                                    Text("Default price automatically populated when 'Family' is selected as the ticket sale type")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(.modernTextSecondary.opacity(0.8))
-                                        .multilineTextAlignment(.leading)
-                                    
-                                    HStack {
-                                        Text("$")
-                                            .font(.system(size: 16))
-                                            .foregroundColor(.modernTextSecondary)
-                                        
-                                        TextField("50", text: $tempFamilyTicketPrice)
-                                            .font(.system(size: 16))
-                                            .foregroundColor(.modernText)
-                                            .keyboardType(.numberPad)
-                                            .padding(16)
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 12)
-                                                    .fill(Color.modernSecondary)
-                                                    .overlay(
-                                                        RoundedRectangle(cornerRadius: 12)
-                                                            .stroke(Color.green.opacity(0.3), lineWidth: 1)
-                                                    )
-                                            )
-                                            .onSubmit {
-                                                if let price = Double(tempFamilyTicketPrice), price > 0 {
-                                                    settingsManager.familyTicketPrice = price
-                                                }
-                                            }
-                                            .onChange(of: tempFamilyTicketPrice) { newValue in
-                                                // Only allow numeric input
-                                                let filtered = newValue.filter { "0123456789".contains($0) }
-                                                if filtered != newValue {
-                                                    tempFamilyTicketPrice = filtered
-                                                }
-                                            }
+                                SettingsField(
+                                    title: "Family Ticket Price",
+                                    subtitle: "Default price automatically populated when 'Family' is selected as the ticket sale type",
+                                    placeholder: "50",
+                                    text: $tempFamilyTicketPrice,
+                                    keyboardType: .numberPad,
+                                    prefix: "$"
+                                ) {
+                                    if let price = Double(tempFamilyTicketPrice), price > 0 {
+                                        settingsManager.familyTicketPrice = price
+                                    }
+                                }
+                                .onChange(of: tempFamilyTicketPrice) { newValue in
+                                    // Only allow numeric input
+                                    let filtered = newValue.filter { "0123456789".contains($0) }
+                                    if filtered != newValue {
+                                        tempFamilyTicketPrice = filtered
                                     }
                                 }
                                 
+                                // Default Seat Cost with integrated Apply button
+                                SettingsField(
+                                    title: "Default Seat Cost",
+                                    subtitle: "Default price for new seats (still editable per seat)",
+                                    placeholder: "25",
+                                    text: $tempDefaultSeatCost,
+                                    keyboardType: .numberPad,
+                                    prefix: "$",
+                                    actionButton: {
+                                        AnyView(
+                                            Button(action: {
+                                                guard let newCost = Double(tempDefaultSeatCost), newCost >= 0 else { return }
+                                                
+                                                // Update all existing seats across all concerts
+                                                for i in 0..<concertManager.concerts.count {
+                                                    for j in 0..<concertManager.concerts[i].seats.count {
+                                                        concertManager.concerts[i].seats[j].cost = newCost
+                                                    }
+                                                }
+                                                
+                                                // Save concerts to persist the changes
+                                                concertManager.saveConcerts()
+                                                
+                                                // Also update the settings manager default
+                                                settingsManager.defaultSeatCost = newCost
+                                                
+                                                // Haptic feedback
+                                                HapticManager.shared.notification(type: .success)
+                                            }) {
+                                                VStack(spacing: 2) {
+                                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                                        .font(.system(size: 16, weight: .semibold))
+                                                    Text("Apply")
+                                                        .font(.system(size: 11, weight: .semibold))
+                                                    Text("to All")
+                                                        .font(.system(size: 11, weight: .semibold))
+                                                }
+                                                .foregroundColor(.white)
+                                                .frame(width: 60, height: 50)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 10)
+                                                        .fill(tempDefaultSeatCost.isEmpty || Double(tempDefaultSeatCost) == nil ? Color.gray.opacity(0.3) : Color.modernAccent)
+                                                )
+                                            }
+                                            .disabled(tempDefaultSeatCost.isEmpty || Double(tempDefaultSeatCost) == nil)
+                                        )
+                                    }
+                                ) {
+                                    if let cost = Double(tempDefaultSeatCost), cost >= 0 {
+                                        settingsManager.defaultSeatCost = cost
+                                    }
+                                }
+                                .onChange(of: tempDefaultSeatCost) { newValue in
+                                    // Only allow numeric input
+                                    let filtered = newValue.filter { "0123456789".contains($0) }
+                                    if filtered != newValue {
+                                        tempDefaultSeatCost = filtered
+                                    }
+                                }
+                                
+                                }
                             }
-                            .padding(20)
-                            .background(
-                                RoundedRectangle(cornerRadius: 20)
-                                    .fill(Color.modernSecondary)
-                            )
                         }
                         
                         // Save Button
@@ -5850,19 +6147,22 @@ struct SettingsView: View {
                             if let price = Double(tempFamilyTicketPrice), price > 0 {
                                 settingsManager.familyTicketPrice = price
                             }
+                            if let cost = Double(tempDefaultSeatCost), cost >= 0 {
+                                settingsManager.defaultSeatCost = cost
+                            }
+                            HapticManager.shared.notification(type: .success)
                             // Navigate back to dashboard
                             selectedTab = 0
                         }) {
-                            Text("Save Changes")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .fill(Color.modernAccent)
-                                )
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 18))
+                                Text("Save All Changes")
+                                    .font(.system(size: 16, weight: .semibold))
+                            }
                         }
+                        .buttonStyle(PrimaryButtonStyle())
+                        .padding(.horizontal)
                         
                         // Suite Sharing Section - Coming Soon
                         VStack(alignment: .leading, spacing: 20) {
@@ -6037,15 +6337,19 @@ struct SettingsView: View {
                 tempSuiteName = settingsManager.suiteName
                 tempVenueLocation = settingsManager.venueLocation
                 tempFamilyTicketPrice = String(format: "%.0f", settingsManager.familyTicketPrice)
+                tempDefaultSeatCost = String(format: "%.0f", settingsManager.defaultSeatCost)
             }
-            .sheet(isPresented: $showingSharingSheet) {
-                CreateSharedSuiteView(sharedSuiteManager: sharedSuiteManager, settingsManager: settingsManager)
-            }
-            .sheet(isPresented: $showingJoinSheet) {
-                JoinSharedSuiteView(sharedSuiteManager: sharedSuiteManager)
-            }
-            .sheet(isPresented: $showingMemberManagement) {
-                MemberManagementView(sharedSuiteManager: sharedSuiteManager)
+            .sheet(item: $activeSheet) { sheetType in
+                switch sheetType {
+                case .shareSheet:
+                    CreateSharedSuiteView(sharedSuiteManager: sharedSuiteManager, settingsManager: settingsManager)
+                case .joinSuite:
+                    JoinSharedSuiteView(sharedSuiteManager: sharedSuiteManager)
+                case .memberManagement:
+                    MemberManagementView(sharedSuiteManager: sharedSuiteManager)
+                default:
+                    EmptyView()
+                }
             }
         }
     }
@@ -6986,7 +7290,7 @@ struct BatchSeatOptionsView: View {
     
     @State private var selectedStatus: SeatStatus = .available
     @State private var priceInput: String = ""
-    @State private var costInput: String = "25"
+    @State private var costInput: String = ""
     @State private var selectedSource: TicketSource = .family
     @State private var noteInput: String = ""
     @State private var familyPersonName: String = ""
@@ -7205,6 +7509,9 @@ struct BatchSeatOptionsView: View {
             }
             .navigationBarHidden(true)
         }
+        .onAppear {
+            costInput = String(format: "%.0f", settingsManager.defaultSeatCost)
+        }
         .alert("Batch Update", isPresented: $showingAlert) {
             Button("OK") { dismiss() }
         } message: {
@@ -7220,7 +7527,7 @@ struct BatchSeatOptionsView: View {
             updatedSeat.status = selectedStatus
             
             // Set cost for all statuses
-            updatedSeat.cost = Double(costInput) ?? 25.0
+            updatedSeat.cost = Double(costInput) ?? settingsManager.defaultSeatCost
             
             switch selectedStatus {
             case .available:
