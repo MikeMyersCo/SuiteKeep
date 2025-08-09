@@ -6319,6 +6319,29 @@ struct SettingsView: View {
                                         .font(.system(size: 14, weight: .medium))
                                         .foregroundColor(.modernText)
                                 }
+                                
+                                Divider()
+                                
+                                Button(action: {
+                                    if let url = URL(string: "https://suitekeepsupport.netlify.app") {
+                                        UIApplication.shared.open(url)
+                                    }
+                                }) {
+                                    HStack {
+                                        Text("Support & Manual")
+                                            .font(.system(size: 14))
+                                            .foregroundColor(.modernTextSecondary)
+                                        Spacer()
+                                        HStack(spacing: 4) {
+                                            Text("Help Center")
+                                                .font(.system(size: 14, weight: .medium))
+                                                .foregroundColor(.modernAccent)
+                                            Image(systemName: "arrow.up.right")
+                                                .font(.system(size: 12, weight: .medium))
+                                                .foregroundColor(.modernAccent)
+                                        }
+                                    }
+                                }
                             }
                             .padding(20)
                             .background(
