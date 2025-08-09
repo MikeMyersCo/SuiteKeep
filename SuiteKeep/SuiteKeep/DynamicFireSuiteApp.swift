@@ -6414,6 +6414,22 @@ struct SettingsView: View {
                                         }
                                     }
                                 }
+                                
+                                Divider()
+                                
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Image(systemName: "exclamationmark.triangle")
+                                            .foregroundColor(.orange)
+                                        Text("Disclaimer")
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundColor(.modernText)
+                                    }
+                                    Text("This app is provided \"as is\" without any warranties. The developer makes no guarantees about the accuracy, reliability, or functionality of this software. Use at your own risk.")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.modernTextSecondary)
+                                        .multilineTextAlignment(.leading)
+                                }
                             }
                             .padding(20)
                             .background(
