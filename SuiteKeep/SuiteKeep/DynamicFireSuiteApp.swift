@@ -4985,7 +4985,6 @@ struct SeatOptionsView: View {
     @State private var selectedSource: TicketSource
     @State private var dateSold: Date
     @State private var datePaid: Date
-    @State private var applyToAllSeats = false
     @State private var familyPersonName: String
     
     init(seatNumber: Int, seat: Seat, onUpdate: @escaping (Seat) -> Void, onUpdateAll: ((Seat) -> Void)? = nil) {
@@ -5265,35 +5264,6 @@ struct SeatOptionsView: View {
                         .padding(.horizontal, 16)
                         .padding(.bottom, 8)
                         
-                        // Apply to all seats checkbox
-                        if selectedStatus == .sold || selectedStatus == .reserved {
-                            HStack {
-                                Button(action: {
-                                    applyToAllSeats.toggle()
-                                }) {
-                                    HStack(spacing: 12) {
-                                        Image(systemName: applyToAllSeats ? "checkmark.square.fill" : "square")
-                                            .font(.system(size: 20))
-                                            .foregroundColor(applyToAllSeats ? .modernAccent : .modernTextSecondary)
-                                        
-                                        Text("Apply to all seats")
-                                            .font(.system(size: 16, weight: .medium))
-                                            .foregroundColor(.modernText)
-                                        
-                                        Spacer()
-                                    }
-                                }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 12)
-                                        .fill(Color.modernSecondary.opacity(0.7))
-                                )
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.bottom, 8)
-                        }
-                        
                         // Action buttons
                         VStack(spacing: 12) {
                             Button {
@@ -5328,13 +5298,8 @@ struct SeatOptionsView: View {
                                     updatedSeat.datePaid = nil
                                 }
                                 
-                                if applyToAllSeats && (selectedStatus == .sold || selectedStatus == .reserved), let updateAllCallback = onUpdateAll {
-                                    // Apply to all seats
-                                    updateAllCallback(updatedSeat)
-                                } else {
-                                    // Apply to current seat only
-                                    onUpdate(updatedSeat)
-                                }
+                                // Apply to current seat only
+                                onUpdate(updatedSeat)
                                 
                                 dismiss()
                             } label: {
