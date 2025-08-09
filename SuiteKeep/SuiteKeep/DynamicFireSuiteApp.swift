@@ -109,7 +109,7 @@ class SettingsManager: ObservableObject {
 // MARK: - Vibrant Color Theme
 extension Color {
     // Fire colors for firepit animation
-    // Note: fireOrange is defined in Assets.xcassets/FireOrange.colorset
+    // Note: fireOrange is auto-generated from Assets.xcassets/FireOrange.colorset
     static let fireRed = Color(red: 0.9, green: 0.1, blue: 0.0)
     static let fireYellow = Color(red: 1.0, green: 0.8, blue: 0.0)
     
@@ -2214,6 +2214,34 @@ struct BackupData: Codable {
     let concerts: [Concert]
     let backupDate: Date
     let version: String
+    let suiteSettings: SuiteSettings?
+    
+    enum CodingKeys: String, CodingKey {
+        case concerts, backupDate, version, suiteSettings
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        concerts = try container.decode([Concert].self, forKey: .concerts)
+        backupDate = try container.decode(Date.self, forKey: .backupDate)
+        version = try container.decode(String.self, forKey: .version)
+        // suiteSettings is optional for backwards compatibility with v1.0
+        suiteSettings = try container.decodeIfPresent(SuiteSettings.self, forKey: .suiteSettings)
+    }
+    
+    init(concerts: [Concert], backupDate: Date, version: String, suiteSettings: SuiteSettings) {
+        self.concerts = concerts
+        self.backupDate = backupDate
+        self.version = version
+        self.suiteSettings = suiteSettings
+    }
+}
+
+struct SuiteSettings: Codable {
+    let suiteName: String
+    let venueLocation: String
+    let familyTicketPrice: Double
+    let defaultSeatCost: Double
 }
 
 // MARK: - Shared Suite Manager
@@ -2296,7 +2324,7 @@ class SharedSuiteManager: ObservableObject {
             iCloudStore.set(data, forKey: suiteInfoKey)
             iCloudStore.synchronize()
         } catch {
-            print("Failed to save suite info: \(error)")
+            // Failed to save suite info: \(error)
         }
     }
     
@@ -2570,7 +2598,7 @@ class ConcertDataManager: ObservableObject {
         let lastVersion = userDefaults.integer(forKey: versionKey)
         
         if lastVersion < currentVersion {
-            print("Migrating data from version \(lastVersion) to \(currentVersion)")
+            // Migrating data from version \(lastVersion) to \(currentVersion)
             
             // Add migration logic here for future versions
             switch lastVersion {
@@ -2590,7 +2618,7 @@ class ConcertDataManager: ObservableObject {
     }
     
     private func migrateToMultiUserData() {
-        print("Migrating existing data to support multi-user sharing")
+        // Migrating existing data to support multi-user sharing
         
         // Load existing concerts and update them with default sharing metadata
         do {
@@ -2623,10 +2651,10 @@ class ConcertDataManager: ObservableObject {
                 let encodedData = try JSONEncoder().encode(concerts)
                 userDefaults.set(encodedData, forKey: concertsKey)
                 
-                print("Successfully migrated \(concerts.count) concerts to multi-user format")
+                // Successfully migrated \(concerts.count) concerts to multi-user format
             }
         } catch {
-            print("Failed to migrate data to multi-user format: \(error)")
+            // Failed to migrate data to multi-user format: \(error)
         }
     }
     
@@ -2675,10 +2703,10 @@ class ConcertDataManager: ObservableObject {
             if let data = userDefaults.data(forKey: concertsKey) {
                 let decodedConcerts = try JSONDecoder().decode([Concert].self, from: data)
                 concerts = decodedConcerts
-                print("Successfully loaded \(concerts.count) concerts")
+                // Successfully loaded \(concerts.count) concerts
             }
         } catch {
-            print("Failed to load concerts: \(error)")
+            // Failed to load concerts: \(error)
             // Attempt to recover from backup if available
             loadFromBackup()
         }
@@ -2697,9 +2725,9 @@ class ConcertDataManager: ObservableObject {
             // Sync to CloudKit if in shared suite
             syncToCloudKitAfterSave()
             
-            print("Successfully saved \(concerts.count) concerts")
+            // Successfully saved \(concerts.count) concerts
         } catch {
-            print("Failed to save concerts: \(error)")
+            // Failed to save concerts: \(error)
         }
     }
     
@@ -2712,7 +2740,7 @@ class ConcertDataManager: ObservableObject {
             // Create backup
             saveBackup(data: encoded)
         } catch {
-            print("Failed to save to local storage: \(error)")
+            // Failed to save to local storage: \(error)
         }
     }
     
@@ -2732,7 +2760,7 @@ class ConcertDataManager: ObservableObject {
         if let backupData = userDefaults.data(forKey: backupKey),
            let decodedConcerts = try? JSONDecoder().decode([Concert].self, from: backupData) {
             concerts = decodedConcerts
-            print("Recovered \(concerts.count) concerts from backup")
+            // Recovered \(concerts.count) concerts from backup
         }
     }
     
@@ -2775,7 +2803,7 @@ class ConcertDataManager: ObservableObject {
     func deleteConcert(_ concert: Concert) {
         // Check permissions before deleting
         guard sharedSuiteManager?.canDeleteConcerts() ?? true else {
-            print("User does not have permission to delete concerts")
+            // User does not have permission to delete concerts
             return
         }
         
@@ -2792,7 +2820,7 @@ class ConcertDataManager: ObservableObject {
         
         // Check permissions
         guard sharedSuiteManager?.canModifySeats() ?? true else {
-            print("User does not have permission to modify seats")
+            // User does not have permission to modify seats
             return
         }
         
@@ -2816,11 +2844,19 @@ class ConcertDataManager: ObservableObject {
     
     // MARK: - Backup/Restore Functionality
     
-    func createBackupData() -> Data? {
+    func createBackupData(settingsManager: SettingsManager) -> Data? {
+        let suiteSettings = SuiteSettings(
+            suiteName: settingsManager.suiteName,
+            venueLocation: settingsManager.venueLocation,
+            familyTicketPrice: settingsManager.familyTicketPrice,
+            defaultSeatCost: settingsManager.defaultSeatCost
+        )
+        
         let backupData = BackupData(
             concerts: concerts,
             backupDate: Date(),
-            version: "1.0"
+            version: "1.1",
+            suiteSettings: suiteSettings
         )
         
         do {
@@ -2828,12 +2864,12 @@ class ConcertDataManager: ObservableObject {
             encoder.dateEncodingStrategy = .iso8601
             return try encoder.encode(backupData)
         } catch {
-            print("Failed to create backup data: \(error)")
+            // Failed to create backup data: \(error)
             return nil
         }
     }
     
-    func restoreFromBackupData(_ data: Data) -> Bool {
+    func restoreFromBackupData(_ data: Data, settingsManager: SettingsManager) -> Bool {
         do {
             let decoder = JSONDecoder()
             decoder.dateDecodingStrategy = .iso8601
@@ -2841,40 +2877,48 @@ class ConcertDataManager: ObservableObject {
             
             // Validate backup data
             guard validateBackupData(backupData) else {
-                print("Invalid backup data")
+                // Invalid backup data
                 return false
             }
             
             // Create backup of current data before restore
-            if let currentBackup = createBackupData() {
+            if let currentBackup = createBackupData(settingsManager: settingsManager) {
                 let emergencyBackupKey = "\(concertsKey)_emergency_backup"
                 userDefaults.set(currentBackup, forKey: emergencyBackupKey)
                 userDefaults.set(Date(), forKey: "\(emergencyBackupKey)_date")
             }
             
-            // Restore the data
+            // Restore the concerts
             concerts = backupData.concerts
             saveConcerts()
             
-            print("Successfully restored \(concerts.count) concerts from backup dated \(backupData.backupDate)")
+            // Restore settings if available (version 1.1 and later)
+            if let settings = backupData.suiteSettings {
+                settingsManager.suiteName = settings.suiteName
+                settingsManager.venueLocation = settings.venueLocation
+                settingsManager.familyTicketPrice = settings.familyTicketPrice
+                settingsManager.defaultSeatCost = settings.defaultSeatCost
+            }
+            
+            // Successfully restored \(concerts.count) concerts from backup dated \(backupData.backupDate)
             return true
         } catch {
-            print("Failed to restore from backup: \(error)")
+            // Failed to restore from backup: \(error)
             return false
         }
     }
     
     private func validateBackupData(_ backupData: BackupData) -> Bool {
-        // Basic validation
-        guard backupData.version == "1.0" else {
-            print("Unsupported backup version: \(backupData.version)")
+        // Basic validation - support both v1.0 and v1.1
+        guard backupData.version == "1.0" || backupData.version == "1.1" else {
+            // Unsupported backup version: \(backupData.version)
             return false
         }
         
         // Validate each concert has required data
         for concert in backupData.concerts {
             if concert.seats.count != 8 {
-                print("Invalid concert data: \(concert.artist) has \(concert.seats.count) seats instead of 8")
+                // Invalid concert data: \(concert.artist) has \(concert.seats.count) seats instead of 8
                 return false
             }
         }
@@ -2886,6 +2930,34 @@ class ConcertDataManager: ObservableObject {
         let backupDateKey = "\(concertsKey)_backup_date"
         let lastBackupDate = userDefaults.object(forKey: backupDateKey) as? Date
         return (concerts.count, lastBackupDate)
+    }
+    
+    func clearAllData() {
+        // Clear concerts array
+        concerts.removeAll()
+        
+        // Clear from UserDefaults
+        userDefaults.removeObject(forKey: concertsKey)
+        userDefaults.removeObject(forKey: "\(concertsKey)_backup")
+        userDefaults.removeObject(forKey: "\(concertsKey)_backup_date")
+        
+        // Clear from iCloud Key-Value Store
+        let iCloudStore = NSUbiquitousKeyValueStore.default
+        iCloudStore.removeObject(forKey: concertsKey)
+        iCloudStore.removeObject(forKey: "\(concertsKey)_backup")
+        iCloudStore.synchronize()
+        
+        // Clear suite settings from storage
+        userDefaults.removeObject(forKey: "suiteName")
+        userDefaults.removeObject(forKey: "venueLocation")
+        userDefaults.removeObject(forKey: "familyTicketPrice")
+        userDefaults.removeObject(forKey: "defaultSeatCost")
+        
+        iCloudStore.removeObject(forKey: "suiteName")
+        iCloudStore.removeObject(forKey: "venueLocation")
+        iCloudStore.removeObject(forKey: "familyTicketPrice")
+        iCloudStore.removeObject(forKey: "defaultSeatCost")
+        iCloudStore.synchronize()
     }
     
     // MARK: - CloudKit Sync
@@ -2916,8 +2988,8 @@ class ConcertDataManager: ObservableObject {
                     if let concert = Concert.fromCloudKitRecord(record) {
                         cloudKitConcerts.append(concert)
                     }
-                case .failure(let error):
-                    print("Failed to process record: \(error)")
+                case .failure(_):
+                    break // Failed to process record
                 }
             }
             
@@ -6289,7 +6361,7 @@ struct SettingsView: View {
                         }
                         
                         // Backup & Restore Section
-                        BackupRestoreSection(concertManager: concertManager)
+                        BackupRestoreSection(concertManager: concertManager, settingsManager: settingsManager)
                         
                         // About Section
                         VStack(alignment: .leading, spacing: 16) {
@@ -6866,7 +6938,7 @@ class ReportGenerator {
             try csvContent.write(to: tempURL, atomically: true, encoding: .utf8)
             return tempURL
         } catch {
-            print("Failed to write CSV file: \(error)")
+            // Failed to write CSV file: \(error)
             return nil
         }
     }
@@ -7117,9 +7189,12 @@ struct IdentifiableURL: Identifiable {
 // MARK: - Backup & Restore Section
 struct BackupRestoreSection: View {
     @ObservedObject var concertManager: ConcertDataManager
+    @ObservedObject var settingsManager: SettingsManager
     @State private var showingBackupAlert = false
     @State private var showingRestoreAlert = false
     @State private var showingFilePicker = false
+    @State private var showingClearDataAlert = false
+    @State private var showingFinalClearAlert = false
     @State private var backupFileURL: IdentifiableURL?
     @State private var alertMessage = ""
     @State private var alertTitle = ""
@@ -7195,6 +7270,23 @@ struct BackupRestoreSection: View {
                                 .fill(Color.orange)
                         )
                     }
+                    
+                    // Clear All Data Button
+                    Button(action: { showingClearDataAlert = true }) {
+                        HStack {
+                            Image(systemName: "trash.fill")
+                                .foregroundColor(.white)
+                            Text("Clear All Data")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.white)
+                            Spacer()
+                        }
+                        .padding(16)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.red)
+                        )
+                    }
                 }
             }
             .padding(16)
@@ -7216,6 +7308,22 @@ struct BackupRestoreSection: View {
         } message: {
             Text(alertMessage)
         }
+        .alert("Clear All Data", isPresented: $showingClearDataAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Continue", role: .destructive) {
+                showingFinalClearAlert = true
+            }
+        } message: {
+            Text("This will permanently delete all concerts, seat data, and settings. This action cannot be undone.\n\nConsider creating a backup first.")
+        }
+        .alert("Final Warning", isPresented: $showingFinalClearAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete Everything", role: .destructive) {
+                clearAllAppData()
+            }
+        } message: {
+            Text("Are you absolutely sure? This will erase ALL app data permanently.")
+        }
         .fileImporter(
             isPresented: $showingFilePicker,
             allowedContentTypes: [.json],
@@ -7229,7 +7337,7 @@ struct BackupRestoreSection: View {
     }
     
     private func createBackup() {
-        guard let backupData = concertManager.createBackupData() else {
+        guard let backupData = concertManager.createBackupData(settingsManager: settingsManager) else {
             showBackupAlert(title: "Backup Failed", message: "Unable to create backup data. Please try again.")
             return
         }
@@ -7269,10 +7377,10 @@ struct BackupRestoreSection: View {
             
             do {
                 let data = try Data(contentsOf: url)
-                let success = concertManager.restoreFromBackupData(data)
+                let success = concertManager.restoreFromBackupData(data, settingsManager: settingsManager)
                 
                 if success {
-                    showBackupAlert(title: "Restore Successful", message: "Your concert data has been restored successfully.")
+                    showBackupAlert(title: "Restore Successful", message: "Your concert data and suite settings have been restored successfully.")
                 } else {
                     showBackupAlert(title: "Restore Failed", message: "The backup file is invalid or corrupted. Please check the file and try again.")
                 }
@@ -7288,6 +7396,20 @@ struct BackupRestoreSection: View {
         alertTitle = title
         alertMessage = message
         showingBackupAlert = true
+    }
+    
+    private func clearAllAppData() {
+        // Clear all concert data and settings from storage
+        concertManager.clearAllData()
+        
+        // Reset SettingsManager to default values
+        settingsManager.suiteName = "Fire Suite"
+        settingsManager.venueLocation = "Ford Amphitheater"
+        settingsManager.familyTicketPrice = 75.0
+        settingsManager.defaultSeatCost = 150.0
+        
+        // Show confirmation
+        showBackupAlert(title: "Data Cleared", message: "All app data has been permanently deleted. The app will now reset to its initial state.")
     }
 }
 
