@@ -4115,11 +4115,6 @@ struct ConcertDetailView: View {
     }
 }
 
-// MARK: - Selected Seat Helper
-struct SelectedSeat: Identifiable {
-    let id = UUID()
-    let index: Int
-}
 
 // MARK: - Seat List View
 struct SeatListView: View {
@@ -4129,8 +4124,8 @@ struct SeatListView: View {
     @Binding var isBatchMode: Bool
     @Binding var selectedSeats: Set<Int>
     @Binding var showingBatchOptions: Bool
-    @State private var showingSeatOptions = false
     @State private var selectedSeatIndex: Int?
+    @State private var isUpdatingData = false
     
     var body: some View {
         VStack(spacing: 16) {
@@ -4140,30 +4135,31 @@ struct SeatListView: View {
             // Seat List
             seatListContent
         }
-        .sheet(item: Binding<SelectedSeat?>(
-            get: {
-                if let index = selectedSeatIndex, showingSeatOptions {
-                    return SelectedSeat(index: index)
-                }
-                return nil
-            },
-            set: { newValue in
-                if newValue == nil {
+        .sheet(isPresented: Binding<Bool>(
+            get: { selectedSeatIndex != nil },
+            set: { isPresented in
+                if !isPresented {
                     selectedSeatIndex = nil
-                    showingSeatOptions = false
+                    // Reset the lock when sheet fully dismisses
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        isUpdatingData = false
+                    }
                 }
             }
-        )) { selectedSeat in
-            SeatOptionsView(
-                seatNumber: selectedSeat.index + 1,
-                seat: concert.seats[selectedSeat.index],
-                onUpdate: { updatedSeat in
-                    concert.seats[selectedSeat.index] = updatedSeat
-                    concertManager.updateConcert(concert)
-                }
-            )
-            .environmentObject(settingsManager)
+        )) {
+            if let index = selectedSeatIndex {
+                SeatOptionsView(
+                    seatNumber: index + 1,
+                    seat: concert.seats[index],
+                    onUpdate: { updatedSeat in
+                        isUpdatingData = true
+                        concert.seats[index] = updatedSeat
+                        concertManager.updateConcert(concert)
+                    }
+                )
+            }
         }
+        .environmentObject(settingsManager)
     }
     
     private var seatListHeader: some View {
@@ -4390,8 +4386,11 @@ struct SeatListView: View {
     
     private func editButton(for index: Int) -> some View {
         Button(action: {
+            // Prevent seat selection while data is updating
+            guard !isUpdatingData else { return }
+            
+            // Simply set the selected seat index - SwiftUI will handle sheet transitions smoothly
             selectedSeatIndex = index
-            showingSeatOptions = true
         }) {
             Image(systemName: "pencil.circle.fill")
                 .font(.system(size: 24))
@@ -4449,10 +4448,10 @@ struct InteractiveFireSuiteView: View {
     @ObservedObject var concertManager: ConcertDataManager
     @ObservedObject var settingsManager: SettingsManager
     @State private var pulseFirepit = false
-    @State private var showingSeatOptions = false
     @State private var selectedSeatIndex: Int?
     @State private var priceInput: String = ""
     @State private var showingParkingOptions = false
+    @State private var isUpdatingData = false
     
     // Batch operation states (now bindings from parent)
     @Binding var isBatchMode: Bool
@@ -4766,36 +4765,40 @@ struct InteractiveFireSuiteView: View {
         .onAppear {
             startPulseAnimation()
         }
-        .sheet(item: Binding<SelectedSeat?>(
-            get: { 
-                if let index = selectedSeatIndex {
-                    return SelectedSeat(index: index)
-                }
-                return nil
-            },
-            set: { _ in 
-                selectedSeatIndex = nil
-                showingSeatOptions = false
-            }
-        )) { selectedSeat in
-            SeatOptionsView(
-                seatNumber: selectedSeat.index + 1,
-                seat: concert.seats[selectedSeat.index],
-                onUpdate: { updatedSeat in
-                    concert.seats[selectedSeat.index] = updatedSeat
-                    concertManager.updateConcert(concert)
-                },
-                onUpdateAll: { templateSeat in
-                    // Apply the template seat to all seats, but keep each seat's original seat number context
-                    for i in 0..<concert.seats.count {
-                        let newSeat = templateSeat
-                        // Each seat should maintain its unique identity for seat-specific tracking
-                        concert.seats[i] = newSeat
+        .sheet(isPresented: Binding<Bool>(
+            get: { selectedSeatIndex != nil },
+            set: { isPresented in
+                if !isPresented {
+                    selectedSeatIndex = nil
+                    // Reset the lock when sheet fully dismisses
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        isUpdatingData = false
                     }
-                    concertManager.updateConcert(concert)
                 }
-            )
-            .environmentObject(settingsManager)
+            }
+        )) {
+            if let index = selectedSeatIndex {
+                SeatOptionsView(
+                    seatNumber: index + 1,
+                    seat: concert.seats[index],
+                    onUpdate: { updatedSeat in
+                        isUpdatingData = true
+                        concert.seats[index] = updatedSeat
+                        concertManager.updateConcert(concert)
+                    },
+                    onUpdateAll: { templateSeat in
+                        isUpdatingData = true
+                        // Apply the template seat to all seats, but keep each seat's original seat number context
+                        for i in 0..<concert.seats.count {
+                            let newSeat = templateSeat
+                            // Each seat should maintain its unique identity for seat-specific tracking
+                            concert.seats[i] = newSeat
+                        }
+                        concertManager.updateConcert(concert)
+                    }
+                )
+                .environmentObject(settingsManager)
+            }
         }
         .sheet(isPresented: $showingParkingOptions) {
             ParkingTicketOptionsView(
@@ -4810,6 +4813,9 @@ struct InteractiveFireSuiteView: View {
     }
     
     private func handleSeatTap(_ index: Int) {
+        // Prevent seat selection while data is updating
+        guard !isUpdatingData else { return }
+        
         if isBatchMode {
             withAnimation(.easeInOut(duration: 0.2)) {
                 if selectedSeats.contains(index) {
@@ -4823,7 +4829,7 @@ struct InteractiveFireSuiteView: View {
             let impactFeedback = UIImpactFeedbackGenerator(style: .light)
             impactFeedback.impactOccurred()
         } else {
-            // Normal single seat selection - the sheet will present automatically when selectedSeatIndex is set
+            // Simply set the selected seat index - SwiftUI will handle sheet transitions smoothly
             selectedSeatIndex = index
             priceInput = concert.seats[index].price != nil ? String(concert.seats[index].price!) : ""
             
@@ -5302,6 +5308,7 @@ struct SeatOptionsView: View {
                                     .font(.system(size: 32, weight: .bold, design: .rounded))
                                     .foregroundColor(.white)
                             )
+                            .animation(.easeInOut(duration: 0.3), value: selectedStatus)
                         
                         Text("Seat \(seatNumber)")
                             .font(.system(size: 24, weight: .bold))
@@ -5341,42 +5348,48 @@ struct SeatOptionsView: View {
                         }
                     }
                 
-                    // Form Fields
-                    if selectedStatus == .sold {
-                        VStack(spacing: 16) {
-                            HStack {
-                                Text("$")
-                                    .font(.system(size: 18, weight: .bold))
-                                TextField("Price", text: $priceInput)
-                                    .keyboardType(.decimalPad)
-                                    .textFieldStyle(.roundedBorder)
-                            }
-                            
-                            Picker("Source", selection: $selectedSource) {
-                                ForEach(TicketSource.allCases, id: \.self) { source in
-                                    Text(source.rawValue).tag(source)
+                    // Form Fields with smooth transitions
+                    VStack(spacing: 16) {
+                        if selectedStatus == .sold {
+                            VStack(spacing: 16) {
+                                HStack {
+                                    Text("$")
+                                        .font(.system(size: 18, weight: .bold))
+                                    TextField("Price", text: $priceInput)
+                                        .keyboardType(.decimalPad)
+                                        .textFieldStyle(.roundedBorder)
                                 }
+                                
+                                Picker("Source", selection: $selectedSource) {
+                                    ForEach(TicketSource.allCases, id: \.self) { source in
+                                        Text(source.rawValue).tag(source)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                
+                                if selectedSource == .family {
+                                    TextField("Person's name", text: $familyPersonName)
+                                        .textFieldStyle(.roundedBorder)
+                                        .transition(.opacity.combined(with: .scale))
+                                }
+                                
+                                DatePicker("Date Sold", selection: $dateSold, displayedComponents: .date)
+                                DatePicker("Date Paid", selection: $datePaid, displayedComponents: .date)
                             }
-                            .pickerStyle(.menu)
-                            
-                            if selectedSource == .family {
-                                TextField("Person's name", text: $familyPersonName)
-                                    .textFieldStyle(.roundedBorder)
-                            }
-                            
-                            DatePicker("Date Sold", selection: $dateSold, displayedComponents: .date)
-                            DatePicker("Date Paid", selection: $datePaid, displayedComponents: .date)
+                            .transition(.opacity.combined(with: .scale))
+                        } else if selectedStatus == .reserved {
+                            TextField("Note (max 5 words)", text: $noteInput)
+                                .textFieldStyle(.roundedBorder)
+                                .onChange(of: noteInput) { newValue in
+                                    let words = newValue.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+                                    if words.count > 5 {
+                                        noteInput = words.prefix(5).joined(separator: " ")
+                                    }
+                                }
+                                .transition(.opacity.combined(with: .scale))
                         }
-                    } else if selectedStatus == .reserved {
-                        TextField("Note (max 5 words)", text: $noteInput)
-                            .textFieldStyle(.roundedBorder)
-                            .onChange(of: noteInput) { newValue in
-                                let words = newValue.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
-                                if words.count > 5 {
-                                    noteInput = words.prefix(5).joined(separator: " ")
-                                }
-                            }
                     }
+                    .animation(.easeInOut(duration: 0.3), value: selectedStatus)
                     
                     HStack {
                         Text("Cost: $")
