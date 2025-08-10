@@ -1852,6 +1852,7 @@ enum TicketSource: String, Codable, CaseIterable {
     case facebook = "Facebook"
     case stubhub = "Stubhub"
     case axs = "AXS"
+    case venu = "VENU"
     case other = "Other"
 }
 
@@ -3780,7 +3781,7 @@ struct ConcertDetailView: View {
                     
                     // Concert Header Card with batch operations overlay
                     ZStack {
-                        VStack(spacing: 16) {
+                        VStack(spacing: 12) {
                             HStack {
                                 Spacer()
                                 Button(action: {
@@ -3820,14 +3821,14 @@ struct ConcertDetailView: View {
                             
                             if isEditingDetails {
                                 // Edit mode
-                                VStack(spacing: 12) {
+                                VStack(spacing: 9) {
                                     TextField("Artist Name", text: $editedArtist)
-                                        .font(.system(size: 22, weight: .bold))
+                                        .font(.system(size: 17, weight: .bold))
                                         .foregroundColor(.modernText)
                                         .multilineTextAlignment(.center)
-                                        .padding(10)
+                                        .padding(8)
                                         .background(
-                                            RoundedRectangle(cornerRadius: 12)
+                                            RoundedRectangle(cornerRadius: 9)
                                                 .fill(Color.black.opacity(0.2))
                                         )
                                     
@@ -3839,21 +3840,21 @@ struct ConcertDetailView: View {
                             } else {
                                 // Display mode
                                 Text(concert.artist)
-                                    .font(.system(size: 22, weight: .bold))
+                                    .font(.system(size: 17, weight: .bold))
                                     .foregroundColor(.modernText)
                                 
-                                VStack(spacing: 6) {
+                                VStack(spacing: 4) {
                                     Text(concert.date, style: .date)
-                                        .font(.system(size: 14))
+                                        .font(.system(size: 11))
                                         .foregroundColor(.modernTextSecondary)
                                     
                                     VStack(spacing: 4) {
                                         HStack {
                                             Circle()
                                                 .fill(concert.ticketsSold == 8 ? Color.modernSuccess : Color.modernWarning)
-                                                .frame(width: 8, height: 8)
+                                                .frame(width: 6, height: 6)
                                             Text("\(concert.ticketsSold)/8 tickets sold")
-                                                .font(.system(size: 14, weight: .medium))
+                                                .font(.system(size: 11, weight: .medium))
                                                 .foregroundColor(concert.ticketsSold == 8 ? .modernSuccess : .modernWarning)
                                         }
                                         
@@ -3861,9 +3862,9 @@ struct ConcertDetailView: View {
                                             HStack {
                                                 Circle()
                                                     .fill(Color.cyan)
-                                                    .frame(width: 8, height: 8)
+                                                    .frame(width: 6, height: 6)
                                                 Text("\(concert.ticketsReserved) reserved")
-                                                    .font(.system(size: 14, weight: .medium))
+                                                    .font(.system(size: 11, weight: .medium))
                                                     .foregroundColor(.cyan)
                                             }
                                         }
@@ -3873,9 +3874,9 @@ struct ConcertDetailView: View {
                                             HStack {
                                                 Circle()
                                                     .fill(Color.green)
-                                                    .frame(width: 8, height: 8)
+                                                    .frame(width: 6, height: 6)
                                                 Text("\(availableSeats) available")
-                                                    .font(.system(size: 14, weight: .medium))
+                                                    .font(.system(size: 11, weight: .medium))
                                                     .foregroundColor(.green)
                                             }
                                         }
@@ -3883,10 +3884,10 @@ struct ConcertDetailView: View {
                                 }
                             }
                         }
-                        .padding(16)
+                        .padding(12)
                         .frame(maxWidth: .infinity)
                         .background(
-                            RoundedRectangle(cornerRadius: 16)
+                            RoundedRectangle(cornerRadius: 12)
                                 .fill(Color.modernSecondary)
                         )
                         .opacity(!isEditingDetails && isBatchMode && !selectedSeats.isEmpty ? 0.3 : 1.0)
@@ -5121,7 +5122,7 @@ struct SeatOptionsView: View {
                                 }
                                 
                                 // Source dropdown
-                                VStack(alignment: .leading, spacing: 8) {
+                                VStack(alignment: .center, spacing: 8) {
                                     Text("Ticket Source")
                                         .font(.system(size: 14, weight: .medium))
                                         .foregroundColor(.modernTextSecondary)
@@ -5169,35 +5170,45 @@ struct SeatOptionsView: View {
                                 // Date fields (only for sold status)
                                 VStack(spacing: 16) {
                                     // Date Sold
-                                    VStack(alignment: .leading, spacing: 8) {
+                                    VStack(alignment: .center, spacing: 8) {
                                         Text("Date Sold")
                                             .font(.system(size: 14, weight: .medium))
                                             .foregroundColor(.modernTextSecondary)
                                         
-                                        DatePicker("", selection: $dateSold, displayedComponents: .date)
-                                            .datePickerStyle(.compact)
-                                            .colorScheme(.dark)
-                                            .padding(12)
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 12)
-                                                    .fill(Color.modernSecondary)
-                                            )
+                                        HStack {
+                                            Spacer()
+                                            DatePicker("", selection: $dateSold, displayedComponents: .date)
+                                                .datePickerStyle(.compact)
+                                                .colorScheme(.dark)
+                                                .padding(12)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 12)
+                                                        .fill(Color.modernSecondary)
+                                                )
+                                                .fixedSize()
+                                            Spacer()
+                                        }
                                     }
                                     
                                     // Date Paid
-                                    VStack(alignment: .leading, spacing: 8) {
+                                    VStack(alignment: .center, spacing: 8) {
                                         Text("Date Paid")
                                             .font(.system(size: 14, weight: .medium))
                                             .foregroundColor(.modernTextSecondary)
                                         
-                                        DatePicker("", selection: $datePaid, displayedComponents: .date)
-                                            .datePickerStyle(.compact)
-                                            .colorScheme(.dark)
-                                            .padding(12)
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 12)
-                                                    .fill(Color.modernSecondary)
-                                            )
+                                        HStack {
+                                            Spacer()
+                                            DatePicker("", selection: $datePaid, displayedComponents: .date)
+                                                .datePickerStyle(.compact)
+                                                .colorScheme(.dark)
+                                                .padding(12)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 12)
+                                                        .fill(Color.modernSecondary)
+                                                )
+                                                .fixedSize()
+                                            Spacer()
+                                        }
                                     }
                                 }
                             }
@@ -5739,6 +5750,7 @@ struct ReportingView: View {
     @State private var includeConcertData = true
     @State private var includePerformanceRankings = true
     @State private var includeExecutiveSummary = true
+    @State private var includeFutureConcerts = false
     
     private var hasSelectedElements: Bool {
         includeProfitAnalysis || includeConcertData || includePerformanceRankings || includeExecutiveSummary
@@ -5804,6 +5816,23 @@ struct ReportingView: View {
                         title: "Executive Summary",
                         description: "Key metrics and occupancy statistics",
                         isEnabled: $includeExecutiveSummary
+                    )
+                }
+                
+                Divider()
+                    .background(Color.white.opacity(0.2))
+                    .padding(.vertical, 8)
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Analysis Options")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                    
+                    CustomizableReportFeatureRow(
+                        icon: "calendar.badge.clock",
+                        title: "Include Future Concerts",
+                        description: "Include upcoming concerts in profit analysis calculations",
+                        isEnabled: $includeFutureConcerts
                     )
                 }
             }
@@ -5905,7 +5934,8 @@ struct ReportingView: View {
                 includeProfitAnalysis: self.includeProfitAnalysis,
                 includeConcertData: self.includeConcertData,
                 includePerformanceRankings: self.includePerformanceRankings,
-                includeExecutiveSummary: self.includeExecutiveSummary
+                includeExecutiveSummary: self.includeExecutiveSummary,
+                includeFutureConcerts: self.includeFutureConcerts
             )
             
             let reportFileURL = ReportGenerator.shared.generateComprehensiveReportFile(
@@ -6889,12 +6919,14 @@ struct ReportOptions {
     let includeConcertData: Bool
     let includePerformanceRankings: Bool
     let includeExecutiveSummary: Bool
+    let includeFutureConcerts: Bool
     
     static let all = ReportOptions(
         includeProfitAnalysis: true,
         includeConcertData: true,
         includePerformanceRankings: true,
-        includeExecutiveSummary: true
+        includeExecutiveSummary: true,
+        includeFutureConcerts: false
     )
 }
 
@@ -6935,13 +6967,13 @@ class ReportGenerator {
         
         // Executive Summary
         if options.includeExecutiveSummary {
-            csv += generateExecutiveSummary(concerts: concerts)
+            csv += generateExecutiveSummary(concerts: concerts, includeFutureConcerts: options.includeFutureConcerts)
             csv += "\n"
         }
         
         // Concert Overview / Performance Rankings
         if options.includePerformanceRankings {
-            csv += generateConcertOverview(concerts: concerts)
+            csv += generateConcertOverview(concerts: concerts, includeFutureConcerts: options.includeFutureConcerts)
             csv += "\n"
         }
         
@@ -6953,17 +6985,18 @@ class ReportGenerator {
         
         // Profit Analysis
         if options.includeProfitAnalysis {
-            csv += generateProfitAnalysis(concerts: concerts)
+            csv += generateProfitAnalysis(concerts: concerts, includeFutureConcerts: options.includeFutureConcerts)
         }
         
         return csv
     }
     
-    private func generateExecutiveSummary(concerts: [Concert]) -> String {
+    private func generateExecutiveSummary(concerts: [Concert], includeFutureConcerts: Bool = false) -> String {
         var csv = "=== EXECUTIVE SUMMARY ===\n"
         
-        // Filter to only include concerts that have already happened for financial metrics
+        // Filter concerts based on includeFutureConcerts option
         let currentDate = Date()
+        let analysisConcerts = includeFutureConcerts ? concerts : concerts.filter { $0.date <= currentDate }
         let pastConcerts = concerts.filter { $0.date <= currentDate }
         
         // Basic counts include ALL concerts (past and future)
@@ -6976,13 +7009,13 @@ class ReportGenerator {
         let pastTotalSeats = pastConcerts.reduce(0) { $0 + $1.seats.count }
         let pastTotalSoldSeats = pastConcerts.reduce(0) { $0 + $1.ticketsSold }
         
-        let totalRevenue = pastConcerts.reduce(0.0) { total, concert in
+        let totalRevenue = analysisConcerts.reduce(0.0) { total, concert in
             let seatRevenue = concert.seats.compactMap { $0.price }.reduce(0.0, +)
             let parkingRevenue = concert.parkingTicket?.price ?? 0.0
             return total + seatRevenue + parkingRevenue
         }
         
-        let totalCosts = pastConcerts.reduce(0.0) { total, concert in
+        let totalCosts = analysisConcerts.reduce(0.0) { total, concert in
             let seatCosts = concert.seats.reduce(0.0) { $0 + ($1.cost ?? 0.0) }
             let parkingCost = concert.parkingTicket?.cost ?? 0.0
             return total + seatCosts + parkingCost
@@ -6992,7 +7025,8 @@ class ReportGenerator {
         let occupancyRate = pastTotalSeats > 0 ? Double(pastTotalSoldSeats) / Double(pastTotalSeats) * 100.0 : 0.0
         let profitMargin = totalCosts > 0 ? (netProfit / totalCosts) * 100.0 : 0.0
         
-        csv += "Note: Financial metrics (Revenue/Costs/Profit/ROI/Averages/Occupancy Rate) include past concerts only\n"
+        let analysisScope = includeFutureConcerts ? "all concerts (past and future)" : "past concerts only"
+        csv += "Note: Financial metrics (Revenue/Costs/Profit/ROI/Averages) include \(analysisScope)\n"
         csv += "Seat counts include all scheduled concerts (past and future)\n\n"
         csv += "Metric,Value\n"
         csv += "Total Concerts,\(totalConcerts)\n"
@@ -7004,12 +7038,13 @@ class ReportGenerator {
         csv += "Total Costs,\(formatCurrency(totalCosts))\n"
         csv += "Net Profit,\(formatCurrency(netProfit))\n"
         csv += "Return on Investment (ROI),\(String(format: "%.1f", profitMargin))%\n"
-        csv += "Average Profit per Concert (Past Shows Only),\(formatCurrency(pastConcerts.count > 0 ? netProfit / Double(pastConcerts.count) : 0.0))\n"
+        let avgProfitLabel = includeFutureConcerts ? "Average Profit per Concert" : "Average Profit per Concert (Past Shows Only)"
+        csv += "\(avgProfitLabel),\(formatCurrency(analysisConcerts.count > 0 ? netProfit / Double(analysisConcerts.count) : 0.0))\n"
         
         return csv
     }
     
-    private func generateConcertOverview(concerts: [Concert]) -> String {
+    private func generateConcertOverview(concerts: [Concert], includeFutureConcerts: Bool = false) -> String {
         var csv = "=== CONCERT OVERVIEW ===\n"
         csv += "Artist,Date,Seats Sold,Seats Reserved,Occupancy Rate,Revenue,Costs,Profit,ROI %\n"
         
@@ -7065,18 +7100,19 @@ class ReportGenerator {
         return csv
     }
     
-    private func generateProfitAnalysis(concerts: [Concert]) -> String {
+    private func generateProfitAnalysis(concerts: [Concert], includeFutureConcerts: Bool = false) -> String {
         var csv = "=== PROFIT ANALYSIS ===\n"
-        csv += "Note: Analysis includes past concerts only\n\n"
+        let analysisScope = includeFutureConcerts ? "all concerts (past and future)" : "past concerts only"
+        csv += "Note: Analysis includes \(analysisScope)\n\n"
         
-        // Filter to only include concerts that have already happened
+        // Filter concerts based on includeFutureConcerts option
         let currentDate = Date()
-        let pastConcerts = concerts.filter { $0.date <= currentDate }
+        let analysisConcerts = includeFutureConcerts ? concerts : concerts.filter { $0.date <= currentDate }
         
         // Performance rankings
         var concertPerformance: [(String, Double, Double)] = []
         
-        for concert in pastConcerts {
+        for concert in analysisConcerts {
             let seatRevenue = concert.seats.compactMap { $0.price }.reduce(0.0, +)
             let parkingRevenue = concert.parkingTicket?.price ?? 0.0
             let totalRevenue = seatRevenue + parkingRevenue
@@ -7104,7 +7140,7 @@ class ReportGenerator {
         var sourceRevenue: [String: Double] = [:]
         var sourceCount: [String: Int] = [:]
         
-        for concert in concerts {
+        for concert in analysisConcerts {
             for seat in concert.seats {
                 if let source = seat.source, let price = seat.price {
                     sourceRevenue[source.rawValue, default: 0.0] += price
