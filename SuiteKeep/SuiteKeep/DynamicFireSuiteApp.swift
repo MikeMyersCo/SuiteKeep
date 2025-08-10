@@ -4655,20 +4655,11 @@ struct InteractiveFireSuiteView: View {
                     // Available legend
                     HStack(spacing: 8) {
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        Color(red: 0.95, green: 0.95, blue: 0.97),
-                                        Color(red: 0.88, green: 0.88, blue: 0.92)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
+                            .fill(Color(red: 0.7, green: 0.8, blue: 0.95))  // Match seat color
                             .frame(width: 16, height: 16)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 6)
-                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                    .stroke(Color.blue.opacity(0.3), lineWidth: 1)
                             )
                         Text("Available")
                             .font(.system(size: 12, weight: .medium))
@@ -4678,16 +4669,7 @@ struct InteractiveFireSuiteView: View {
                     // Reserved legend
                     HStack(spacing: 8) {
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        Color(red: 1.0, green: 0.7, blue: 0.2),
-                                        Color(red: 0.95, green: 0.6, blue: 0.1)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
+                            .fill(Color(red: 1.0, green: 0.65, blue: 0.2))  // Match seat color
                             .frame(width: 16, height: 16)
                         Text("Reserved")
                             .font(.system(size: 12, weight: .medium))
@@ -4697,16 +4679,7 @@ struct InteractiveFireSuiteView: View {
                     // Sold legend
                     HStack(spacing: 8) {
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        Color(red: 0.2, green: 0.8, blue: 0.4),
-                                        Color(red: 0.1, green: 0.7, blue: 0.3)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
+                            .fill(Color(red: 0.2, green: 0.8, blue: 0.4))  // Match seat color
                             .frame(width: 16, height: 16)
                         Text("Sold")
                             .font(.system(size: 12, weight: .medium))
@@ -4943,7 +4916,7 @@ struct CompactSeatView: View {
             return .blue
         }
         switch seat.status {
-        case .available: return Color(red: 0.95, green: 0.95, blue: 0.97)
+        case .available: return Color(red: 0.7, green: 0.8, blue: 0.95)  // Light blue
         case .reserved: return Color(red: 1.0, green: 0.65, blue: 0.2)
         case .sold: return Color(red: 0.2, green: 0.8, blue: 0.4)
         }
@@ -4951,7 +4924,7 @@ struct CompactSeatView: View {
     
     var textColor: Color {
         switch seat.status {
-        case .available: return .primary
+        case .available: return Color(red: 0.3, green: 0.3, blue: 0.4)  // Darker blue-gray for contrast
         case .reserved, .sold: return .white
         }
     }
