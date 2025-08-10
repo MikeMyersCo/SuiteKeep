@@ -108,8 +108,7 @@ class SettingsManager: ObservableObject {
 
 // MARK: - Vibrant Color Theme
 extension Color {
-    // Fire colors for firepit animation
-    // Note: fireOrange is auto-generated from Assets.xcassets/FireOrange.colorset
+    // Fire colors for firepit animation (fireOrange is defined in Assets.xcassets)
     static let fireRed = Color(red: 0.9, green: 0.1, blue: 0.0)
     static let fireYellow = Color(red: 1.0, green: 0.8, blue: 0.0)
     
@@ -131,6 +130,7 @@ extension Color {
     // Modern colors with engagement focus - now adaptive to light/dark mode
     static let modernBackground = Color(.systemBackground)
     static let modernSecondary = Color(.secondarySystemBackground)
+    static let modernCard = Color(.tertiarySystemBackground)
     static let modernAccent = Color(red: 0.0, green: 0.7, blue: 1.0) // Bright blue
     static let modernText = Color(.label)
     static let modernTextSecondary = Color(.secondaryLabel)
@@ -1297,6 +1297,7 @@ struct DynamicFirepitView: View {
         }
     }
 }
+
 
 
 // MARK: - Enhanced Performance Metrics View
@@ -4524,190 +4525,271 @@ struct InteractiveFireSuiteView: View {
                 }
             }
             
-            // 3D-like Fire Suite Layout
-            ZStack {
-                // Stage background
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(
-                        LinearGradient(
-                            colors: [.blue.opacity(0.3), .cyan.opacity(0.2)],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
-                    .frame(width: 350, height: 280) // Made taller to fit seats properly
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                    )
-                
-                VStack(spacing: 8) {
-                    // Stage
-                    HStack {
-                        Spacer()
-                        VStack {
-                            Image(systemName: "music.mic")
-                                .font(.title)
-                                .foregroundColor(.blue)
-                            Text("STAGE")
-                                .font(.caption)
-                                .fontWeight(.bold)
-                                .foregroundColor(.blue)
-                        }
-                        Spacer()
+            // Professional U-Shaped Suite Layout
+            VStack(spacing: 12) {
+                // Stage indicator
+                HStack {
+                    Spacer()
+                    HStack(spacing: 6) {
+                        Image(systemName: "music.mic")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.blue)
+                        Text("STAGE")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.blue)
                     }
-                    
-                    // Fire Suite Layout with firepit in center - CORRECT seat positions
-                    ZStack {
-                        // Bottom row: Seats 6, 5, 4, 3 (left to right) 
-                        VStack {
-                            Spacer()
-                            HStack(spacing: 6) {
-                                InteractiveSeatView(
-                                    seatNumber: 6,
-                                    seat: concert.seats[5],
-                                    isSelected: selectedSeats.contains(5),
-                                    isBatchMode: isBatchMode,
-                                    onTap: { handleSeatTap(5) }
-                                )
-                                InteractiveSeatView(
-                                    seatNumber: 5,
-                                    seat: concert.seats[4],
-                                    isSelected: selectedSeats.contains(4),
-                                    isBatchMode: isBatchMode,
-                                    onTap: { handleSeatTap(4) }
-                                )
-                                InteractiveSeatView(
-                                    seatNumber: 4,
-                                    seat: concert.seats[3],
-                                    isSelected: selectedSeats.contains(3),
-                                    isBatchMode: isBatchMode,
-                                    onTap: { handleSeatTap(3) }
-                                )
-                                InteractiveSeatView(
-                                    seatNumber: 3,
-                                    seat: concert.seats[2],
-                                    isSelected: selectedSeats.contains(2),
-                                    isBatchMode: isBatchMode,
-                                    onTap: { handleSeatTap(2) }
-                                )
-                            }
-                        }
-                        
-                        // Side seats positioned to align with bottom row seats
-                        HStack {
-                            // Left side: Seats 8, 7 aligned above seat 6
-                            VStack(spacing: 6) {
-                                InteractiveSeatView(
-                                    seatNumber: 8,
-                                    seat: concert.seats[7],
-                                    isSelected: selectedSeats.contains(7),
-                                    isBatchMode: isBatchMode,
-                                    onTap: { handleSeatTap(7) }
-                                )
-                                .offset(y: -24) // Move seat 8 up for consistent spacing
-                                InteractiveSeatView(
-                                    seatNumber: 7,
-                                    seat: concert.seats[6],
-                                    isSelected: selectedSeats.contains(6),
-                                    isBatchMode: isBatchMode,
-                                    onTap: { handleSeatTap(6) }
-                                )
-                                .offset(y: -32) // Move seat 7 up more to prevent text overlap
-                                Spacer()
-                                    .frame(height: 38) // Space for bottom seat alignment
-                            }
-                            .offset(x: 19) // Align with seat 6 position
-                            
-                            Spacer()
-                            
-                            // Right side: Seats 1, 2 aligned above seat 3  
-                            VStack(spacing: 6) {
-                                InteractiveSeatView(
-                                    seatNumber: 1,
-                                    seat: concert.seats[0],
-                                    isSelected: selectedSeats.contains(0),
-                                    isBatchMode: isBatchMode,
-                                    onTap: { handleSeatTap(0) }
-                                )
-                                .offset(y: -24) // Move seat 1 up for consistent spacing
-                                InteractiveSeatView(
-                                    seatNumber: 2,
-                                    seat: concert.seats[1],
-                                    isSelected: selectedSeats.contains(1),
-                                    isBatchMode: isBatchMode,
-                                    onTap: { handleSeatTap(1) }
-                                )
-                                .offset(y: -32) // Move seat 2 up more to prevent text overlap
-                                Spacer()
-                                    .frame(height: 38) // Space for bottom seat alignment
-                            }
-                            .offset(x: -19) // Align with seat 3 position
-                        }
-                        
-                        // Firepit centered among all seats
-                        DynamicFirepitView(isPulsing: pulseFirepit)
-                            .scaleEffect(1.3)
-                            .offset(y: -24) // Move firepit up about an inch
-                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                    Spacer()
                 }
-                .padding(20)
-                .offset(y: -20) // Adjusted offset for better centering
+                
+                // Main suite card with U-shaped layout
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.modernCard)
+                    .frame(height: 220)
+                    .overlay(
+                        ZStack {
+                            // Bottom row positioned at the bottom
+                            VStack {
+                                Spacer()
+                                HStack(spacing: 14) {
+                                    CompactSeatView(
+                                        seatNumber: 6,
+                                        seat: concert.seats[5],
+                                        isSelected: selectedSeats.contains(5),
+                                        isBatchMode: isBatchMode,
+                                        onTap: { handleSeatTap(5) }
+                                    )
+                                    CompactSeatView(
+                                        seatNumber: 5,
+                                        seat: concert.seats[4],
+                                        isSelected: selectedSeats.contains(4),
+                                        isBatchMode: isBatchMode,
+                                        onTap: { handleSeatTap(4) }
+                                    )
+                                    CompactSeatView(
+                                        seatNumber: 4,
+                                        seat: concert.seats[3],
+                                        isSelected: selectedSeats.contains(3),
+                                        isBatchMode: isBatchMode,
+                                        onTap: { handleSeatTap(3) }
+                                    )
+                                    CompactSeatView(
+                                        seatNumber: 3,
+                                        seat: concert.seats[2],
+                                        isSelected: selectedSeats.contains(2),
+                                        isBatchMode: isBatchMode,
+                                        onTap: { handleSeatTap(2) }
+                                    )
+                                }
+                                .padding(.bottom, 20)
+                            }
+                            
+                            // Left side vertical stack aligned with seat 6
+                            HStack {
+                                VStack(spacing: 8) {
+                                    CompactSeatView(
+                                        seatNumber: 8,
+                                        seat: concert.seats[7],
+                                        isSelected: selectedSeats.contains(7),
+                                        isBatchMode: isBatchMode,
+                                        onTap: { handleSeatTap(7) }
+                                    )
+                                    CompactSeatView(
+                                        seatNumber: 7,
+                                        seat: concert.seats[6],
+                                        isSelected: selectedSeats.contains(6),
+                                        isBatchMode: isBatchMode,
+                                        onTap: { handleSeatTap(6) }
+                                    )
+                                    Spacer()
+                                        .frame(height: 60) // Space to align with bottom row
+                                }
+                                .padding(.leading, 20)
+                                
+                                Spacer()
+                            }
+                            
+                            // Right side vertical stack aligned with seat 3
+                            HStack {
+                                Spacer()
+                                
+                                VStack(spacing: 8) {
+                                    CompactSeatView(
+                                        seatNumber: 1,
+                                        seat: concert.seats[0],
+                                        isSelected: selectedSeats.contains(0),
+                                        isBatchMode: isBatchMode,
+                                        onTap: { handleSeatTap(0) }
+                                    )
+                                    CompactSeatView(
+                                        seatNumber: 2,
+                                        seat: concert.seats[1],
+                                        isSelected: selectedSeats.contains(1),
+                                        isBatchMode: isBatchMode,
+                                        onTap: { handleSeatTap(1) }
+                                    )
+                                    Spacer()
+                                        .frame(height: 60) // Space to align with bottom row
+                                }
+                                .padding(.trailing, 20)
+                            }
+                            
+                            // Center firepit positioned between upper seats (8,7 and 1,2)
+                            VStack {
+                                CompactFirepitView(isPulsing: pulseFirepit)
+                                    .offset(y: 25) // Center between seat rows
+                                Spacer()
+                            }
+                        }
+                        .padding(.top, 20)
+                    )
+                    .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 2)
             }
             
-            // Revenue display
-            VStack(spacing: 8) {
-                Text("Revenue: $\(Int(concert.totalRevenue))")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundColor(.green)
-                
-                HStack(spacing: 15) {
-                    Text("\(concert.ticketsSold) sold")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.red)
-                    
-                    Text("\(concert.ticketsReserved) reserved")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.orange)
-                    
-                    Text("\(8 - concert.ticketsSold - concert.ticketsReserved) available")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.green)
-                }
-                
-                // Parking ticket status - clickable
-                Button(action: {
-                    showingParkingOptions = true
-                }) {
+            // Enhanced status legend and metrics
+            VStack(spacing: 16) {
+                // Status legend with professional design
+                HStack(spacing: 20) {
+                    // Available legend
                     HStack(spacing: 8) {
-                        Image(systemName: "car.fill")
-                            .font(.system(size: 12))
-                            .foregroundColor(.blue)
-                        
-                        if concert.parkingTicketSold {
-                            Text("Parking: SOLD")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.red)
-                        } else if concert.parkingTicketReserved {
-                            Text("Parking: RESERVED")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.orange)
-                        } else {
-                            Text("Parking: AVAILABLE")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(.green)
-                        }
-                        
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 10))
-                            .foregroundColor(.blue.opacity(0.6))
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color(red: 0.95, green: 0.95, blue: 0.97),
+                                        Color(red: 0.88, green: 0.88, blue: 0.92)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 16, height: 16)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                            )
+                        Text("Available")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    // Reserved legend
+                    HStack(spacing: 8) {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color(red: 1.0, green: 0.7, blue: 0.2),
+                                        Color(red: 0.95, green: 0.6, blue: 0.1)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 16, height: 16)
+                        Text("Reserved")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.orange)
+                    }
+                    
+                    // Sold legend
+                    HStack(spacing: 8) {
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color(red: 0.2, green: 0.8, blue: 0.4),
+                                        Color(red: 0.1, green: 0.7, blue: 0.3)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .frame(width: 16, height: 16)
+                        Text("Sold")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.green)
                     }
                 }
-                .buttonStyle(PlainButtonStyle())
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color(UIColor.systemBackground).opacity(0.8))
+                        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
+                )
+                
+                // Enhanced revenue display
+                VStack(spacing: 8) {
+                    Text("Revenue: $\(Int(concert.totalRevenue))")
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundColor(.green)
+                    
+                    HStack(spacing: 20) {
+                        VStack(spacing: 2) {
+                            Text("\(concert.ticketsSold)")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(.green)
+                            Text("sold")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.green.opacity(0.7))
+                        }
+                        
+                        VStack(spacing: 2) {
+                            Text("\(concert.ticketsReserved)")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(.orange)
+                            Text("reserved")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.orange.opacity(0.7))
+                        }
+                        
+                        VStack(spacing: 2) {
+                            Text("\(8 - concert.ticketsSold - concert.ticketsReserved)")
+                                .font(.system(size: 16, weight: .bold))
+                                .foregroundColor(.secondary)
+                            Text("available")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.secondary.opacity(0.7))
+                        }
+                    }
+                }
             }
-            .padding()
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+            
+            // Parking ticket status - clickable
+            Button(action: {
+                showingParkingOptions = true
+            }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "car.fill")
+                        .font(.system(size: 12))
+                        .foregroundColor(.blue)
+                    
+                    if concert.parkingTicketSold {
+                        Text("Parking: SOLD")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.red)
+                    } else if concert.parkingTicketReserved {
+                        Text("Parking: RESERVED")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.orange)
+                    } else {
+                        Text("Parking: AVAILABLE")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.green)
+                    }
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10))
+                        .foregroundColor(.blue.opacity(0.6))
+                }
+            }
+            .buttonStyle(PlainButtonStyle())
         }
+        .padding()
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
         .onAppear {
             startPulseAnimation()
         }
@@ -4786,6 +4868,145 @@ struct InteractiveFireSuiteView: View {
     }
 }
 
+// MARK: - Compact Firepit View
+struct CompactFirepitView: View {
+    let isPulsing: Bool
+    
+    var body: some View {
+        ZStack {
+            // Outer glow for rectangular firepit
+            RoundedRectangle(cornerRadius: 10)
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            Color.fireOrange.opacity(0.3),
+                            Color.fireOrange.opacity(0.15),
+                            Color.clear
+                        ],
+                        center: .center,
+                        startRadius: 15,
+                        endRadius: 60
+                    )
+                )
+                .frame(width: 120, height: 70)
+                .blur(radius: 10)
+                .scaleEffect(isPulsing ? 1.1 : 1.0)
+            
+            // Main rectangular firepit
+            RoundedRectangle(cornerRadius: 8)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.fireRed,
+                            Color.fireOrange,
+                            Color.fireYellow.opacity(0.9)
+                        ],
+                        startPoint: .bottom,
+                        endPoint: .top
+                    )
+                )
+                .frame(width: 100, height: 50)
+                .overlay(
+                    // Inner fire detail
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.fireYellow.opacity(0.8),
+                                    Color.fireOrange.opacity(0.6)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .frame(width: 85, height: 38)
+                        .blur(radius: 2)
+                )
+                .shadow(color: .fireOrange.opacity(0.6), radius: 12)
+                .shadow(color: .fireRed.opacity(0.4), radius: 6)
+        }
+        .animation(.easeInOut(duration: 2.0).repeatForever(), value: isPulsing)
+    }
+}
+
+// MARK: - Compact Seat View
+struct CompactSeatView: View {
+    let seatNumber: Int
+    let seat: Seat
+    let isSelected: Bool
+    let isBatchMode: Bool
+    let onTap: () -> Void
+    @State private var isPressed = false
+    
+    var seatColor: Color {
+        if isBatchMode && isSelected {
+            return .blue
+        }
+        switch seat.status {
+        case .available: return Color(red: 0.95, green: 0.95, blue: 0.97)
+        case .reserved: return Color(red: 1.0, green: 0.65, blue: 0.2)
+        case .sold: return Color(red: 0.2, green: 0.8, blue: 0.4)
+        }
+    }
+    
+    var textColor: Color {
+        switch seat.status {
+        case .available: return .primary
+        case .reserved, .sold: return .white
+        }
+    }
+    
+    var statusText: String {
+        if let price = seat.price, seat.status != .available {
+            return "$\(Int(price))"
+        }
+        return seat.status == .available ? "OPEN" : "RESV"
+    }
+    
+    var body: some View {
+        Button(action: {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isPressed = true
+            }
+            onTap()
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    isPressed = false
+                }
+            }
+        }) {
+            VStack(spacing: 4) {
+                // Seat button
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(seatColor)
+                        .frame(width: 44, height: 44)
+                        .scaleEffect(isPressed ? 0.95 : 1.0)
+                        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+                    
+                    if isBatchMode && isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.white)
+                    } else {
+                        Text("\(seatNumber)")
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .foregroundColor(textColor)
+                    }
+                }
+                
+                // Status/Price text
+                Text(statusText)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
 // MARK: - Interactive Seat View
 struct InteractiveSeatView: View {
     let seatNumber: Int
@@ -4797,176 +5018,266 @@ struct InteractiveSeatView: View {
     @State private var isAnimating = false
     @State private var isHovering = false
     
-    var seatColor: LinearGradient {
+    var seatGradient: LinearGradient {
         if isBatchMode && isSelected {
-            // Selected seats in batch mode get a blue gradient
-            return LinearGradient(colors: [Color.blue, Color.blue.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            return LinearGradient(
+                colors: [
+                    Color(red: 0.2, green: 0.6, blue: 1.0),
+                    Color(red: 0.1, green: 0.4, blue: 0.9)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
         }
         
         switch seat.status {
         case .available:
-            return LinearGradient(colors: [Color.seatAvailable, Color.seatAvailable.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            return LinearGradient(
+                colors: [
+                    Color(red: 0.95, green: 0.95, blue: 0.97),
+                    Color(red: 0.88, green: 0.88, blue: 0.92)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
         case .reserved:
-            return LinearGradient(colors: [Color.seatReserved, Color.seatReserved.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            return LinearGradient(
+                colors: [
+                    Color(red: 1.0, green: 0.7, blue: 0.2),
+                    Color(red: 0.95, green: 0.6, blue: 0.1)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
         case .sold:
-            return LinearGradient(colors: [Color.seatSold, Color.seatSold.opacity(0.8)], startPoint: .topLeading, endPoint: .bottomTrailing)
+            return LinearGradient(
+                colors: [
+                    Color(red: 0.2, green: 0.8, blue: 0.4),
+                    Color(red: 0.1, green: 0.7, blue: 0.3)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+    
+    var seatTextColor: Color {
+        switch seat.status {
+        case .available:
+            return Color(red: 0.2, green: 0.2, blue: 0.3)
+        case .reserved, .sold:
+            return .white
+        }
+    }
+    
+    var statusIcon: String {
+        switch seat.status {
+        case .available:
+            return "circle"
+        case .reserved:
+            return "clock.circle.fill"
+        case .sold:
+            return "checkmark.circle.fill"
         }
     }
     
     var body: some View {
-        VStack(spacing: 3) {
+        VStack(spacing: 6) {
             Button(action: {
-                // Haptic feedback
-                HapticManager.shared.impact(style: .light)
+                // Enhanced haptic feedback
+                HapticManager.shared.impact(style: seat.status == .available ? .medium : .light)
                 
-                // Animate press
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                // Smooth press animation
+                withAnimation(.spring(response: 0.25, dampingFraction: 0.7, blendDuration: 0.1)) {
                     isPressed = true
                     isAnimating = true
                 }
                 
                 onTap()
                 
-                // Reset animation
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                // Reset press animation
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                         isPressed = false
                     }
                 }
                 
-                // Additional animation for status change
-                withAnimation(.easeInOut(duration: 0.5)) {
-                    isAnimating = false
+                // Status change animation
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    withAnimation(.easeInOut(duration: 0.4)) {
+                        isAnimating = false
+                    }
                 }
             }) {
                 ZStack {
-                    // Background circle with gradient
-                    Circle()
-                        .fill(seatColor)
-                        .frame(width: 42, height: 42)
-                        .scaleEffect(isPressed ? 1.2 : (isAnimating ? 1.1 : (isHovering ? 1.05 : 1.0)))
-                        .shadow(
-                            color: seat.status != .available ? Color.black.opacity(0.2) : Color.clear, 
-                            radius: isHovering ? 6 : 4, 
-                            x: 0, 
-                            y: isHovering ? 3 : 2
-                        )
-                        .overlay(
-                            Circle()
-                                .stroke(
-                                    isHovering ? Color.white.opacity(0.6) : Color.white.opacity(0.3), 
-                                    lineWidth: isHovering ? 2 : 1
-                                )
-                                .scaleEffect(isPressed ? 1.2 : (isHovering ? 1.02 : 1.0))
-                        )
-                        .overlay(
-                            // Pulse effect on hover
-                            Circle()
-                                .stroke(Color.white.opacity(isHovering ? 0.4 : 0), lineWidth: 3)
-                                .scaleEffect(isHovering ? 1.3 : 1.0)
-                                .opacity(isHovering ? 0.3 : 0)
-                                .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isHovering)
-                        )
-                    
+                    // Enhanced seat design
                     ZStack {
-                        // Always show seat number
-                        Text("\(seatNumber)")
-                            .font(.system(size: 16, weight: .bold, design: .rounded))
-                            .foregroundColor(.white)
+                        // Main seat body
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(seatGradient)
+                            .frame(width: 50, height: 50)
+                            .scaleEffect(
+                                isPressed ? 0.95 : 
+                                (isAnimating ? 1.08 : 
+                                (isHovering ? 1.03 : 1.0))
+                            )
+                            .shadow(
+                                color: seatShadowColor,
+                                radius: isHovering ? 8 : 5,
+                                x: 0,
+                                y: isHovering ? 4 : 2
+                            )
                         
-                        // Show batch selection indicator in top-left corner
-                        if isBatchMode && isSelected {
-                            VStack {
-                                HStack {
+                        // Subtle inner highlight
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(seat.status == .available ? 0.3 : 0.4),
+                                        Color.white.opacity(0.1)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: 1.5
+                            )
+                            .frame(width: 50, height: 50)
+                            .scaleEffect(
+                                isPressed ? 0.95 : 
+                                (isAnimating ? 1.08 : 
+                                (isHovering ? 1.03 : 1.0))
+                            )
+                        
+                        // Animated ring for interaction feedback
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(
+                                Color.white.opacity(isHovering ? 0.6 : 0),
+                                lineWidth: 2
+                            )
+                            .frame(width: 54, height: 54)
+                            .scaleEffect(isHovering ? 1.05 : 1.0)
+                            .opacity(isHovering ? 1.0 : 0.0)
+                    }
+                    
+                    // Seat content overlay
+                    ZStack {
+                        // Seat number
+                        Text("\(seatNumber)")
+                            .font(.system(size: 18, weight: .bold, design: .rounded))
+                            .foregroundColor(seatTextColor)
+                        
+                        // Status indicators
+                        VStack {
+                            HStack {
+                                if isBatchMode && isSelected {
+                                    // Batch selection indicator
                                     Image(systemName: "checkmark.circle.fill")
-                                        .font(.system(size: 14, weight: .bold))
+                                        .font(.system(size: 16, weight: .bold))
                                         .foregroundColor(.white)
-                                        .background(Circle().fill(Color.blue).frame(width: 16, height: 16))
-                                        .scaleEffect(isSelected ? 1.2 : 1.0)
-                                        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: isSelected)
-                                    Spacer()
+                                        .background(
+                                            Circle()
+                                                .fill(Color(red: 0.1, green: 0.4, blue: 0.9))
+                                                .frame(width: 20, height: 20)
+                                        )
+                                        .scaleEffect(isSelected ? 1.1 : 1.0)
+                                        .transition(.scale.combined(with: .opacity))
+                                } else if seat.status != .available {
+                                    // Status icon for reserved/sold
+                                    Image(systemName: statusIcon)
+                                        .font(.system(size: 12, weight: .bold))
+                                        .foregroundColor(.white)
+                                        .opacity(0.9)
                                 }
                                 Spacer()
                             }
+                            Spacer()
                         }
-                        // Show status icon in top-right corner for sold/reserved (only if not in batch mode or not selected)
-                        else if seat.status == .sold {
-                            VStack {
-                                HStack {
-                                    Spacer()
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(.white)
-                                        .background(Circle().fill(Color.green).frame(width: 12, height: 12))
-                                }
-                                Spacer()
-                            }
-                        } else if seat.status == .reserved {
-                            VStack {
-                                HStack {
-                                    Spacer()
-                                    Image(systemName: "clock.fill")
-                                        .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(.white)
-                                        .background(Circle().fill(Color.orange).frame(width: 12, height: 12))
-                                }
-                                Spacer()
-                            }
-                        }
+                        .frame(width: 44, height: 44)
                     }
                 }
             }
             .buttonStyle(PlainButtonStyle())
             .onHover { hovering in
-                withAnimation(.easeInOut(duration: 0.2)) {
+                withAnimation(.easeInOut(duration: 0.15)) {
                     isHovering = hovering
                 }
             }
+            .disabled(false) // Always allow interaction for better UX
             
-            // Fixed-height container for text to prevent layout shifts
-            VStack(spacing: 1) {
-                if seat.status == .sold {
-                    Text(seat.price != nil ? "$\(Int(seat.price!))" : "SOLD")
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundColor(seat.status.color)
-                    
-                    Text(displayTextForSeat(seat))
-                        .font(.system(size: 8, weight: .medium, design: .monospaced))
-                        .foregroundColor(seat.status.color.opacity(0.8))
+            // Enhanced information display
+            VStack(spacing: 2) {
+                // Status text
+                Text(primaryStatusText)
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundColor(statusTextColor)
+                    .lineLimit(1)
+                
+                // Secondary info
+                if !secondaryStatusText.isEmpty {
+                    Text(secondaryStatusText)
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundColor(statusTextColor.opacity(0.7))
                         .lineLimit(1)
-                        .frame(height: 10) // Fixed height for consistent spacing
-                } else if seat.status == .reserved && seat.note != nil {
-                    Text("RESERVED")
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundColor(seat.status.color)
-                    
-                    Text(seat.note!)
-                        .font(.system(size: 8, weight: .medium, design: .monospaced))
-                        .foregroundColor(seat.status.color.opacity(0.8))
-                        .lineLimit(1)
-                        .frame(height: 10) // Fixed height for consistent spacing
-                } else {
-                    Text(seat.status.displayText)
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundColor(seat.status.color)
-                    
-                    // Empty space to maintain consistent height
-                    Text("")
-                        .font(.system(size: 8, weight: .medium, design: .monospaced))
-                        .frame(height: 10)
                 }
             }
-            .frame(width: 52, height: 32) // Smaller text area with fixed dimensions
+            .frame(width: 60, height: 28)
             .multilineTextAlignment(.center)
         }
-        .frame(width: 55, height: 78) // Smaller overall container
+        .frame(width: 64, height: 84)
     }
     
-    private func displayTextForSeat(_ seat: Seat) -> String {
-        if seat.source == .family, let personName = seat.familyPersonName, !personName.isEmpty {
-            return personName
+    private var seatShadowColor: Color {
+        switch seat.status {
+        case .available:
+            return Color.black.opacity(0.12)
+        case .reserved:
+            return Color.orange.opacity(0.3)
+        case .sold:
+            return Color.green.opacity(0.3)
         }
-        return seat.source?.rawValue ?? ""
+    }
+    
+    private var statusTextColor: Color {
+        switch seat.status {
+        case .available:
+            return Color(red: 0.4, green: 0.4, blue: 0.5)
+        case .reserved:
+            return Color.orange
+        case .sold:
+            return Color.green
+        }
+    }
+    
+    private var primaryStatusText: String {
+        if isBatchMode && isSelected {
+            return "SELECTED"
+        }
+        
+        switch seat.status {
+        case .available:
+            return "AVAILABLE"
+        case .reserved:
+            return "RESERVED"
+        case .sold:
+            if let price = seat.price {
+                return "$\(Int(price))"
+            }
+            return "SOLD"
+        }
+    }
+    
+    private var secondaryStatusText: String {
+        switch seat.status {
+        case .available:
+            return ""
+        case .reserved:
+            return seat.note ?? ""
+        case .sold:
+            if seat.source == .family, let personName = seat.familyPersonName, !personName.isEmpty {
+                return personName
+            }
+            return seat.source?.rawValue ?? ""
+        }
     }
 }
 
@@ -4974,6 +5285,7 @@ struct InteractiveSeatView: View {
 struct SeatOptionsView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var settingsManager: SettingsManager
+    
     let seatNumber: Int
     let seat: Seat
     let onUpdate: (Seat) -> Void
@@ -4995,7 +5307,6 @@ struct SeatOptionsView: View {
         self.onUpdateAll = onUpdateAll
         self._selectedStatus = State(initialValue: seat.status)
         self._priceInput = State(initialValue: seat.price != nil ? String(seat.price!) : "")
-        // Use the seat's actual cost, or fallback to 0.0 if nil (for older seats)
         self._costInput = State(initialValue: String(seat.cost ?? 0.0))
         self._noteInput = State(initialValue: seat.note ?? "")
         self._selectedSource = State(initialValue: seat.source ?? .facebook)
@@ -5006,379 +5317,208 @@ struct SeatOptionsView: View {
     
     var body: some View {
         NavigationView {
-            ZStack {
-                // Dynamic background that adapts to light/dark mode
-                Color(.systemBackground)
-                .ignoresSafeArea()
-                
-                ScrollView {
-                    VStack(spacing: 24) {
-                        // Header
-                        VStack(spacing: 16) {
-                            Circle()
-                                .fill(seat.status.color.opacity(0.1))
-                                .frame(width: 80, height: 80)
-                                .overlay(
-                                    Text("\(seatNumber)")
-                                        .font(.system(size: 32, weight: .bold))
-                                        .foregroundColor(seat.status.color)
-                                )
-                            
-                            Text("Seat \(seatNumber)")
-                                .font(.system(size: 24, weight: .bold))
-                                .foregroundColor(.modernText)
-                            
-                            HStack {
-                                Circle()
-                                    .fill(seat.status.color)
-                                    .frame(width: 8, height: 8)
-                                Text(seat.status.rawValue.capitalized)
-                                    .font(.system(size: 16))
-                                    .foregroundColor(seat.status.color)
-                            }
-                        }
-                        .padding(.top, 20)
-                    
-                        // Status selection
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("Seat Status")
-                                .font(.system(size: 20, weight: .semibold))
-                                .foregroundColor(.modernText)
-                            
-                            VStack(spacing: 12) {
-                                ForEach(SeatStatus.allCases, id: \.self) { status in
-                                    Button(action: {
-                                        let previousStatus = selectedStatus
-                                        selectedStatus = status
-                                        
-                                        // Auto-populate dateSold when status changes to sold
-                                        if status == .sold && previousStatus != .sold {
-                                            dateSold = Date()
-                                            datePaid = Date()
-                                        }
-                                    }) {
-                                        HStack(spacing: 16) {
-                                            Circle()
-                                                .fill(status.color.opacity(0.1))
-                                                .frame(width: 40, height: 40)
-                                                .overlay(
-                                                    Circle()
-                                                        .fill(status.color)
-                                                        .frame(width: 16, height: 16)
-                                                )
-                                            
-                                            Text(status.rawValue.capitalized)
-                                                .font(.system(size: 16, weight: .medium))
-                                                .foregroundColor(.modernText)
-                                            
-                                            Spacer()
-                                            
-                                            if selectedStatus == status {
-                                                Image(systemName: "checkmark.circle.fill")
-                                                    .font(.system(size: 20))
-                                                    .foregroundColor(status.color)
-                                            }
-                                        }
-                                        .padding(16)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 16)
-                                                .fill(selectedStatus == status ? status.color.opacity(0.2) : Color.modernSecondary)
-                                                .overlay(
-                                                    RoundedRectangle(cornerRadius: 16)
-                                                        .stroke(selectedStatus == status ? status.color.opacity(0.3) : Color.clear, lineWidth: 1)
-                                                )
-                                        )
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
-                                }
-                            }
-                        }
-                    
-                        // Price and Source input (only for sold status)
-                        if selectedStatus == .sold {
-                            VStack(spacing: 20) {
-                                // Price input
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Sale Price")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.modernTextSecondary)
-                                    
-                                    HStack {
-                                        Text("$")
-                                            .font(.system(size: 18, weight: .bold))
-                                            .foregroundColor(.modernText)
-                                        
-                                        TextField("", text: $priceInput)
-                                            .font(.system(size: 16))
-                                            .foregroundColor(.modernText)
-                                            .padding(16)
-                                            .padding(.leading, -10)
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 12)
-                                                    .fill(Color.modernSecondary)
-                                            )
-                                            .keyboardType(.decimalPad)
-                                    }
-                                }
-                                
-                                // Source dropdown
-                                VStack(alignment: .center, spacing: 8) {
-                                    Text("Ticket Source")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.modernTextSecondary)
-                                    
-                                    Picker("", selection: $selectedSource) {
-                                        ForEach(TicketSource.allCases, id: \.self) { source in
-                                            Text(source.rawValue)
-                                                .tag(source)
-                                        }
-                                    }
-                                    .pickerStyle(.menu)
-                                    .tint(.modernText)
-                                    .padding(12)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .fill(Color.modernSecondary)
-                                    )
-                                    .onChange(of: selectedSource) { newSource in
-                                        // Auto-set price for family tickets
-                                        if newSource == .family {
-                                            priceInput = String(format: "%.0f", settingsManager.familyTicketPrice)
-                                        }
-                                    }
-                                }
-                                
-                                // Family person name field (only for family source)
-                                if selectedSource == .family {
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text("Person's Name")
-                                            .font(.system(size: 14, weight: .medium))
-                                            .foregroundColor(.modernTextSecondary)
-                                        
-                                        TextField("Enter person's name", text: $familyPersonName)
-                                            .font(.system(size: 16))
-                                            .foregroundColor(.modernText)
-                                            .padding(12)
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 12)
-                                                    .fill(Color.modernSecondary)
-                                            )
-                                            .autocapitalization(.words)
-                                    }
-                                }
-                                
-                                // Date fields (only for sold status)
-                                VStack(spacing: 16) {
-                                    // Date Sold
-                                    VStack(alignment: .center, spacing: 8) {
-                                        Text("Date Sold")
-                                            .font(.system(size: 14, weight: .medium))
-                                            .foregroundColor(.modernTextSecondary)
-                                        
-                                        HStack {
-                                            Spacer()
-                                            DatePicker("", selection: $dateSold, displayedComponents: .date)
-                                                .datePickerStyle(.compact)
-                                                .colorScheme(.dark)
-                                                .padding(12)
-                                                .background(
-                                                    RoundedRectangle(cornerRadius: 12)
-                                                        .fill(Color.modernSecondary)
-                                                )
-                                                .fixedSize()
-                                            Spacer()
-                                        }
-                                    }
-                                    
-                                    // Date Paid
-                                    VStack(alignment: .center, spacing: 8) {
-                                        Text("Date Paid")
-                                            .font(.system(size: 14, weight: .medium))
-                                            .foregroundColor(.modernTextSecondary)
-                                        
-                                        HStack {
-                                            Spacer()
-                                            DatePicker("", selection: $datePaid, displayedComponents: .date)
-                                                .datePickerStyle(.compact)
-                                                .colorScheme(.dark)
-                                                .padding(12)
-                                                .background(
-                                                    RoundedRectangle(cornerRadius: 12)
-                                                        .fill(Color.modernSecondary)
-                                                )
-                                                .fixedSize()
-                                            Spacer()
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    
-                        // Note input (only for reserved status)
-                        if selectedStatus == .reserved {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Reservation Note")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.modernTextSecondary)
-                                
-                                Text("Maximum 5 words")
-                                    .font(.system(size: 12))
-                                    .foregroundColor(.modernTextSecondary.opacity(0.8))
-                                
-                                TextField("Enter note...", text: $noteInput)
-                                    .font(.system(size: 16))
-                                    .foregroundColor(.modernText)
-                                    .padding(16)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .fill(Color.modernSecondary)
-                                    )
-                                    .onChange(of: noteInput) { newValue in
-                                        let words = newValue.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
-                                        if words.count > 5 {
-                                            noteInput = words.prefix(5).joined(separator: " ")
-                                        }
-                                    }
-                            }
-                        }
-                    
-                        Spacer()
-                        
-                        // Cost input (less prominent)
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text("Ticket Cost")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(.modernTextSecondary.opacity(0.7))
-                                
-                                Spacer()
-                                
-                                HStack(spacing: 4) {
-                                    Text("$")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.modernTextSecondary.opacity(0.7))
-                                    
-                                    TextField("25", text: $costInput)
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.modernText)
-                                        .frame(width: 50)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 6)
-                                        .background(
-                                            RoundedRectangle(cornerRadius: 8)
-                                                .fill(Color.modernSecondary.opacity(0.7))
-                                        )
-                                        .keyboardType(.decimalPad)
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 8)
-                        
-                        // Action buttons
-                        VStack(spacing: 12) {
-                            Button {
-                                var updatedSeat = seat
-                                updatedSeat.status = selectedStatus
-                                
-                                if selectedStatus == .sold {
-                                    updatedSeat.price = priceInput.isEmpty ? nil : Double(priceInput)
-                                    updatedSeat.cost = Double(costInput) ?? settingsManager.defaultSeatCost
-                                    updatedSeat.note = nil
-                                    updatedSeat.source = selectedSource
-                                    updatedSeat.familyPersonName = selectedSource == .family ? (familyPersonName.isEmpty ? nil : familyPersonName) : nil
-                                    updatedSeat.dateSold = dateSold
-                                    updatedSeat.datePaid = datePaid
-                                    // Play ding sound effect
-                                    playDingSound()
-                                } else if selectedStatus == .reserved {
-                                    updatedSeat.price = nil
-                                    updatedSeat.cost = Double(costInput) ?? settingsManager.defaultSeatCost
-                                    updatedSeat.note = noteInput.isEmpty ? nil : noteInput
-                                    updatedSeat.source = nil
-                                    updatedSeat.familyPersonName = nil
-                                    updatedSeat.dateSold = nil
-                                    updatedSeat.datePaid = nil
-                                } else {
-                                    updatedSeat.price = nil
-                                    updatedSeat.cost = Double(costInput) ?? settingsManager.defaultSeatCost
-                                    updatedSeat.note = nil
-                                    updatedSeat.source = nil
-                                    updatedSeat.familyPersonName = nil
-                                    updatedSeat.dateSold = nil
-                                    updatedSeat.datePaid = nil
-                                }
-                                
-                                // Apply to current seat only
-                                onUpdate(updatedSeat)
-                                
-                                dismiss()
-                            } label: {
-                                HStack {
-                                    Image(systemName: "checkmark.circle.fill")
-                                    Text("Update Seat")
-                                }
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 16)
-                                        .fill(selectedStatus.color)
-                                )
-                            }
-                            
-                            Button {
-                                dismiss()
-                            } label: {
-                                HStack {
-                                    Image(systemName: "xmark.circle")
-                                    Text("Cancel")
-                                }
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.red)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 16)
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
-                }
-                .scrollDismissesKeyboard(.interactively)
-            }
-            .navigationBarHidden(true)
-            .onAppear {
-                // If seat is sold and source is family, set the price to family ticket price
-                if selectedStatus == .sold && selectedSource == .family && priceInput.isEmpty {
-                    priceInput = String(format: "%.0f", settingsManager.familyTicketPrice)
-                }
-            }
-            .overlay(
-                HStack {
-                    Spacer()
-                    Button(action: {
-                        dismiss()
-                    }) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundColor(.black)
-                            .frame(width: 32, height: 32)
-                            .background(
-                                Circle()
-                                    .fill(Color.white)
-                                    .shadow(color: Color.black.opacity(0.08), radius: 8, x: 0, y: 2)
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Header
+                    VStack(spacing: 16) {
+                        Circle()
+                            .fill(selectedStatus.color)
+                            .frame(width: 80, height: 80)
+                            .overlay(
+                                Text("\(seatNumber)")
+                                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                                    .foregroundColor(.white)
                             )
+                        
+                        Text("Seat \(seatNumber)")
+                            .font(.system(size: 24, weight: .bold))
                     }
+                    .padding(.top, 20)
+                
+                    // Status Selection
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Status")
+                            .font(.system(size: 18, weight: .semibold))
+                        
+                        HStack(spacing: 8) {
+                            ForEach(SeatStatus.allCases, id: \.self) { status in
+                                Button(action: {
+                                    selectedStatus = status
+                                    if status == .sold {
+                                        dateSold = Date()
+                                        datePaid = Date()
+                                    }
+                                }) {
+                                    VStack(spacing: 6) {
+                                        Circle()
+                                            .fill(status.color)
+                                            .frame(width: 12, height: 12)
+                                        Text(status.rawValue.capitalized)
+                                            .font(.system(size: 12, weight: .medium))
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 12)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(selectedStatus == status ? status.color.opacity(0.15) : Color.gray.opacity(0.1))
+                                    )
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
+                        }
+                    }
+                
+                    // Form Fields
+                    if selectedStatus == .sold {
+                        VStack(spacing: 16) {
+                            HStack {
+                                Text("$")
+                                    .font(.system(size: 18, weight: .bold))
+                                TextField("Price", text: $priceInput)
+                                    .keyboardType(.decimalPad)
+                                    .textFieldStyle(.roundedBorder)
+                            }
+                            
+                            Picker("Source", selection: $selectedSource) {
+                                ForEach(TicketSource.allCases, id: \.self) { source in
+                                    Text(source.rawValue).tag(source)
+                                }
+                            }
+                            .pickerStyle(.menu)
+                            
+                            if selectedSource == .family {
+                                TextField("Person's name", text: $familyPersonName)
+                                    .textFieldStyle(.roundedBorder)
+                            }
+                            
+                            DatePicker("Date Sold", selection: $dateSold, displayedComponents: .date)
+                            DatePicker("Date Paid", selection: $datePaid, displayedComponents: .date)
+                        }
+                    } else if selectedStatus == .reserved {
+                        TextField("Note (max 5 words)", text: $noteInput)
+                            .textFieldStyle(.roundedBorder)
+                            .onChange(of: noteInput) { newValue in
+                                let words = newValue.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+                                if words.count > 5 {
+                                    noteInput = words.prefix(5).joined(separator: " ")
+                                }
+                            }
+                    }
+                    
+                    HStack {
+                        Text("Cost: $")
+                        TextField("25", text: $costInput)
+                            .keyboardType(.decimalPad)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    
+                    // Action Buttons
+                    VStack(spacing: 12) {
+                        Button("Update Seat") {
+                            updateSeat()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        
+                        Button("Cancel") {
+                            dismiss()
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    .padding(.top, 20)
                 }
                 .padding()
-                .padding(.top, 44)
+            }
+            .navigationBarHidden(true)
+            .overlay(
+                Button("✕") {
+                    dismiss()
+                }
+                .frame(width: 32, height: 32)
+                .background(Circle().fill(Color.white))
+                .shadow(radius: 4)
+                .padding()
                 , alignment: .topTrailing
             )
         }
     }
     
-    private func playDingSound() {
-        AudioServicesPlaySystemSound(1054) // System ding sound
+    private func updateSeat() {
+        var updatedSeat = seat
+        updatedSeat.status = selectedStatus
+        
+        if selectedStatus == .sold {
+            updatedSeat.price = priceInput.isEmpty ? nil : Double(priceInput)
+            updatedSeat.cost = Double(costInput) ?? settingsManager.defaultSeatCost
+            updatedSeat.note = nil
+            updatedSeat.source = selectedSource
+            updatedSeat.familyPersonName = selectedSource == .family ? (familyPersonName.isEmpty ? nil : familyPersonName) : nil
+            updatedSeat.dateSold = dateSold
+            updatedSeat.datePaid = datePaid
+            AudioServicesPlaySystemSound(1054)
+        } else if selectedStatus == .reserved {
+            updatedSeat.price = nil
+            updatedSeat.cost = Double(costInput) ?? settingsManager.defaultSeatCost
+            updatedSeat.note = noteInput.isEmpty ? nil : noteInput
+            updatedSeat.source = nil
+            updatedSeat.familyPersonName = nil
+            updatedSeat.dateSold = nil
+            updatedSeat.datePaid = nil
+        } else {
+            updatedSeat.price = nil
+            updatedSeat.cost = Double(costInput) ?? settingsManager.defaultSeatCost
+            updatedSeat.note = nil
+            updatedSeat.source = nil
+            updatedSeat.familyPersonName = nil
+            updatedSeat.dateSold = nil
+            updatedSeat.datePaid = nil
+        }
+        
+        onUpdate(updatedSeat)
+        dismiss()
+    }
+}
+
+// MARK: - Quick Action Button
+struct QuickActionButton: View {
+    let icon: String
+    let title: String
+    let color: Color
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(color)
+                
+                Text(title)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.modernText)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(color.opacity(0.1))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(color.opacity(0.3), lineWidth: 1)
+                    )
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+// MARK: - Scale Button Style
+struct ScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
     }
 }
 
