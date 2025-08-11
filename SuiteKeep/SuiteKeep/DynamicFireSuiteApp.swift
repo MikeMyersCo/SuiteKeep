@@ -4699,10 +4699,10 @@ struct InteractiveFireSuiteView: View {
                         VStack(spacing: 2) {
                             Text("\(concert.ticketsSold)")
                                 .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.green)
+                                .foregroundColor(.red)
                             Text("sold")
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.green.opacity(0.7))
+                                .foregroundColor(.red.opacity(0.7))
                         }
                         
                         VStack(spacing: 2) {
@@ -4717,10 +4717,10 @@ struct InteractiveFireSuiteView: View {
                         VStack(spacing: 2) {
                             Text("\(8 - concert.ticketsSold - concert.ticketsReserved)")
                                 .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.green)
                             Text("available")
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.secondary.opacity(0.7))
+                                .foregroundColor(.green.opacity(0.7))
                         }
                     }
                 }
@@ -4936,7 +4936,7 @@ struct CompactSeatView: View {
         if let price = seat.price, seat.status != .available {
             return "$\(Int(price))"
         }
-        return seat.status == .available ? "OPEN" : "RESV"
+        return seat.status == .available ? "\(seatNumber)" : "RESV"
     }
     
     var body: some View {
