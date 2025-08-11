@@ -4918,16 +4918,17 @@ struct CompactSeatView: View {
             return .blue
         }
         switch seat.status {
-        case .available: return Color(red: 0.7, green: 0.8, blue: 0.95)  // Light blue
-        case .reserved: return Color(red: 1.0, green: 0.65, blue: 0.2)
-        case .sold: return Color(red: 0.2, green: 0.8, blue: 0.4)
+        case .available: return .green  // Green for available
+        case .reserved: return .orange  // Orange for reserved
+        case .sold: return .red  // Red for sold
         }
     }
     
     var textColor: Color {
         switch seat.status {
-        case .available: return Color(red: 0.3, green: 0.3, blue: 0.4)  // Darker blue-gray for contrast
-        case .reserved, .sold: return .white
+        case .available: return .white  // White text on green background
+        case .reserved: return .white  // White text on orange background
+        case .sold: return .white  // White text on red background
         }
     }
     
