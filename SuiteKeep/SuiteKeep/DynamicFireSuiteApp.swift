@@ -4319,9 +4319,24 @@ struct SeatListView: View {
         VStack(alignment: .leading, spacing: 4) {
             // Header with seat name and status
             HStack {
-                Text("Seat \(index + 1)")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.modernText)
+                // Show family member name if sold to family
+                if concert.seats[index].status == .sold,
+                   concert.seats[index].source == .family,
+                   let note = concert.seats[index].note,
+                   !note.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Seat \(index + 1)")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.modernText)
+                        Text(note)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.blue)
+                    }
+                } else {
+                    Text("Seat \(index + 1)")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.modernText)
+                }
                 
                 Spacer()
                 
@@ -4370,7 +4385,10 @@ struct SeatListView: View {
                 }
             }
             
-            if let note = concert.seats[index].note, !note.isEmpty {
+            // Only show note if it's not a family member (to avoid duplication)
+            if let note = concert.seats[index].note, 
+               !note.isEmpty,
+               concert.seats[index].source != .family {
                 HStack(spacing: 4) {
                     Image(systemName: "note.text")
                         .font(.system(size: 12))
@@ -4933,18 +4951,16 @@ struct CompactSeatView: View {
     }
     
     var statusText: String {
-        // For sold seats, show price and possibly family member name
+        // For sold seats, show price OR family member name
         if seat.status == .sold {
-            if let price = seat.price {
-                // Check if it's a family member (source is Family)
-                if seat.source == .family, let note = seat.note, !note.isEmpty {
-                    // Show truncated name (4 chars) and price
-                    let name = String(note.prefix(4)).uppercased()
-                    return "\(name)\n$\(Int(price))"
-                } else {
-                    // Just show price for non-family sold seats
-                    return "$\(Int(price))"
-                }
+            // Check if it's a family member (source is Family)
+            if seat.source == .family, let note = seat.note, !note.isEmpty {
+                // Show only truncated name (4 chars) for family - no price
+                let name = String(note.prefix(4)).uppercased()
+                return name
+            } else if let price = seat.price {
+                // Show price for non-family sold seats
+                return "$\(Int(price))"
             }
             return "SOLD"
         }
@@ -5315,7 +5331,11 @@ struct SeatOptionsView: View {
         self._selectedSource = State(initialValue: seat.source ?? .facebook)
         self._dateSold = State(initialValue: seat.dateSold ?? Date())
         self._datePaid = State(initialValue: seat.datePaid ?? Date())
-        self._familyPersonName = State(initialValue: seat.familyPersonName ?? "")
+        // Initialize familyPersonName from note if it's a family sale
+        self._familyPersonName = State(initialValue: 
+            (seat.source == .family && seat.note != nil) ? seat.note! : 
+            (seat.familyPersonName ?? "")
+        )
     }
     
     var body: some View {
@@ -5351,6 +5371,10 @@ struct SeatOptionsView: View {
                                     if status == .sold {
                                         dateSold = Date()
                                         datePaid = Date()
+                                        // Auto-populate family price if Family source is selected
+                                        if selectedSource == .family {
+                                            priceInput = String(Int(settingsManager.familyTicketPrice))
+                                        }
                                     }
                                 }) {
                                     VStack(spacing: 6) {
@@ -5390,6 +5414,12 @@ struct SeatOptionsView: View {
                                     }
                                 }
                                 .pickerStyle(.menu)
+                                .onChange(of: selectedSource) { newSource in
+                                    // Auto-populate family ticket price when Family is selected
+                                    if newSource == .family {
+                                        priceInput = String(Int(settingsManager.familyTicketPrice))
+                                    }
+                                }
                                 
                                 if selectedSource == .family {
                                     TextField("Person's name", text: $familyPersonName)
@@ -5460,7 +5490,8 @@ struct SeatOptionsView: View {
         if selectedStatus == .sold {
             updatedSeat.price = priceInput.isEmpty ? nil : Double(priceInput)
             updatedSeat.cost = Double(costInput) ?? settingsManager.defaultSeatCost
-            updatedSeat.note = nil
+            // For family members, store the name in the note field
+            updatedSeat.note = selectedSource == .family && !familyPersonName.isEmpty ? familyPersonName : nil
             updatedSeat.source = selectedSource
             updatedSeat.familyPersonName = selectedSource == .family ? (familyPersonName.isEmpty ? nil : familyPersonName) : nil
             updatedSeat.dateSold = dateSold
