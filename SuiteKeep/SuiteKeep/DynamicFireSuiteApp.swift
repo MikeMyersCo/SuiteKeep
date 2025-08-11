@@ -4654,15 +4654,11 @@ struct InteractiveFireSuiteView: View {
                     // Available legend
                     HStack(spacing: 8) {
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(Color(red: 0.7, green: 0.8, blue: 0.95))  // Match seat color
+                            .fill(Color.green)  // Match seat color - available should be green
                             .frame(width: 16, height: 16)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .stroke(Color.blue.opacity(0.3), lineWidth: 1)
-                            )
                         Text("Available")
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.green)
                     }
                     
                     // Reserved legend
@@ -4678,11 +4674,11 @@ struct InteractiveFireSuiteView: View {
                     // Sold legend
                     HStack(spacing: 8) {
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(Color(red: 0.2, green: 0.8, blue: 0.4))  // Match seat color
+                            .fill(Color.red)  // Match seat color - sold should be red
                             .frame(width: 16, height: 16)
                         Text("Sold")
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.green)
+                            .foregroundColor(.red)
                     }
                 }
                 .padding(.horizontal, 20)
