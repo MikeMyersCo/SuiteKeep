@@ -4582,12 +4582,12 @@ struct InteractiveFireSuiteView: View {
                                         onTap: { handleSeatTap(2) }
                                     )
                                 }
-                                .padding(.bottom, 20)
+                                .padding(.bottom, 8)  // Moved closer to bottom edge, leaving minimal space for text
                             }
                             
                             // Left side vertical stack aligned with seat 6
                             HStack {
-                                VStack(spacing: 8) {
+                                VStack(spacing: -2) {  // Negative spacing to bring seat 7 very close to 8
                                     CompactSeatView(
                                         seatNumber: 8,
                                         seat: concert.seats[7],
@@ -4603,9 +4603,9 @@ struct InteractiveFireSuiteView: View {
                                         onTap: { handleSeatTap(6) }
                                     )
                                     Spacer()
-                                        .frame(height: 60) // Space to align with bottom row
+                                        .frame(height: 72) // Adjusted space to align with lower bottom row
                                 }
-                                .padding(.leading, 20)
+                                .padding(.leading, 8)  // Moved closer to left edge
                                 
                                 Spacer()
                             }
@@ -4614,7 +4614,7 @@ struct InteractiveFireSuiteView: View {
                             HStack {
                                 Spacer()
                                 
-                                VStack(spacing: 8) {
+                                VStack(spacing: -2) {  // Negative spacing to bring seat 2 very close to 1
                                     CompactSeatView(
                                         seatNumber: 1,
                                         seat: concert.seats[0],
@@ -4630,9 +4630,9 @@ struct InteractiveFireSuiteView: View {
                                         onTap: { handleSeatTap(1) }
                                     )
                                     Spacer()
-                                        .frame(height: 60) // Space to align with bottom row
+                                        .frame(height: 72) // Adjusted space to align with lower bottom row
                                 }
-                                .padding(.trailing, 20)
+                                .padding(.trailing, 8)  // Moved closer to right edge
                             }
                             
                             // Center firepit positioned between upper seats (8,7 and 1,2)
@@ -4933,10 +4933,33 @@ struct CompactSeatView: View {
     }
     
     var statusText: String {
-        if let price = seat.price, seat.status != .available {
-            return "$\(Int(price))"
+        // For sold seats, show price and possibly family member name
+        if seat.status == .sold {
+            if let price = seat.price {
+                // Check if it's a family member (source is Family)
+                if seat.source == .family, let note = seat.note, !note.isEmpty {
+                    // Show truncated name (4 chars) and price
+                    let name = String(note.prefix(4)).uppercased()
+                    return "\(name)\n$\(Int(price))"
+                } else {
+                    // Just show price for non-family sold seats
+                    return "$\(Int(price))"
+                }
+            }
+            return "SOLD"
         }
-        return seat.status == .available ? "\(seatNumber)" : "RESV"
+        
+        // For reserved seats, show note if present
+        if seat.status == .reserved {
+            if let note = seat.note, !note.isEmpty {
+                let truncated = String(note.prefix(7))
+                return truncated.uppercased()
+            }
+            return "RESV"
+        }
+        
+        // For available seats, show nothing (seat number is shown in the circle)
+        return ""
     }
     
     var body: some View {
@@ -4952,7 +4975,7 @@ struct CompactSeatView: View {
                 }
             }
         }) {
-            VStack(spacing: 4) {
+            VStack(spacing: -2) {  // Negative spacing to bring text very close to seat
                 // Seat button
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
@@ -4972,11 +4995,15 @@ struct CompactSeatView: View {
                     }
                 }
                 
-                // Status/Price text
-                Text(statusText)
+                // Status/Price text - always present with fixed height for alignment
+                Text(statusText.isEmpty ? " " : statusText)
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundColor(.secondary)
-                    .lineLimit(1)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+                    .frame(height: 24) // Fixed height to maintain alignment
+                    .opacity(statusText.isEmpty ? 0 : 1) // Hide when empty but maintain space
             }
         }
         .buttonStyle(PlainButtonStyle())
@@ -5375,12 +5402,12 @@ struct SeatOptionsView: View {
                             }
                             .transition(.opacity.combined(with: .scale))
                         } else if selectedStatus == .reserved {
-                            TextField("Note (max 5 words)", text: $noteInput)
+                            TextField("Reserved for", text: $noteInput)
                                 .textFieldStyle(.roundedBorder)
                                 .onChange(of: noteInput) { newValue in
                                     let words = newValue.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
-                                    if words.count > 5 {
-                                        noteInput = words.prefix(5).joined(separator: " ")
+                                    if words.count > 1 {
+                                        noteInput = words.prefix(1).joined(separator: " ")
                                     }
                                 }
                                 .transition(.opacity.combined(with: .scale))
