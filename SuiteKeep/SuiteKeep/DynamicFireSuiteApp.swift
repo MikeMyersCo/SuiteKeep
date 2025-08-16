@@ -9,6 +9,23 @@ import SwiftUI
 import AVFoundation
 import CloudKit
 
+// MARK: - Charity Data Model
+struct SavedCharity: Codable, Identifiable, Equatable {
+    let id = UUID()
+    var name: String
+    var address: String
+    var ein: String
+    var contactName: String
+    var contactInfo: String
+    
+    init(name: String, address: String, ein: String, contactName: String, contactInfo: String) {
+        self.name = name
+        self.address = address
+        self.ein = ein
+        self.contactName = contactName
+        self.contactInfo = contactInfo
+    }
+}
 
 // MARK: - Settings Manager
 class SettingsManager: ObservableObject {
@@ -84,6 +101,9 @@ class SettingsManager: ObservableObject {
         }
         
         NSUbiquitousKeyValueStore.default.synchronize()
+        
+        // Load saved charities
+        loadSavedCharities()
     }
     
     deinit {
@@ -102,6 +122,37 @@ class SettingsManager: ObservableObject {
         let iCloudFamilyPrice = NSUbiquitousKeyValueStore.default.double(forKey: "familyTicketPrice")
         if iCloudFamilyPrice > 0 {
             self.familyTicketPrice = iCloudFamilyPrice
+        }
+    }
+    
+    // MARK: - Charity Management
+    @Published var savedCharities: [SavedCharity] = []
+    
+    func loadSavedCharities() {
+        if let data = UserDefaults.standard.data(forKey: "SavedCharities"),
+           let charities = try? JSONDecoder().decode([SavedCharity].self, from: data) {
+            self.savedCharities = charities
+        }
+    }
+    
+    func saveCharity(_ charity: SavedCharity) {
+        // Check if charity already exists (by name)
+        if !savedCharities.contains(where: { $0.name.lowercased() == charity.name.lowercased() }) {
+            savedCharities.append(charity)
+            saveCharitiestoUserDefaults()
+        }
+    }
+    
+    func updateCharity(_ charity: SavedCharity) {
+        if let index = savedCharities.firstIndex(where: { $0.id == charity.id }) {
+            savedCharities[index] = charity
+            saveCharitiestoUserDefaults()
+        }
+    }
+    
+    private func saveCharitiestoUserDefaults() {
+        if let data = try? JSONEncoder().encode(savedCharities) {
+            UserDefaults.standard.set(data, forKey: "SavedCharities")
         }
     }
 }
@@ -473,6 +524,117 @@ struct SettingsField: View {
                 }
             }
         }
+    }
+}
+
+// Enhanced charity search field with dropdown
+struct CharitySearchField: View {
+    @Binding var selectedCharity: String
+    let savedCharities: [SavedCharity]
+    let onCharitySelected: (SavedCharity) -> Void
+    
+    @State private var showDropdown: Bool = false
+    @FocusState private var isTextFieldFocused: Bool
+    
+    // Computed property for filtering - avoids state dependency issues
+    private var filteredCharities: [SavedCharity] {
+        if selectedCharity.isEmpty {
+            return savedCharities
+        } else {
+            return savedCharities.filter { charity in
+                charity.name.localizedCaseInsensitiveContains(selectedCharity)
+            }
+        }
+    }
+    
+    private var shouldShowDropdown: Bool {
+        showDropdown && !filteredCharities.isEmpty && !savedCharities.isEmpty
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            TextField("Full Legal Name of Charity", text: $selectedCharity)
+                .textFieldStyle(.roundedBorder)
+                .focused($isTextFieldFocused)
+                .onTapGesture {
+                    showDropdown = true
+                }
+                .onChange(of: selectedCharity) { _, _ in
+                    showDropdown = !selectedCharity.isEmpty
+                }
+                .onSubmit {
+                    showDropdown = false
+                }
+            
+            if shouldShowDropdown {
+                DropdownList(items: Array(filteredCharities.prefix(5))) { charity in
+                    selectedCharity = charity.name
+                    onCharitySelected(charity)
+                    showDropdown = false
+                    isTextFieldFocused = false
+                }
+                .zIndex(100)
+            }
+        }
+        .onChange(of: isTextFieldFocused) { _, focused in
+            if !focused {
+                showDropdown = false
+            }
+        }
+    }
+}
+
+// Basic charity item row component
+struct CharityItem: View {
+    let charity: SavedCharity
+    let onSelect: () -> Void
+    
+    var body: some View {
+        Button(action: onSelect) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(charity.name)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.modernText)
+                    if !charity.address.isEmpty {
+                        Text(charity.address)
+                            .font(.system(size: 12))
+                            .foregroundColor(.modernTextSecondary)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+// Basic dropdown list component  
+struct DropdownList: View {
+    let items: [SavedCharity]
+    let onSelect: (SavedCharity) -> Void
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(items, id: \.id) { charity in
+                CharityItem(charity: charity) {
+                    onSelect(charity)
+                }
+                if charity.id != items.last?.id {
+                    Divider()
+                }
+            }
+        }
+        .background(Color.modernCard)
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.1), radius: 8, x: 0, y: 4)
     }
 }
 
@@ -5492,8 +5654,17 @@ struct SeatOptionsView: View {
                                                 .font(.system(size: 16, weight: .semibold))
                                                 .foregroundColor(.modernText)
                                             
-                                            TextField("Full Legal Name of Charity", text: $charityName)
-                                                .textFieldStyle(.roundedBorder)
+                                            CharitySearchField(
+                                                selectedCharity: $charityName,
+                                                savedCharities: settingsManager.savedCharities,
+                                                onCharitySelected: { charity in
+                                                    charityName = charity.name
+                                                    charityAddress = charity.address
+                                                    charityEIN = charity.ein
+                                                    charityContactName = charity.contactName
+                                                    charityContactInfo = charity.contactInfo
+                                                }
+                                            )
                                             
                                             TextField("Charity Mailing Address", text: $charityAddress, axis: .vertical)
                                                 .textFieldStyle(.roundedBorder)
@@ -5640,6 +5811,21 @@ struct SeatOptionsView: View {
             updatedSeat.charityEIN = nil
             updatedSeat.charityContactName = nil
             updatedSeat.charityContactInfo = nil
+        }
+        
+        // Save charity if it's a new donation with complete charity information
+        if selectedSource == .donation && 
+           !charityName.isEmpty && 
+           !charityAddress.isEmpty && 
+           !charityEIN.isEmpty {
+            let newCharity = SavedCharity(
+                name: charityName,
+                address: charityAddress,
+                ein: charityEIN,
+                contactName: charityContactName,
+                contactInfo: charityContactInfo
+            )
+            settingsManager.saveCharity(newCharity)
         }
         
         onUpdate(updatedSeat)
