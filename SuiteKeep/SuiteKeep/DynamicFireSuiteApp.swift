@@ -1855,6 +1855,7 @@ enum TicketSource: String, Codable, CaseIterable {
     case axs = "AXS"
     case venu = "VENU"
     case other = "Other"
+    case donation = "Donation"
 }
 
 // MARK: - Multi-User Sharing Models
@@ -2068,13 +2069,22 @@ struct Seat: Codable, Equatable {
     var datePaid: Date? // Date when payment was received
     var familyPersonName: String? // For family seats - person's name
     
+    // Donation-specific properties (only used when source == .donation)
+    var donationDate: Date? // Date tickets were transferred to charity
+    var donationFaceValue: Double? // MSRP per ticket from venue
+    var charityName: String? // Full legal name of charity
+    var charityAddress: String? // Charity mailing address
+    var charityEIN: String? // Employer Identification Number
+    var charityContactName: String? // Contact person at charity
+    var charityContactInfo: String? // Email or phone for contact person
+    
     // Multi-user sharing properties
     var lastModifiedBy: String? // User ID who last modified this seat
     var lastModifiedDate: Date? // When this seat was last modified
     var modificationHistory: [SeatModification]? // History of changes for conflict resolution
     var conflictResolutionVersion: Int? // Version number for conflict resolution
     
-    init(status: SeatStatus = .available, price: Double? = nil, note: String? = nil, source: TicketSource? = nil, cost: Double? = nil, dateSold: Date? = nil, datePaid: Date? = nil, familyPersonName: String? = nil, lastModifiedBy: String? = nil, lastModifiedDate: Date? = nil, modificationHistory: [SeatModification]? = nil, conflictResolutionVersion: Int? = nil) {
+    init(status: SeatStatus = .available, price: Double? = nil, note: String? = nil, source: TicketSource? = nil, cost: Double? = nil, dateSold: Date? = nil, datePaid: Date? = nil, familyPersonName: String? = nil, donationDate: Date? = nil, donationFaceValue: Double? = nil, charityName: String? = nil, charityAddress: String? = nil, charityEIN: String? = nil, charityContactName: String? = nil, charityContactInfo: String? = nil, lastModifiedBy: String? = nil, lastModifiedDate: Date? = nil, modificationHistory: [SeatModification]? = nil, conflictResolutionVersion: Int? = nil) {
         self.status = status
         self.price = price
         self.note = note
@@ -2083,6 +2093,13 @@ struct Seat: Codable, Equatable {
         self.dateSold = dateSold
         self.datePaid = datePaid
         self.familyPersonName = familyPersonName
+        self.donationDate = donationDate
+        self.donationFaceValue = donationFaceValue
+        self.charityName = charityName
+        self.charityAddress = charityAddress
+        self.charityEIN = charityEIN
+        self.charityContactName = charityContactName
+        self.charityContactInfo = charityContactInfo
         self.lastModifiedBy = lastModifiedBy
         self.lastModifiedDate = lastModifiedDate
         self.modificationHistory = modificationHistory ?? []
@@ -3852,21 +3869,21 @@ struct ConcertDetailView: View {
                                     VStack(spacing: 4) {
                                         HStack {
                                             Circle()
-                                                .fill(concert.ticketsSold == 8 ? Color.modernSuccess : Color.modernWarning)
+                                                .fill(Color.red)  // Red for sold - matches seat color
                                                 .frame(width: 6, height: 6)
-                                            Text("\(concert.ticketsSold)/8 tickets sold")
+                                            Text("\(concert.ticketsSold) sold")
                                                 .font(.system(size: 11, weight: .medium))
-                                                .foregroundColor(concert.ticketsSold == 8 ? .modernSuccess : .modernWarning)
+                                                .foregroundColor(.red)
                                         }
                                         
                                         if concert.ticketsReserved > 0 {
                                             HStack {
                                                 Circle()
-                                                    .fill(Color.cyan)
+                                                    .fill(Color.orange)  // Orange for reserved - matches seat color
                                                     .frame(width: 6, height: 6)
                                                 Text("\(concert.ticketsReserved) reserved")
                                                     .font(.system(size: 11, weight: .medium))
-                                                    .foregroundColor(.cyan)
+                                                    .foregroundColor(.orange)
                                             }
                                         }
                                         
@@ -4951,8 +4968,12 @@ struct CompactSeatView: View {
     }
     
     var statusText: String {
-        // For sold seats, show price OR family member name
+        // For sold seats, show price OR family member name OR donation
         if seat.status == .sold {
+            // Check if it's a donation
+            if seat.source == .donation {
+                return "DONATION"
+            }
             // Check if it's a family member (source is Family)
             if seat.source == .family, let note = seat.note, !note.isEmpty {
                 // Show only truncated name (4 chars) for family - no price
@@ -5278,6 +5299,9 @@ struct InteractiveSeatView: View {
         case .reserved:
             return "RESERVED"
         case .sold:
+            if seat.source == .donation {
+                return "DONATION"
+            }
             if let price = seat.price {
                 return "$\(Int(price))"
             }
@@ -5294,6 +5318,9 @@ struct InteractiveSeatView: View {
         case .sold:
             if seat.source == .family, let personName = seat.familyPersonName, !personName.isEmpty {
                 return personName
+            }
+            if seat.source == .donation {
+                return "Donate"
             }
             return seat.source?.rawValue ?? ""
         }
@@ -5319,6 +5346,15 @@ struct SeatOptionsView: View {
     @State private var datePaid: Date
     @State private var familyPersonName: String
     
+    // Donation-specific state variables
+    @State private var donationDate: Date
+    @State private var donationFaceValueInput: String
+    @State private var charityName: String
+    @State private var charityAddress: String
+    @State private var charityEIN: String
+    @State private var charityContactName: String
+    @State private var charityContactInfo: String
+    
     init(seatNumber: Int, seat: Seat, onUpdate: @escaping (Seat) -> Void, onUpdateAll: ((Seat) -> Void)? = nil) {
         self.seatNumber = seatNumber
         self.seat = seat
@@ -5336,6 +5372,15 @@ struct SeatOptionsView: View {
             (seat.source == .family && seat.note != nil) ? seat.note! : 
             (seat.familyPersonName ?? "")
         )
+        
+        // Initialize donation-specific state variables
+        self._donationDate = State(initialValue: seat.donationDate ?? Date())
+        self._donationFaceValueInput = State(initialValue: seat.donationFaceValue != nil ? String(seat.donationFaceValue!) : "")
+        self._charityName = State(initialValue: seat.charityName ?? "")
+        self._charityAddress = State(initialValue: seat.charityAddress ?? "")
+        self._charityEIN = State(initialValue: seat.charityEIN ?? "")
+        self._charityContactName = State(initialValue: seat.charityContactName ?? "")
+        self._charityContactInfo = State(initialValue: seat.charityContactInfo ?? "")
     }
     
     var body: some View {
@@ -5427,8 +5472,53 @@ struct SeatOptionsView: View {
                                         .transition(.opacity.combined(with: .scale))
                                 }
                                 
-                                DatePicker("Date Sold", selection: $dateSold, displayedComponents: .date)
-                                DatePicker("Date Paid", selection: $datePaid, displayedComponents: .date)
+                                // Donation Details (only when Donation source is selected)
+                                if selectedSource == .donation {
+                                    VStack(spacing: 16) {
+                                        VStack(alignment: .leading, spacing: 8) {
+                                            Text("Donation Details")
+                                                .font(.system(size: 16, weight: .semibold))
+                                                .foregroundColor(.modernText)
+                                            
+                                            DatePicker("Donation Date", selection: $donationDate, displayedComponents: .date)
+                                            
+                                            TextField("Face Value per Ticket", text: $donationFaceValueInput)
+                                                .keyboardType(.decimalPad)
+                                                .textFieldStyle(.roundedBorder)
+                                        }
+                                        
+                                        VStack(alignment: .leading, spacing: 8) {
+                                            Text("Charity Information")
+                                                .font(.system(size: 16, weight: .semibold))
+                                                .foregroundColor(.modernText)
+                                            
+                                            TextField("Full Legal Name of Charity", text: $charityName)
+                                                .textFieldStyle(.roundedBorder)
+                                            
+                                            TextField("Charity Mailing Address", text: $charityAddress, axis: .vertical)
+                                                .textFieldStyle(.roundedBorder)
+                                                .lineLimit(2...4)
+                                            
+                                            TextField("EIN (Tax ID Number)", text: $charityEIN)
+                                                .textFieldStyle(.roundedBorder)
+                                            
+                                            TextField("Contact Person Name", text: $charityContactName)
+                                                .textFieldStyle(.roundedBorder)
+                                            
+                                            TextField("Contact Email or Phone", text: $charityContactInfo)
+                                                .textFieldStyle(.roundedBorder)
+                                        }
+                                    }
+                                    .padding(16)
+                                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+                                    .transition(.opacity.combined(with: .scale))
+                                }
+                                
+                                // Only show Date Sold/Paid for non-donation sources
+                                if selectedSource != .donation {
+                                    DatePicker("Date Sold", selection: $dateSold, displayedComponents: .date)
+                                    DatePicker("Date Paid", selection: $datePaid, displayedComponents: .date)
+                                }
                             }
                             .transition(.opacity.combined(with: .scale))
                         } else if selectedStatus == .reserved {
@@ -5496,6 +5586,27 @@ struct SeatOptionsView: View {
             updatedSeat.familyPersonName = selectedSource == .family ? (familyPersonName.isEmpty ? nil : familyPersonName) : nil
             updatedSeat.dateSold = dateSold
             updatedSeat.datePaid = datePaid
+            
+            // Handle donation-specific data
+            if selectedSource == .donation {
+                updatedSeat.donationDate = donationDate
+                updatedSeat.donationFaceValue = donationFaceValueInput.isEmpty ? nil : Double(donationFaceValueInput)
+                updatedSeat.charityName = charityName.isEmpty ? nil : charityName
+                updatedSeat.charityAddress = charityAddress.isEmpty ? nil : charityAddress
+                updatedSeat.charityEIN = charityEIN.isEmpty ? nil : charityEIN
+                updatedSeat.charityContactName = charityContactName.isEmpty ? nil : charityContactName
+                updatedSeat.charityContactInfo = charityContactInfo.isEmpty ? nil : charityContactInfo
+            } else {
+                // Clear donation fields for non-donation sources
+                updatedSeat.donationDate = nil
+                updatedSeat.donationFaceValue = nil
+                updatedSeat.charityName = nil
+                updatedSeat.charityAddress = nil
+                updatedSeat.charityEIN = nil
+                updatedSeat.charityContactName = nil
+                updatedSeat.charityContactInfo = nil
+            }
+            
             AudioServicesPlaySystemSound(1054)
         } else if selectedStatus == .reserved {
             updatedSeat.price = nil
@@ -5505,6 +5616,14 @@ struct SeatOptionsView: View {
             updatedSeat.familyPersonName = nil
             updatedSeat.dateSold = nil
             updatedSeat.datePaid = nil
+            // Clear donation fields
+            updatedSeat.donationDate = nil
+            updatedSeat.donationFaceValue = nil
+            updatedSeat.charityName = nil
+            updatedSeat.charityAddress = nil
+            updatedSeat.charityEIN = nil
+            updatedSeat.charityContactName = nil
+            updatedSeat.charityContactInfo = nil
         } else {
             updatedSeat.price = nil
             updatedSeat.cost = Double(costInput) ?? settingsManager.defaultSeatCost
@@ -5513,6 +5632,14 @@ struct SeatOptionsView: View {
             updatedSeat.familyPersonName = nil
             updatedSeat.dateSold = nil
             updatedSeat.datePaid = nil
+            // Clear donation fields
+            updatedSeat.donationDate = nil
+            updatedSeat.donationFaceValue = nil
+            updatedSeat.charityName = nil
+            updatedSeat.charityAddress = nil
+            updatedSeat.charityEIN = nil
+            updatedSeat.charityContactName = nil
+            updatedSeat.charityContactInfo = nil
         }
         
         onUpdate(updatedSeat)
