@@ -4285,6 +4285,18 @@ struct ConcertDetailView: View {
                     concert.seats[index].price = nil
                     concert.seats[index].source = nil
                     concert.seats[index].note = nil
+                    concert.seats[index].cost = nil
+                    concert.seats[index].dateSold = nil
+                    concert.seats[index].datePaid = nil
+                    concert.seats[index].familyPersonName = nil
+                    // Clear donation fields
+                    concert.seats[index].donationDate = nil
+                    concert.seats[index].donationFaceValue = nil
+                    concert.seats[index].charityName = nil
+                    concert.seats[index].charityAddress = nil
+                    concert.seats[index].charityEIN = nil
+                    concert.seats[index].charityContactName = nil
+                    concert.seats[index].charityContactInfo = nil
                 }
             }
             
@@ -6244,10 +6256,11 @@ struct ReportingView: View {
     @State private var includeConcertData = true
     @State private var includePerformanceRankings = true
     @State private var includeExecutiveSummary = true
+    @State private var includeCharityReport = false
     @State private var includeFutureConcerts = false
     
     private var hasSelectedElements: Bool {
-        includeProfitAnalysis || includeConcertData || includePerformanceRankings || includeExecutiveSummary
+        includeProfitAnalysis || includeConcertData || includePerformanceRankings || includeExecutiveSummary || includeCharityReport
     }
     
     var body: some View {
@@ -6310,6 +6323,13 @@ struct ReportingView: View {
                         title: "Executive Summary",
                         description: "Key metrics and occupancy statistics",
                         isEnabled: $includeExecutiveSummary
+                    )
+                    
+                    CustomizableReportFeatureRow(
+                        icon: "heart.circle",
+                        title: "Charity Report",
+                        description: "Tax-deductible donations and charity analytics",
+                        isEnabled: $includeCharityReport
                     )
                 }
                 
@@ -6429,6 +6449,7 @@ struct ReportingView: View {
                 includeConcertData: self.includeConcertData,
                 includePerformanceRankings: self.includePerformanceRankings,
                 includeExecutiveSummary: self.includeExecutiveSummary,
+                includeCharityReport: self.includeCharityReport,
                 includeFutureConcerts: self.includeFutureConcerts
             )
             
@@ -7413,6 +7434,7 @@ struct ReportOptions {
     let includeConcertData: Bool
     let includePerformanceRankings: Bool
     let includeExecutiveSummary: Bool
+    let includeCharityReport: Bool
     let includeFutureConcerts: Bool
     
     static let all = ReportOptions(
@@ -7420,6 +7442,7 @@ struct ReportOptions {
         includeConcertData: true,
         includePerformanceRankings: true,
         includeExecutiveSummary: true,
+        includeCharityReport: true,
         includeFutureConcerts: false
     )
 }
@@ -7482,6 +7505,11 @@ class ReportGenerator {
             csv += generateProfitAnalysis(concerts: concerts, includeFutureConcerts: options.includeFutureConcerts)
         }
         
+        // Charity Report
+        if options.includeCharityReport {
+            csv += generateCharityReport(concerts: concerts, settingsManager: settingsManager)
+        }
+        
         return csv
     }
     
@@ -7504,13 +7532,13 @@ class ReportGenerator {
         let pastTotalSoldSeats = pastConcerts.reduce(0) { $0 + $1.ticketsSold }
         
         let totalRevenue = analysisConcerts.reduce(0.0) { total, concert in
-            let seatRevenue = concert.seats.compactMap { $0.price }.reduce(0.0, +)
+            let seatRevenue = concert.seats.filter { $0.source != .donation }.compactMap { $0.price }.reduce(0.0, +)
             let parkingRevenue = concert.parkingTicket?.price ?? 0.0
             return total + seatRevenue + parkingRevenue
         }
         
         let totalCosts = analysisConcerts.reduce(0.0) { total, concert in
-            let seatCosts = concert.seats.reduce(0.0) { $0 + ($1.cost ?? 0.0) }
+            let seatCosts = concert.seats.filter { $0.source != .donation }.reduce(0.0) { $0 + ($1.cost ?? 0.0) }
             let parkingCost = concert.parkingTicket?.cost ?? 0.0
             return total + seatCosts + parkingCost
         }
@@ -7521,6 +7549,7 @@ class ReportGenerator {
         
         let analysisScope = includeFutureConcerts ? "all concerts (past and future)" : "past concerts only"
         csv += "Note: Financial metrics (Revenue/Costs/Profit/ROI/Averages) include \(analysisScope)\n"
+        csv += "Revenue and profit calculations exclude charity donations (see Charity Report for donation details)\n"
         csv += "Seat counts include all scheduled concerts (past and future)\n\n"
         csv += "Metric,Value\n"
         csv += "Total Concerts,\(totalConcerts)\n"
@@ -7545,11 +7574,11 @@ class ReportGenerator {
         let sortedConcerts = concerts.sorted { $0.date < $1.date }
         
         for concert in sortedConcerts {
-            let seatRevenue = concert.seats.compactMap { $0.price }.reduce(0.0, +)
+            let seatRevenue = concert.seats.filter { $0.source != .donation }.compactMap { $0.price }.reduce(0.0, +)
             let parkingRevenue = concert.parkingTicket?.price ?? 0.0
             let totalRevenue = seatRevenue + parkingRevenue
             
-            let seatCosts = concert.seats.reduce(0.0) { $0 + ($1.cost ?? 0.0) }
+            let seatCosts = concert.seats.filter { $0.source != .donation }.reduce(0.0) { $0 + ($1.cost ?? 0.0) }
             let parkingCost = concert.parkingTicket?.cost ?? 0.0
             let totalCosts = seatCosts + parkingCost
             
@@ -7572,7 +7601,7 @@ class ReportGenerator {
         for concert in sortedConcerts {
             for (index, seat) in concert.seats.enumerated() {
                 let seatNumber = index + 1
-                let profit = (seat.price ?? 0.0) - (seat.cost ?? 0.0)
+                let profit = seat.source == .donation ? 0.0 : (seat.price ?? 0.0) - (seat.cost ?? 0.0)
                 let source = seat.source?.rawValue ?? ""
                 let familyMember = seat.source == .family && seat.familyPersonName != nil ? seat.familyPersonName! : ""
                 let dateSold = seat.dateSold.map { DateFormatter.reportDate.string(from: $0) } ?? ""
@@ -7607,11 +7636,11 @@ class ReportGenerator {
         var concertPerformance: [(String, Double, Double)] = []
         
         for concert in analysisConcerts {
-            let seatRevenue = concert.seats.compactMap { $0.price }.reduce(0.0, +)
+            let seatRevenue = concert.seats.filter { $0.source != .donation }.compactMap { $0.price }.reduce(0.0, +)
             let parkingRevenue = concert.parkingTicket?.price ?? 0.0
             let totalRevenue = seatRevenue + parkingRevenue
             
-            let seatCosts = concert.seats.reduce(0.0) { $0 + ($1.cost ?? 0.0) }
+            let seatCosts = concert.seats.filter { $0.source != .donation }.reduce(0.0) { $0 + ($1.cost ?? 0.0) }
             let parkingCost = concert.parkingTicket?.cost ?? 0.0
             let totalCosts = seatCosts + parkingCost
             
@@ -7651,6 +7680,110 @@ class ReportGenerator {
             csv += "\(source),\(formatCurrency(revenue)),\(count),\(formatCurrency(avgPrice))\n"
         }
         
+        return csv
+    }
+    
+    private func generateCharityReport(concerts: [Concert], settingsManager: SettingsManager) -> String {
+        var csv = "=== CHARITY DONATION REPORT ===\n"
+        
+        // Get all charity donations
+        var charityDonations: [(Concert, Int, Seat)] = []
+        for concert in concerts {
+            for (index, seat) in concert.seats.enumerated() {
+                if seat.source == .donation {
+                    charityDonations.append((concert, index + 1, seat))
+                }
+            }
+        }
+        
+        guard !charityDonations.isEmpty else {
+            csv += "No charity donations found in this period.\n\n"
+            return csv
+        }
+        
+        // Summary by charity
+        var charityTotals: [String: (count: Int, faceValue: Double, donationAmount: Double)] = [:]
+        
+        for (_, _, seat) in charityDonations {
+            let charityName = seat.charityName ?? "Unknown Charity"
+            let faceValue = seat.donationFaceValue ?? 0.0
+            let donationAmount = seat.price ?? 0.0
+            
+            if var existing = charityTotals[charityName] {
+                existing.count += 1
+                existing.faceValue += faceValue
+                existing.donationAmount += donationAmount
+                charityTotals[charityName] = existing
+            } else {
+                charityTotals[charityName] = (count: 1, faceValue: faceValue, donationAmount: donationAmount)
+            }
+        }
+        
+        // Charity Summary Section
+        csv += "CHARITY SUMMARY\n"
+        csv += "Charity Name,Donations Count,Total Face Value,Total Donation Amount,Tax Deductible Amount\n"
+        
+        let sortedCharities = charityTotals.sorted { $0.value.donationAmount > $1.value.donationAmount }
+        var totalDonations = 0
+        var totalFaceValue = 0.0
+        var totalDonationAmount = 0.0
+        
+        for (charityName, totals) in sortedCharities {
+            let taxDeductible = totals.donationAmount - totals.faceValue
+            csv += "\"\(charityName)\",\(totals.count),\(formatCurrency(totals.faceValue)),\(formatCurrency(totals.donationAmount)),\(formatCurrency(max(0, taxDeductible)))\n"
+            totalDonations += totals.count
+            totalFaceValue += totals.faceValue
+            totalDonationAmount += totals.donationAmount
+        }
+        
+        csv += "\nTOTAL SUMMARY\n"
+        csv += "Total Donations,\(totalDonations)\n"
+        csv += "Total Face Value,\(formatCurrency(totalFaceValue))\n"
+        csv += "Total Donation Amount,\(formatCurrency(totalDonationAmount))\n"
+        csv += "Total Tax Deductible Amount,\(formatCurrency(max(0, totalDonationAmount - totalFaceValue)))\n\n"
+        
+        // Detailed Donation Records
+        csv += "DETAILED DONATION RECORDS\n"
+        csv += "Concert,Date,Seat,Charity Name,Charity EIN,Charity Address,Contact Name,Contact Info,Face Value,Donation Amount,Tax Deductible,Donation Date\n"
+        
+        let sortedDonations = charityDonations.sorted { $0.0.date < $1.0.date }
+        
+        for (concert, seatNumber, seat) in sortedDonations {
+            let charityName = seat.charityName ?? ""
+            let ein = seat.charityEIN ?? ""
+            let charityAddress = seat.charityAddress ?? ""
+            let contactName = seat.charityContactName ?? ""
+            let contactInfo = seat.charityContactInfo ?? ""
+            let faceValue = seat.donationFaceValue ?? 0.0
+            let donationAmount = seat.price ?? 0.0
+            let taxDeductible = max(0, donationAmount - faceValue)
+            let donationDate = seat.donationDate.map { DateFormatter.reportDate.string(from: $0) } ?? ""
+            
+            csv += "\"\(concert.artist)\",\(DateFormatter.reportDate.string(from: concert.date)),\(seatNumber),\"\(charityName)\",\(ein),\"\(charityAddress)\",\"\(contactName)\",\"\(contactInfo)\",\(formatCurrency(faceValue)),\(formatCurrency(donationAmount)),\(formatCurrency(taxDeductible)),\(donationDate)\n"
+        }
+        
+        // Tax Year Summary (if current year donations exist)
+        let currentYear = Calendar.current.component(.year, from: Date())
+        let currentYearDonations = charityDonations.filter { 
+            if let donationDate = $0.2.donationDate {
+                return Calendar.current.component(.year, from: donationDate) == currentYear
+            }
+            return false
+        }
+        
+        if !currentYearDonations.isEmpty {
+            let currentYearTotal = currentYearDonations.reduce(into: 0.0) { total, donation in
+                let donationAmount = donation.2.price ?? 0.0
+                let faceValue = donation.2.donationFaceValue ?? 0.0
+                total += max(0, donationAmount - faceValue)
+            }
+            
+            csv += "\n\(currentYear) TAX YEAR SUMMARY\n"
+            csv += "Year,Total Tax Deductible Donations\n"
+            csv += "\(currentYear),\(formatCurrency(currentYearTotal))\n"
+        }
+        
+        csv += "\n"
         return csv
     }
     
@@ -8193,6 +8326,14 @@ struct BatchSeatOptionsView: View {
                 updatedSeat.note = nil
                 updatedSeat.dateSold = nil
                 updatedSeat.datePaid = nil
+                // Clear donation fields
+                updatedSeat.donationDate = nil
+                updatedSeat.donationFaceValue = nil
+                updatedSeat.charityName = nil
+                updatedSeat.charityAddress = nil
+                updatedSeat.charityEIN = nil
+                updatedSeat.charityContactName = nil
+                updatedSeat.charityContactInfo = nil
                 
             case .reserved:
                 updatedSeat.price = nil
