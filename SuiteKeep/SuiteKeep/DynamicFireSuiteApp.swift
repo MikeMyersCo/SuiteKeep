@@ -3915,7 +3915,12 @@ struct ConcertDetailView: View {
     @Environment(\.dismiss) private var dismiss
     
     // View mode state
-    @State private var isListView = false
+    @State private var viewMode: ViewMode = .seatView
+    @State private var isBuyerView = false
+    
+    enum ViewMode {
+        case seatView, listView
+    }
     
     // Batch operation states
     @State private var isBatchMode = false
@@ -4174,35 +4179,35 @@ struct ConcertDetailView: View {
                         }
                     }
                     
-                    // View Toggle
+                    // View Toggle (Two Options)
                     HStack(spacing: 0) {
                         Button(action: {
                             withAnimation(.easeInOut(duration: 0.3)) {
-                                isListView = false
+                                viewMode = .seatView
                             }
                         }) {
                             Text("Seat View")
                                 .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(!isListView ? .white : .modernTextSecondary)
+                                .foregroundColor(viewMode == .seatView ? .white : .modernTextSecondary)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 10)
                                 .background(
-                                    !isListView ? Color.modernAccent : Color.clear
+                                    viewMode == .seatView ? Color.modernAccent : Color.clear
                                 )
                         }
                         
                         Button(action: {
                             withAnimation(.easeInOut(duration: 0.3)) {
-                                isListView = true
+                                viewMode = .listView
                             }
                         }) {
                             Text("List View")
                                 .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(isListView ? .white : .modernTextSecondary)
+                                .foregroundColor(viewMode == .listView ? .white : .modernTextSecondary)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 10)
                                 .background(
-                                    isListView ? Color.modernAccent : Color.clear
+                                    viewMode == .listView ? Color.modernAccent : Color.clear
                                 )
                         }
                     }
@@ -4216,8 +4221,9 @@ struct ConcertDetailView: View {
                     )
                     .padding(.horizontal)
                     
-                    // Conditional view based on toggle
-                    if isListView {
+                    // Conditional view based on mode
+                    switch viewMode {
+                    case .listView:
                         // List View
                         SeatListView(
                             concert: $concert,
@@ -4227,7 +4233,7 @@ struct ConcertDetailView: View {
                             selectedSeats: $selectedSeats,
                             showingBatchOptions: $showingBatchOptions
                         )
-                    } else {
+                    case .seatView:
                         // Interactive Fire Suite Layout for seat selection
                         InteractiveFireSuiteView(
                             concert: $concert, 
@@ -4235,7 +4241,8 @@ struct ConcertDetailView: View {
                             settingsManager: settingsManager,
                             isBatchMode: $isBatchMode,
                             selectedSeats: $selectedSeats,
-                            showingBatchOptions: $showingBatchOptions
+                            showingBatchOptions: $showingBatchOptions,
+                            isBuyerView: $isBuyerView
                         )
                     }
                 }
@@ -4666,6 +4673,7 @@ struct InteractiveFireSuiteView: View {
     @Binding var isBatchMode: Bool
     @Binding var selectedSeats: Set<Int>
     @Binding var showingBatchOptions: Bool
+    @Binding var isBuyerView: Bool
     
     var body: some View {
         VStack(spacing: 16) {
@@ -4679,15 +4687,16 @@ struct InteractiveFireSuiteView: View {
                     .font(.system(size: 14))
                     .foregroundColor(.modernTextSecondary)
                 
-                // Batch mode toggle
-                HStack {
-                    Spacer()
-                    Button(action: {
-                        withAnimation(.easeInOut(duration: 0.3)) {
-                            isBatchMode.toggle()
-                            selectedSeats.removeAll()
-                        }
-                    }) {
+                // Batch mode toggle (hidden in buyer view)
+                if !isBuyerView {
+                    HStack {
+                        Spacer()
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.3)) {
+                                isBatchMode.toggle()
+                                selectedSeats.removeAll()
+                            }
+                        }) {
                         HStack(spacing: 6) {
                             Image(systemName: isBatchMode ? "checkmark.square.fill" : "square.on.square")
                                 .font(.system(size: 16, weight: .medium))
@@ -4731,25 +4740,28 @@ struct InteractiveFireSuiteView: View {
                     .padding(.vertical, 6)
                     .background(Color.blue.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
                 }
+                }
             }
             
             // Professional U-Shaped Suite Layout
             VStack(spacing: 12) {
-                // Stage indicator
-                HStack {
-                    Spacer()
-                    HStack(spacing: 6) {
-                        Image(systemName: "music.mic")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.blue)
-                        Text("STAGE")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.blue)
+                // Stage indicator (hidden in buyer view)
+                if !isBuyerView {
+                    HStack {
+                        Spacer()
+                        HStack(spacing: 6) {
+                            Image(systemName: "music.mic")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.blue)
+                            Text("STAGE")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.blue)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                        Spacer()
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
-                    Spacer()
                 }
                 
                 // Main suite card with U-shaped layout
@@ -4767,6 +4779,7 @@ struct InteractiveFireSuiteView: View {
                                         seat: concert.seats[5],
                                         isSelected: selectedSeats.contains(5),
                                         isBatchMode: isBatchMode,
+                                        isBuyerView: isBuyerView,
                                         onTap: { handleSeatTap(5) }
                                     )
                                     CompactSeatView(
@@ -4774,6 +4787,7 @@ struct InteractiveFireSuiteView: View {
                                         seat: concert.seats[4],
                                         isSelected: selectedSeats.contains(4),
                                         isBatchMode: isBatchMode,
+                                        isBuyerView: isBuyerView,
                                         onTap: { handleSeatTap(4) }
                                     )
                                     CompactSeatView(
@@ -4781,6 +4795,7 @@ struct InteractiveFireSuiteView: View {
                                         seat: concert.seats[3],
                                         isSelected: selectedSeats.contains(3),
                                         isBatchMode: isBatchMode,
+                                        isBuyerView: isBuyerView,
                                         onTap: { handleSeatTap(3) }
                                     )
                                     CompactSeatView(
@@ -4788,6 +4803,7 @@ struct InteractiveFireSuiteView: View {
                                         seat: concert.seats[2],
                                         isSelected: selectedSeats.contains(2),
                                         isBatchMode: isBatchMode,
+                                        isBuyerView: isBuyerView,
                                         onTap: { handleSeatTap(2) }
                                     )
                                 }
@@ -4802,6 +4818,7 @@ struct InteractiveFireSuiteView: View {
                                         seat: concert.seats[7],
                                         isSelected: selectedSeats.contains(7),
                                         isBatchMode: isBatchMode,
+                                        isBuyerView: isBuyerView,
                                         onTap: { handleSeatTap(7) }
                                     )
                                     CompactSeatView(
@@ -4809,6 +4826,7 @@ struct InteractiveFireSuiteView: View {
                                         seat: concert.seats[6],
                                         isSelected: selectedSeats.contains(6),
                                         isBatchMode: isBatchMode,
+                                        isBuyerView: isBuyerView,
                                         onTap: { handleSeatTap(6) }
                                     )
                                     Spacer()
@@ -4829,6 +4847,7 @@ struct InteractiveFireSuiteView: View {
                                         seat: concert.seats[0],
                                         isSelected: selectedSeats.contains(0),
                                         isBatchMode: isBatchMode,
+                                        isBuyerView: isBuyerView,
                                         onTap: { handleSeatTap(0) }
                                     )
                                     CompactSeatView(
@@ -4836,6 +4855,7 @@ struct InteractiveFireSuiteView: View {
                                         seat: concert.seats[1],
                                         isSelected: selectedSeats.contains(1),
                                         isBatchMode: isBatchMode,
+                                        isBuyerView: isBuyerView,
                                         onTap: { handleSeatTap(1) }
                                     )
                                     Spacer()
@@ -4898,38 +4918,40 @@ struct InteractiveFireSuiteView: View {
                         .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
                 )
                 
-                // Enhanced revenue display
-                VStack(spacing: 8) {
-                    Text("Revenue: $\(Int(concert.totalRevenue))")
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundColor(.green)
-                    
-                    HStack(spacing: 20) {
-                        VStack(spacing: 2) {
-                            Text("\(concert.ticketsSold)")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.red)
-                            Text("sold")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.red.opacity(0.7))
-                        }
+                // Enhanced revenue display (hidden in buyer view)
+                if !isBuyerView {
+                    VStack(spacing: 8) {
+                        Text("Revenue: $\(Int(concert.totalRevenue))")
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .foregroundColor(.green)
                         
-                        VStack(spacing: 2) {
-                            Text("\(concert.ticketsReserved)")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.orange)
-                            Text("reserved")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.orange.opacity(0.7))
-                        }
-                        
-                        VStack(spacing: 2) {
-                            Text("\(8 - concert.ticketsSold - concert.ticketsReserved)")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.green)
-                            Text("available")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.green.opacity(0.7))
+                        HStack(spacing: 20) {
+                            VStack(spacing: 2) {
+                                Text("\(concert.ticketsSold)")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundColor(.red)
+                                Text("sold")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.red.opacity(0.7))
+                            }
+                            
+                            VStack(spacing: 2) {
+                                Text("\(concert.ticketsReserved)")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundColor(.orange)
+                                Text("reserved")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.orange.opacity(0.7))
+                            }
+                            
+                            VStack(spacing: 2) {
+                                Text("\(8 - concert.ticketsSold - concert.ticketsReserved)")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundColor(.green)
+                                Text("available")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundColor(.green.opacity(0.7))
+                            }
                         }
                     }
                 }
@@ -4964,6 +4986,36 @@ struct InteractiveFireSuiteView: View {
                 }
             }
             .buttonStyle(PlainButtonStyle())
+            
+            // Buyer View Toggle - Centered
+            HStack {
+                Spacer()
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        isBuyerView.toggle()
+                    }
+                }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: isBuyerView ? "eye.fill" : "eye")
+                            .font(.system(size: 14, weight: .medium))
+                        Text("Buyer View")
+                            .font(.system(size: 13, weight: .medium))
+                    }
+                    .foregroundColor(isBuyerView ? .blue : .modernTextSecondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(isBuyerView ? Color.blue.opacity(0.1) : Color.clear)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(isBuyerView ? Color.blue.opacity(0.3) : Color.gray.opacity(0.3), lineWidth: 1)
+                            )
+                    )
+                }
+                Spacer()
+            }
+            .padding(.top, 8)
         }
         .padding()
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
@@ -5119,17 +5171,25 @@ struct CompactSeatView: View {
     let seat: Seat
     let isSelected: Bool
     let isBatchMode: Bool
+    let isBuyerView: Bool
     let onTap: () -> Void
     @State private var isPressed = false
     
     var seatColor: Color {
-        if isBatchMode && isSelected {
+        if isBuyerView {
+            // Buyer view: only green for available, red for sold/reserved
+            switch seat.status {
+            case .available: return .green
+            case .reserved, .sold: return .red
+            }
+        } else if isBatchMode && isSelected {
             return .blue
-        }
-        switch seat.status {
-        case .available: return .green  // Green for available
-        case .reserved: return .orange  // Orange for reserved
-        case .sold: return .red  // Red for sold
+        } else {
+            switch seat.status {
+            case .available: return .green  // Green for available
+            case .reserved: return .orange  // Orange for reserved
+            case .sold: return .red  // Red for sold
+            }
         }
     }
     
@@ -5142,6 +5202,15 @@ struct CompactSeatView: View {
     }
     
     var statusText: String {
+        if isBuyerView {
+            // Buyer view: simple "SOLD" or "AVAILABLE"
+            switch seat.status {
+            case .available: return "AVAILABLE"
+            case .reserved, .sold: return "SOLD"
+            }
+        }
+        
+        // Management view: detailed status
         // For sold seats, show price OR family member name OR donation
         if seat.status == .sold {
             // Check if it's a donation
@@ -5175,6 +5244,8 @@ struct CompactSeatView: View {
     
     var body: some View {
         Button(action: {
+            guard !isBuyerView else { return } // Disable interactions in buyer view
+            
             withAnimation(.easeInOut(duration: 0.15)) {
                 isPressed = true
             }
@@ -5842,6 +5913,177 @@ struct SeatOptionsView: View {
         
         onUpdate(updatedSeat)
         dismiss()
+    }
+}
+
+// MARK: - Shareable Seat Layout View
+struct ShareableSeatLayoutView: View {
+    let concert: Concert
+    @ObservedObject var settingsManager: SettingsManager
+    
+    var body: some View {
+        VStack(spacing: 24) {
+            // Header
+            VStack(spacing: 8) {
+                Text(settingsManager.suiteName)
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(.primary)
+                
+                Text(concert.artist)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(.secondary)
+                
+                Text(DateFormatter.localizedString(from: concert.date, dateStyle: .full, timeStyle: .none))
+                    .font(.system(size: 16))
+                    .foregroundColor(.secondary)
+                
+                Text(settingsManager.venueLocation)
+                    .font(.system(size: 16))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.top, 16)
+            
+            // Legend
+            HStack(spacing: 20) {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 16, height: 16)
+                    Text("Available")
+                        .font(.system(size: 14, weight: .medium))
+                }
+                
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(Color.red)
+                        .frame(width: 16, height: 16)
+                    Text("Sold")
+                        .font(.system(size: 14, weight: .medium))
+                }
+            }
+            .padding(.horizontal)
+            
+            // Seat Layout - Same arrangement as management view but simplified
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color(.systemGray6))
+                .frame(height: 220)
+                .overlay(
+                    ZStack {
+                        // Bottom row (seats 3, 4, 5, 6)
+                        VStack {
+                            Spacer()
+                            HStack(spacing: 14) {
+                                ShareableSeatView(seatNumber: 6, seat: concert.seats[5])
+                                ShareableSeatView(seatNumber: 5, seat: concert.seats[4])
+                                ShareableSeatView(seatNumber: 4, seat: concert.seats[3])
+                                ShareableSeatView(seatNumber: 3, seat: concert.seats[2])
+                            }
+                            .padding(.bottom, 8)
+                        }
+                        
+                        // Left side (seats 7, 8)
+                        HStack {
+                            VStack(spacing: -2) {
+                                ShareableSeatView(seatNumber: 8, seat: concert.seats[7])
+                                ShareableSeatView(seatNumber: 7, seat: concert.seats[6])
+                                Spacer()
+                                    .frame(height: 72)
+                            }
+                            .padding(.leading, 8)
+                            
+                            Spacer()
+                        }
+                        
+                        // Right side (seats 1, 2)
+                        HStack {
+                            Spacer()
+                            
+                            VStack(spacing: -2) {
+                                ShareableSeatView(seatNumber: 1, seat: concert.seats[0])
+                                ShareableSeatView(seatNumber: 2, seat: concert.seats[1])
+                                Spacer()
+                                    .frame(height: 72)
+                            }
+                            .padding(.trailing, 8)
+                        }
+                        
+                        // Center firepit
+                        VStack {
+                            ShareableFirepitView()
+                                .padding(.top, 80)
+                            Spacer()
+                        }
+                    }
+                )
+                .padding(.horizontal)
+            
+            // Footer with contact info
+            VStack(spacing: 4) {
+                Text("Select your seat and text your choice!")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.primary)
+                
+                Text("Suite seats available for purchase")
+                    .font(.system(size: 14))
+                    .foregroundColor(.secondary)
+            }
+            .padding(.bottom, 16)
+        }
+        .background(Color(.systemBackground))
+    }
+}
+
+// MARK: - Shareable Seat View (Simplified)
+struct ShareableSeatView: View {
+    let seatNumber: Int
+    let seat: Seat
+    
+    private var seatColor: Color {
+        switch seat.status {
+        case .available:
+            return .green
+        case .reserved, .sold:
+            return .red
+        }
+    }
+    
+    var body: some View {
+        VStack(spacing: 4) {
+            Circle()
+                .fill(seatColor)
+                .frame(width: 40, height: 40)
+                .overlay(
+                    Text("\(seatNumber)")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.white)
+                )
+                .shadow(color: seatColor.opacity(0.4), radius: 4, x: 0, y: 2)
+            
+            Text(seat.status == .available ? "Available" : "Sold")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(seatColor)
+        }
+    }
+}
+
+// MARK: - Shareable Firepit View (Simplified)
+struct ShareableFirepitView: View {
+    var body: some View {
+        Circle()
+            .fill(
+                RadialGradient(
+                    colors: [.yellow, .orange, .red.opacity(0.8)],
+                    center: .center,
+                    startRadius: 5,
+                    endRadius: 20
+                )
+            )
+            .frame(width: 40, height: 40)
+            .overlay(
+                Image(systemName: "flame.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(.white)
+            )
     }
 }
 
