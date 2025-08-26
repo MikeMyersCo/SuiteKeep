@@ -8,6 +8,19 @@
 import SwiftUI
 import AVFoundation
 import CloudKit
+import UIKit
+
+// MARK: - Extensions
+extension CGFloat {
+    var safeValue: CGFloat {
+        return self.isFinite ? self : 0
+    }
+}
+
+extension Notification.Name {
+    static let concertDataSynced = Notification.Name("concertDataSynced")
+}
+
 
 // MARK: - Charity Data Model
 struct SavedCharity: Codable, Identifiable, Equatable {
@@ -61,6 +74,14 @@ class SettingsManager: ObservableObject {
         }
     }
     
+    @Published var enableMultiTenantSuites: Bool {
+        didSet {
+            UserDefaults.standard.set(enableMultiTenantSuites, forKey: "enableMultiTenantSuites")
+            NSUbiquitousKeyValueStore.default.set(enableMultiTenantSuites, forKey: "enableMultiTenantSuites")
+            NSUbiquitousKeyValueStore.default.synchronize()
+        }
+    }
+    
     
     private var iCloudObserver: NSObjectProtocol?
     
@@ -76,6 +97,9 @@ class SettingsManager: ObservableObject {
             self.defaultSeatCost = 25.0 // Default to $25 only if no value was ever set
         }
         
+        // Load multi-tenant setting (defaults to false)
+        self.enableMultiTenantSuites = UserDefaults.standard.bool(forKey: "enableMultiTenantSuites")
+        
         // Check iCloud for newer values
         if let iCloudSuiteName = NSUbiquitousKeyValueStore.default.string(forKey: "suiteName") {
             self.suiteName = iCloudSuiteName
@@ -89,6 +113,12 @@ class SettingsManager: ObservableObject {
         }
         if let iCloudDefaultCost = NSUbiquitousKeyValueStore.default.object(forKey: "defaultSeatCost") as? Double {
             self.defaultSeatCost = iCloudDefaultCost // Use iCloud value (including 0)
+        }
+        
+        // Check iCloud for multi-tenant setting
+        let iCloudMultiTenant = NSUbiquitousKeyValueStore.default.object(forKey: "enableMultiTenantSuites")
+        if iCloudMultiTenant != nil {
+            self.enableMultiTenantSuites = NSUbiquitousKeyValueStore.default.bool(forKey: "enableMultiTenantSuites")
         }
         
         // Listen for iCloud changes
@@ -122,6 +152,13 @@ class SettingsManager: ObservableObject {
         let iCloudFamilyPrice = NSUbiquitousKeyValueStore.default.double(forKey: "familyTicketPrice")
         if iCloudFamilyPrice > 0 {
             self.familyTicketPrice = iCloudFamilyPrice
+        }
+        if let iCloudDefaultCost = NSUbiquitousKeyValueStore.default.object(forKey: "defaultSeatCost") as? Double {
+            self.defaultSeatCost = iCloudDefaultCost
+        }
+        let iCloudMultiTenant = NSUbiquitousKeyValueStore.default.object(forKey: "enableMultiTenantSuites")
+        if iCloudMultiTenant != nil {
+            self.enableMultiTenantSuites = NSUbiquitousKeyValueStore.default.bool(forKey: "enableMultiTenantSuites")
         }
     }
     
@@ -865,7 +902,7 @@ struct DynamicFireSuiteApp: View {
     @State private var selectedTab = 0
     @State private var animateFlames = true
     @State private var isShowingSplash = true
-    @StateObject private var sharedSuiteManager = SharedSuiteManager()
+    @EnvironmentObject var sharedSuiteManager: SharedSuiteManager
     @StateObject private var settingsManager = SettingsManager()
     @StateObject private var concertManager = ConcertDataManager()
     
@@ -1047,6 +1084,7 @@ struct SuiteSummaryView: View {
     let concerts: [Concert]
     @ObservedObject var settingsManager: SettingsManager
     @State private var animateStats = false
+    @EnvironmentObject var sharedSuiteManager: SharedSuiteManager
     
     var totalTicketsSold: Int {
         concerts.reduce(0) { $0 + $1.ticketsSold }
@@ -1076,8 +1114,75 @@ struct SuiteSummaryView: View {
         return Int((Double(totalOccupancy) / Double(pastConcerts.count * 8)) * 100)
     }
     
+    var syncStatusText: String {
+        if sharedSuiteManager.isSyncing {
+            return "Syncing..."
+        } else if sharedSuiteManager.isOffline {
+            return "Offline"
+        } else if sharedSuiteManager.pendingOperationsCount > 0 {
+            return "Pending Sync"
+        } else {
+            return "Synced"
+        }
+    }
+    
+    var syncDetailText: String {
+        if sharedSuiteManager.pendingOperationsCount > 0 {
+            return "\(sharedSuiteManager.pendingOperationsCount) pending changes"
+        } else {
+            return "Shared with \(sharedSuiteManager.currentSuiteInfo?.members.count ?? 0) members"
+        }
+    }
+    
     var body: some View {
         VStack(spacing: 20) {
+            // Sync Status Indicator for Shared Suites
+            if sharedSuiteManager.isInSharedSuite {
+                HStack {
+                    HStack(spacing: 6) {
+                        if sharedSuiteManager.isSyncing {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.modernAccent)
+                                .rotationEffect(.degrees(animateStats ? 360 : 0))
+                                .animation(.linear(duration: 2).repeatForever(autoreverses: false), value: animateStats)
+                        } else if sharedSuiteManager.isOffline || sharedSuiteManager.pendingOperationsCount > 0 {
+                            Image(systemName: "wifi.exclamationmark")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.orange)
+                        } else {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(.green)
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(syncStatusText)
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.modernText)
+                            
+                            Text(syncDetailText)
+                                .font(.system(size: 10))
+                                .foregroundColor(.modernTextSecondary)
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    Text(sharedSuiteManager.cloudKitStatus)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.modernTextSecondary)
+                }
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.modernSecondary.opacity(0.6))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(sharedSuiteManager.isSyncing ? Color.modernAccent.opacity(0.5) : Color.green.opacity(0.3), lineWidth: 1)
+                        )
+                )
+            }
             
             // Key Metrics Cards with Beautiful Gradients
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 2), spacing: 12) {
@@ -1446,8 +1551,8 @@ struct DynamicFirepitView: View {
                     .fill(Color.yellow)
                     .frame(width: 2, height: 2)
                     .offset(
-                        x: CGFloat.random(in: -20...20),
-                        y: CGFloat.random(in: -30...10)
+                        x: CGFloat.random(in: -20...20).safeValue,
+                        y: CGFloat.random(in: -30...10).safeValue
                     )
                     .opacity(isPulsing ? 0.8 : 0.3)
             }
@@ -1538,7 +1643,7 @@ struct PerformanceMetricsView: View {
                                                 endPoint: .top
                                             )
                                         )
-                                        .frame(width: barWidth, height: animateBars ? max(20, CGFloat(chartData[index] * 0.8)) : 0)
+                                        .frame(width: barWidth.safeValue, height: animateBars ? max(20, CGFloat(chartData[index] * 0.8).safeValue) : 0)
                                         .animation(.spring(response: 0.8, dampingFraction: 0.7).delay(Double(index) * 0.08), value: animateBars)
                                         .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
                                     
@@ -2101,23 +2206,84 @@ struct SeatModification: Codable, Equatable {
     }
 }
 
+// MARK: - Invitation Token Model
+struct InvitationToken: Codable, Identifiable {
+    let id: String
+    let suiteId: String
+    let invitedBy: String
+    let role: UserRole
+    let expirationDate: Date
+    let createdDate: Date
+    var used: Bool
+    var usedBy: String?
+    var usedDate: Date?
+    
+    init(suiteId: String, invitedBy: String, role: UserRole, validForDays: Int = 7) {
+        self.id = UUID().uuidString
+        self.suiteId = suiteId
+        self.invitedBy = invitedBy
+        self.role = role
+        self.createdDate = Date()
+        self.expirationDate = Calendar.current.date(byAdding: .day, value: validForDays, to: Date()) ?? Date()
+        self.used = false
+    }
+    
+    var isExpired: Bool {
+        return Date() > expirationDate
+    }
+    
+    var isValid: Bool {
+        return !used && !isExpired
+    }
+}
+
+// MARK: - Suite Sync Model
+struct SuiteSync: Codable {
+    let suiteId: String
+    let lastSyncDate: Date
+    let syncVersion: Int
+    var pendingChanges: [String: String] // Changed to Codable types only
+    
+    init(suiteId: String, syncVersion: Int = 1) {
+        self.suiteId = suiteId
+        self.lastSyncDate = Date()
+        self.syncVersion = syncVersion
+        self.pendingChanges = [:]
+    }
+}
+
 // MARK: - CloudKit Record Types
 
 enum CloudKitRecordType {
     static let sharedSuite = "SharedSuite"
-    static let concert = "Concert"
+    static let concert = "Concert"  
     static let suiteMember = "SuiteMember"
+    static let invitationToken = "InvitationToken"
+    static let suiteSync = "SuiteSync"
+}
+
+// MARK: - CloudKit Zone Configuration
+struct CloudKitZone {
+    static let sharedSuiteZoneID = CKRecordZone.ID(zoneName: "SharedSuiteZone", ownerName: CKCurrentUserDefaultName)
+    
+    static func createCustomZone() -> CKRecordZone {
+        return CKRecordZone(zoneID: sharedSuiteZoneID)
+    }
 }
 
 // Extensions to convert models to/from CloudKit records
 extension SharedSuiteInfo {
     func toCloudKitRecord() -> CKRecord {
-        let record = CKRecord(recordType: CloudKitRecordType.sharedSuite, recordID: CKRecord.ID(recordName: suiteId))
+        // Use default zone for both suites and invitation tokens for consistency
+        let record = CKRecord(recordType: CloudKitRecordType.sharedSuite, 
+                             recordID: CKRecord.ID(recordName: suiteId))
         record["suiteName"] = suiteName
         record["venueLocation"] = venueLocation
         record["ownerId"] = ownerId
         record["createdDate"] = createdDate
         record["lastModified"] = lastModified
+        record["isActive"] = true
+        record["memberCount"] = Int64(members.count)
         
         // Store members as JSON data
         if let membersData = try? JSONEncoder().encode(members) {
@@ -2162,6 +2328,7 @@ extension Concert {
         record["concertId"] = Int64(id)
         record["artist"] = artist
         record["date"] = date
+        record["suiteId"] = suiteId  // Add the missing suiteId field
         record["createdBy"] = createdBy
         record["lastModifiedBy"] = lastModifiedBy
         record["lastModifiedDate"] = lastModifiedDate
@@ -2211,12 +2378,85 @@ extension Concert {
             date: date,
             seats: seats,
             parkingTicket: parkingTicket,
-            suiteId: record["suite"] != nil ? "shared" : nil,
+            suiteId: record["suiteId"] as? String,
             createdBy: record["createdBy"] as? String,
             lastModifiedBy: record["lastModifiedBy"] as? String,
             lastModifiedDate: record["lastModifiedDate"] as? Date,
             sharedVersion: record["sharedVersion"] as? Int
         )
+    }
+}
+
+// Extensions for new CloudKit models
+extension InvitationToken {
+    func toCloudKitRecord() -> CKRecord {
+        // Use default zone for invitation tokens to avoid zone issues
+        let record = CKRecord(recordType: CloudKitRecordType.invitationToken, 
+                             recordID: CKRecord.ID(recordName: id))
+        record["suiteId"] = suiteId
+        record["invitedBy"] = invitedBy
+        record["role"] = role.rawValue
+        record["expirationDate"] = expirationDate
+        record["createdDate"] = createdDate
+        record["used"] = used
+        record["usedBy"] = usedBy
+        record["usedDate"] = usedDate
+        
+        return record
+    }
+    
+    static func fromCloudKitRecord(_ record: CKRecord) -> InvitationToken? {
+        guard let suiteId = record["suiteId"] as? String,
+              let invitedBy = record["invitedBy"] as? String,
+              let roleString = record["role"] as? String,
+              let role = UserRole(rawValue: roleString),
+              let expirationDate = record["expirationDate"] as? Date,
+              let createdDate = record["createdDate"] as? Date,
+              let used = record["used"] as? Bool else {
+            return nil
+        }
+        
+        var token = InvitationToken(suiteId: suiteId, invitedBy: invitedBy, role: role)
+        token.used = used
+        token.usedBy = record["usedBy"] as? String
+        token.usedDate = record["usedDate"] as? Date
+        
+        return token
+    }
+}
+
+extension SuiteSync {
+    func toCloudKitRecord() -> CKRecord {
+        let record = CKRecord(recordType: CloudKitRecordType.suiteSync, 
+                             recordID: CKRecord.ID(recordName: "sync_\(suiteId)"))
+        record["suiteId"] = suiteId
+        record["lastSyncDate"] = lastSyncDate
+        record["syncVersion"] = Int64(syncVersion)
+        
+        // Store pending changes as JSON
+        if let changesData = try? JSONEncoder().encode(pendingChanges) {
+            record["pendingChanges"] = changesData
+        }
+        
+        return record
+    }
+    
+    static func fromCloudKitRecord(_ record: CKRecord) -> SuiteSync? {
+        guard let suiteId = record["suiteId"] as? String,
+              let lastSyncDate = record["lastSyncDate"] as? Date,
+              let syncVersionInt = record["syncVersion"] as? Int64 else {
+            return nil
+        }
+        
+        var sync = SuiteSync(suiteId: suiteId, syncVersion: Int(syncVersionInt))
+        
+        // Decode pending changes
+        if let changesData = record["pendingChanges"] as? Data,
+           let changes = try? JSONDecoder().decode([String: String].self, from: changesData) {
+            sync.pendingChanges = changes
+        }
+        
+        return sync
     }
 }
 
@@ -2429,21 +2669,35 @@ struct SuiteSettings: Codable {
 class SharedSuiteManager: ObservableObject {
     @Published var currentSuiteInfo: SharedSuiteInfo?
     @Published var userRole: UserRole = .owner
-    @Published var currentUserId: String = ""
+    @Published var self.currentUserId: String = ""
     @Published var currentUserName: String = ""
     @Published var isSharedSuite: Bool = false
     @Published var cloudKitStatus: String = "Ready"
     @Published var isCloudKitAvailable: Bool = false
     @Published var isSyncing: Bool = false
+    @Published var isOffline: Bool = false
+    @Published var pendingOperationsCount: Int = 0
     
     private let userDefaults = UserDefaults.standard
     private let iCloudStore = NSUbiquitousKeyValueStore.default
     private let cloudKitContainer = CKContainer.default()
-    private var cloudKitDatabase: CKDatabase { cloudKitContainer.privateCloudDatabase }
+    private var cloudKitDatabase: CKDatabase { 
+        return cloudKitContainer.privateCloudDatabase 
+    }
+    
+    private var self.publicCloudKitDatabase: CKDatabase {
+        return cloudKitContainer.publicCloudDatabase
+    }
     
     private let suiteInfoKey = "SharedSuiteInfo"
     private let userIdKey = "CurrentUserId"
     private let userNameKey = "CurrentUserName"
+    private let subscriptionID = "SharedSuiteUpdates"
+    private let offlineQueueKey = "OfflineOperationQueue"
+    
+    // Offline operation queue
+    private var offlineQueue: [OfflineOperation] = []
+    private var retryTimer: Timer?
     
     var isInSharedSuite: Bool {
         return currentSuiteInfo != nil
@@ -2452,16 +2706,18 @@ class SharedSuiteManager: ObservableObject {
     init() {
         loadUserInfo()
         loadSuiteInfo()
+        loadOfflineQueue()
         checkCloudKitAvailability()
+        startRetryTimer()
     }
     
     private func loadUserInfo() {
         // Generate or load user ID
         if let existingUserId = userDefaults.string(forKey: userIdKey) {
-            currentUserId = existingUserId
+            self.currentUserId = existingUserId
         } else {
-            currentUserId = UUID().uuidString
-            userDefaults.set(currentUserId, forKey: userIdKey)
+            self.currentUserId = UUID().uuidString
+            userDefaults.set(self.currentUserId, forKey: userIdKey)
         }
         
         // Load user name (default to device name)
@@ -2484,9 +2740,9 @@ class SharedSuiteManager: ObservableObject {
             isSharedSuite = true
             
             // Determine user role
-            if suiteInfo.ownerId == currentUserId {
+            if suiteInfo.ownerId == self.currentUserId {
                 userRole = .owner
-            } else if let member = suiteInfo.members.first(where: { $0.userId == currentUserId }) {
+            } else if let member = suiteInfo.members.first(where: { $0.userId == self.currentUserId }) {
                 userRole = member.role
             } else {
                 userRole = .viewer
@@ -2517,7 +2773,7 @@ class SharedSuiteManager: ObservableObject {
             suiteId: suiteId,
             suiteName: suiteName,
             venueLocation: venueLocation,
-            ownerId: currentUserId
+            ownerId: self.currentUserId
         )
         
         currentSuiteInfo = suiteInfo
@@ -2529,7 +2785,7 @@ class SharedSuiteManager: ObservableObject {
     func joinSharedSuite(_ suiteInfo: SharedSuiteInfo, as role: UserRole = .viewer) {
         // Add current user as a member
         let member = SuiteMember(
-            userId: currentUserId,
+            userId: self.currentUserId,
             displayName: currentUserName,
             role: role
         )
@@ -2545,11 +2801,18 @@ class SharedSuiteManager: ObservableObject {
     }
     
     func leaveSharedSuite() {
+        // Clean up subscriptions first
+        Task {
+            try? await removeCloudKitSubscriptions()
+        }
+        
         currentSuiteInfo = nil
         userRole = .owner
         isSharedSuite = false
         userDefaults.removeObject(forKey: suiteInfoKey)
         iCloudStore.removeObject(forKey: suiteInfoKey)
+        
+        cloudKitStatus = "Left shared suite"
     }
     
     func updateUserRole(for userId: String, to newRole: UserRole) {
@@ -2570,11 +2833,22 @@ class SharedSuiteManager: ObservableObject {
         suiteInfo.lastModified = Date()
         currentSuiteInfo = suiteInfo
         saveSuiteInfo()
+        
+        // Sync to CloudKit
+        Task {
+            do {
+                let record = suiteInfo.toCloudKitRecord()
+                _ = try await self.publicCloudKitDatabase.save(record)
+            } catch {
+                // Handle error silently for now
+            }
+        }
     }
     
     func removeMember(userId: String) {
         guard var suiteInfo = currentSuiteInfo,
-              userRole.canManageUsers else {
+              userRole.canManageUsers,
+              userId != self.currentUserId else { // Can't remove self
             return
         }
         
@@ -2582,6 +2856,16 @@ class SharedSuiteManager: ObservableObject {
         suiteInfo.lastModified = Date()
         currentSuiteInfo = suiteInfo
         saveSuiteInfo()
+        
+        // Sync to CloudKit
+        Task {
+            do {
+                let record = suiteInfo.toCloudKitRecord()
+                _ = try await self.publicCloudKitDatabase.save(record)
+            } catch {
+                // Handle error silently for now
+            }
+        }
     }
     
     // MARK: - Permission Checking
@@ -2598,6 +2882,7 @@ class SharedSuiteManager: ObservableObject {
         return !isSharedSuite || userRole.canEdit
     }
     
+    
     // MARK: - CloudKit Integration
     
     private func checkCloudKitAvailability() {
@@ -2607,6 +2892,10 @@ class SharedSuiteManager: ObservableObject {
                 case .available:
                     self?.isCloudKitAvailable = true
                     self?.cloudKitStatus = "Ready"
+                    // Set up CloudKit zone when available
+                    Task {
+                        await self?.ensureCloudKitZoneExists()
+                    }
                 case .noAccount:
                     self?.isCloudKitAvailable = false
                     self?.cloudKitStatus = "No iCloud account"
@@ -2616,9 +2905,38 @@ class SharedSuiteManager: ObservableObject {
                 case .restricted:
                     self?.isCloudKitAvailable = false
                     self?.cloudKitStatus = "Restricted"
+                case .temporarilyUnavailable:
+                    self?.isCloudKitAvailable = false
+                    self?.cloudKitStatus = "Temporarily unavailable"
                 @unknown default:
                     self?.isCloudKitAvailable = false
                     self?.cloudKitStatus = "Unknown status"
+                }
+            }
+        }
+    }
+    
+    private func ensureCloudKitZoneExists() async {
+        do {
+            let zone = CloudKitZone.createCustomZone()
+            _ = try await cloudKitDatabase.save(zone)
+            await MainActor.run {
+                cloudKitStatus = "CloudKit zone ready"
+            }
+        } catch {
+            // Zone might already exist, which is fine
+            if let ckError = error as? CKError {
+                switch ckError.code {
+                case .serverRecordChanged, .unknownItem:
+                    // Zone already exists, continue
+                    await MainActor.run {
+                        cloudKitStatus = "CloudKit zone ready (existing)"
+                    }
+                    return
+                default:
+                    await MainActor.run {
+                        cloudKitStatus = "Zone creation failed: \(ckError.localizedDescription)"
+                    }
                 }
             }
         }
@@ -2629,19 +2947,35 @@ class SharedSuiteManager: ObservableObject {
             throw CloudKitError.notAvailable
         }
         
-        cloudKitStatus = "Creating shared suite..."
+        await MainActor.run {
+            cloudKitStatus = "Creating shared suite..."
+            isSyncing = true
+        }
         
-        let suiteInfo = SharedSuiteInfo(
+        // Create suite info with owner as initial member (move outside do block)
+        var suiteInfo = SharedSuiteInfo(
             suiteId: UUID().uuidString,
             suiteName: suiteName,
             venueLocation: venueLocation,
-            ownerId: currentUserId
+            ownerId: self.currentUserId
         )
         
-        let record = suiteInfo.toCloudKitRecord()
+        // Add owner as first member
+        let ownerMember = SuiteMember(
+            userId: self.currentUserId,
+            displayName: currentUserName,
+            role: .owner
+        )
+        suiteInfo.members = [ownerMember]
         
         do {
-            let savedRecord = try await cloudKitDatabase.save(record)
+            // Ensure the zone exists first
+            await ensureCloudKitZoneExists()
+            
+            let record = suiteInfo.toCloudKitRecord()
+            let savedRecord = try await executeWithRetry { [self] in
+                try await self.publicCloudKitDatabase.save(record)
+            }
             
             // Update local state
             await MainActor.run {
@@ -2649,15 +2983,33 @@ class SharedSuiteManager: ObservableObject {
                 isSharedSuite = true
                 userRole = .owner
                 cloudKitStatus = "Suite created successfully"
+                isSyncing = false
                 saveSuiteInfo()
+            }
+            
+            // Set up real-time updates for the new suite
+            Task {
+                await setupCloudKitSubscriptions()
             }
             
             return savedRecord.recordID.recordName
         } catch {
-            await MainActor.run {
-                cloudKitStatus = "Failed to create suite: \(error.localizedDescription)"
+            let cloudKitError = handleCloudKitError(error)
+            
+            // If it's a network error, queue the operation for later
+            if cloudKitError == .networkUnavailable {
+                if let data = try? JSONEncoder().encode(suiteInfo) {
+                    let operation = OfflineOperation(type: .createSuite, data: data)
+                    addToOfflineQueue(operation)
+                }
             }
-            throw error
+            
+            await MainActor.run {
+                cloudKitStatus = cloudKitError.localizedDescription
+                isOffline = (cloudKitError == .networkUnavailable)
+                isSyncing = false
+            }
+            throw cloudKitError
         }
     }
     
@@ -2666,39 +3018,79 @@ class SharedSuiteManager: ObservableObject {
             throw CloudKitError.notAvailable
         }
         
-        cloudKitStatus = "Joining shared suite..."
+        await MainActor.run {
+            cloudKitStatus = "Joining shared suite..."
+            isSyncing = true
+        }
         
         let recordID = CKRecord.ID(recordName: suiteId)
         
         do {
-            let record = try await cloudKitDatabase.record(for: recordID)
+            let record = try await self.publicCloudKitDatabase.record(for: recordID)
             
             if var suiteInfo = SharedSuiteInfo.fromCloudKitRecord(record) {
-                // Add current user as member
-                let member = SuiteMember(
-                    userId: currentUserId,
-                    displayName: currentUserName,
-                    role: .viewer // Default role for new members
-                )
-                suiteInfo.members.append(member)
-                suiteInfo.lastModified = Date()
-                
-                // Save updated suite info to CloudKit
-                let updatedRecord = suiteInfo.toCloudKitRecord()
-                _ = try await cloudKitDatabase.save(updatedRecord)
-                
-                // Update local state
-                await MainActor.run {
-                    currentSuiteInfo = suiteInfo
-                    isSharedSuite = true
-                    userRole = .viewer
-                    cloudKitStatus = "Joined suite successfully"
-                    saveSuiteInfo()
+                // Check if user is already a member
+                if suiteInfo.members.contains(where: { $0.userId == self.currentUserId }) {
+                    // User is already a member, just update local state
+                    let userRole = suiteInfo.members.first(where: { $0.userId == self.currentUserId })?.role ?? .viewer
+                    
+                    await MainActor.run {
+                        currentSuiteInfo = suiteInfo
+                        isSharedSuite = true
+                        self.userRole = userRole
+                        cloudKitStatus = "Rejoined suite successfully"
+                        isSyncing = false
+                        saveSuiteInfo()
+                    }
+                    
+                    // Set up real-time updates and sync concert data
+                    Task {
+                        await setupCloudKitSubscriptions()
+                        await syncConcertData()
+                    }
+                } else {
+                    // Add current user as new member
+                    let member = SuiteMember(
+                        userId: self.currentUserId,
+                        displayName: currentUserName,
+                        role: .viewer // Default role for new members
+                    )
+                    suiteInfo.members.append(member)
+                    suiteInfo.lastModified = Date()
+                    
+                    // Try to save updated suite info to CloudKit (optional)
+                    do {
+                        let updatedRecord = suiteInfo.toCloudKitRecord()
+                        _ = try await self.publicCloudKitDatabase.save(updatedRecord)
+                        print("✅ DEBUG: Added member to suite record successfully")
+                    } catch {
+                        print("⚠️ DEBUG: Could not update suite record with new member (continuing anyway): \(error)")
+                        // Don't fail the join - user can still access the suite locally
+                    }
+                    
+                    // Update local state
+                    await MainActor.run {
+                        currentSuiteInfo = suiteInfo
+                        isSharedSuite = true
+                        userRole = .viewer
+                        cloudKitStatus = "Joined suite successfully"
+                        isSyncing = false
+                        saveSuiteInfo()
+                    }
+                    
+                    // Set up real-time updates and sync concert data
+                    Task {
+                        await setupCloudKitSubscriptions()
+                        await syncConcertData()
+                    }
                 }
+            } else {
+                throw CloudKitError.recordNotFound
             }
         } catch {
             await MainActor.run {
                 cloudKitStatus = "Failed to join suite: \(error.localizedDescription)"
+                isSyncing = false
             }
             throw error
         }
@@ -2706,7 +3098,214 @@ class SharedSuiteManager: ObservableObject {
     
     func generateSharingLink() -> String? {
         guard let suiteInfo = currentSuiteInfo else { return nil }
-        return "suitekeeper://join/\(suiteInfo.suiteId)"
+        return "suitekeep://invite/\(suiteInfo.suiteId)"
+    }
+    
+    func generateUniversalLink(tokenId: String) -> String {
+        // Return just the URL - iOS will make it tappable automatically
+        return "suitekeep://invite/\(tokenId)"
+    }
+    
+    func generateInvitationInstructions() -> String {
+        return """
+🔥 You're invited to join my Fire Suite!
+
+To join:
+1. Download SuiteKeep from the App Store if you don't have it
+2. Open SuiteKeep 
+3. Go to Settings → Suite Sharing → Join Suite
+4. Paste the invitation code or tap the link I'm sending next
+"""
+    }
+    
+    func generateInvitationCode(tokenId: String) -> String {
+        return tokenId
+    }
+    
+    func generateInvitationMessage(tokenId: String) -> String {
+        return """
+🔥 You're invited to join my Fire Suite!
+
+Invitation Code: \(tokenId)
+
+Tap to join: suitekeep://invite/\(tokenId)
+
+Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the code above.
+"""
+    }
+    
+    func generateInvitationLink(role: UserRole = .viewer, validForDays: Int = 7) async throws -> String {
+        let tokenId = try await generateInvitationToken(role: role, validForDays: validForDays)
+        return generateInvitationCode(tokenId: tokenId)
+    }
+    
+    
+    // MARK: - Invitation Management
+    
+    func generateInvitationToken(role: UserRole = .viewer, validForDays: Int = 7) async throws -> String {
+        guard isCloudKitAvailable,
+              let suiteInfo = currentSuiteInfo,
+              userRole.canManageUsers else {
+            throw CloudKitError.permissionDenied
+        }
+        
+        await MainActor.run {
+            cloudKitStatus = "Creating invitation..."
+            isSyncing = true
+        }
+        
+        do {
+            // Ensure the zone exists first
+            await ensureCloudKitZoneExists()
+            
+            // Check if suite record exists, create only if needed
+            print("🔧 DEBUG: Checking if suite exists in CloudKit with ID: \(suiteInfo.suiteId)")
+            do {
+                let recordID = CKRecord.ID(recordName: suiteInfo.suiteId)
+                _ = try await self.publicCloudKitDatabase.record(for: recordID)
+                print("✅ DEBUG: Suite record already exists in CloudKit")
+            } catch let ckError as CKError where ckError.code == .unknownItem {
+                // Record doesn't exist, create it
+                print("🔧 DEBUG: Suite record doesn't exist, creating it...")
+                let suiteRecord = suiteInfo.toCloudKitRecord()
+                _ = try await withTimeout(seconds: 30) { [self] in
+                    try await executeWithRetry { [self] in
+                        print("🔧 DEBUG: Attempting to create new suite record...")
+                        let result = try await self.publicCloudKitDatabase.save(suiteRecord)
+                        print("🔧 DEBUG: New suite record created: \(result.recordID)")
+                        return result
+                    }
+                }
+                print("✅ DEBUG: Suite record created successfully")
+            } catch {
+                print("❌ DEBUG: Error checking suite record: \(error)")
+                // Continue anyway - we'll try to create the invitation token
+            }
+            
+            let token = InvitationToken(
+                suiteId: suiteInfo.suiteId,
+                invitedBy: self.currentUserId,
+                role: role,
+                validForDays: validForDays
+            )
+            
+            let tokenRecord = token.toCloudKitRecord()
+            print("🔧 DEBUG: Saving invitation token to CloudKit with ID: \(token.id)")
+            print("🔧 DEBUG: Token zone: \(tokenRecord.recordID.zoneID)")
+            _ = try await withTimeout(seconds: 30) { [self] in
+                try await executeWithRetry { [self] in
+                    print("🔧 DEBUG: Attempting invitation token save...")
+                    let result = try await self.publicCloudKitDatabase.save(tokenRecord)
+                    print("🔧 DEBUG: Token save returned: \(result.recordID)")
+                    return result
+                }
+            }
+            print("✅ DEBUG: Invitation token saved successfully")
+            
+            await MainActor.run {
+                cloudKitStatus = "Invitation created"
+                isSyncing = false
+            }
+            
+            return token.id
+        } catch {
+            let cloudKitError = handleCloudKitError(error)
+            await MainActor.run {
+                cloudKitStatus = "Failed to create invitation: \(cloudKitError.localizedDescription)"
+                isSyncing = false
+            }
+            throw cloudKitError
+        }
+    }
+    
+    func validateAndUseInvitationToken(_ tokenId: String) async throws -> SharedSuiteInfo {
+        guard isCloudKitAvailable else {
+            throw CloudKitError.notAvailable
+        }
+        
+        await MainActor.run {
+            cloudKitStatus = "Validating invitation..."
+            isSyncing = true
+        }
+        
+        do {
+            // Try to find the invitation token in default zone (since we save tokens there now)
+            let tokenRecordID = CKRecord.ID(recordName: tokenId)
+            print("🔧 DEBUG: Looking for invitation token with ID: \(tokenId)")
+            print("🔧 DEBUG: Token record ID zone: \(tokenRecordID.zoneID)")
+            let tokenRecord = try await withTimeout(seconds: 30) { [self] in
+                try await self.publicCloudKitDatabase.record(for: tokenRecordID)
+            }
+            print("✅ DEBUG: Found invitation token record")
+            
+            guard var token = InvitationToken.fromCloudKitRecord(tokenRecord),
+                  token.isValid else {
+                print("❌ DEBUG: Token is invalid or expired")
+                await MainActor.run {
+                    cloudKitStatus = "Invalid or expired invitation"
+                    isSyncing = false
+                }
+                throw CloudKitError.permissionDenied
+            }
+            print("✅ DEBUG: Token is valid, looking for suite: \(token.suiteId)")
+            
+            // Look for the suite in the default zone (since we're now saving both there)
+            let suiteRecordID = CKRecord.ID(recordName: token.suiteId)
+            print("🔧 DEBUG: Looking for suite record with ID: \(token.suiteId)")
+            print("🔧 DEBUG: Suite record ID zone: \(suiteRecordID.zoneID)")
+            let suiteRecord: CKRecord
+            do {
+                suiteRecord = try await withTimeout(seconds: 30) { [self] in
+                    try await self.publicCloudKitDatabase.record(for: suiteRecordID)
+                }
+                print("✅ DEBUG: Found suite record")
+            } catch let error as CKError {
+                print("❌ DEBUG: Suite record lookup failed - Code: \(error.code.rawValue), Description: \(error.localizedDescription)")
+                throw error
+            }
+            
+            guard let suiteInfo = SharedSuiteInfo.fromCloudKitRecord(suiteRecord) else {
+                await MainActor.run {
+                    cloudKitStatus = "Suite record is invalid"
+                    isSyncing = false
+                }
+                throw CloudKitError.recordNotFound
+            }
+            
+            // Try to mark token as used (optional - don't fail if this doesn't work)
+            do {
+                token.used = true
+                token.usedBy = self.currentUserId
+                token.usedDate = Date()
+                
+                let updatedTokenRecord = token.toCloudKitRecord()
+                _ = try await self.publicCloudKitDatabase.save(updatedTokenRecord)
+                print("✅ DEBUG: Token marked as used successfully")
+            } catch {
+                print("⚠️ DEBUG: Could not mark token as used (continuing anyway): \(error)")
+                // Don't fail the entire operation - invitation can still work
+            }
+            
+            await MainActor.run {
+                cloudKitStatus = "Invitation validated"
+                isSyncing = false
+            }
+            
+            return suiteInfo
+            
+        } catch {
+            let cloudKitError = handleCloudKitError(error)
+            await MainActor.run {
+                cloudKitStatus = "Failed to validate invitation: \(cloudKitError.localizedDescription)"
+                isSyncing = false
+            }
+            throw cloudKitError
+        }
+    }
+    
+    func joinSuiteWithInvitation(_ tokenId: String) async throws {
+        let suiteInfo = try await validateAndUseInvitationToken(tokenId)
+        try await joinSharedSuiteFromCloud(suiteId: suiteInfo.suiteId)
     }
     
     func syncWithCloudKit() async {
@@ -2716,7 +3315,7 @@ class SharedSuiteManager: ObservableObject {
         
         do {
             let recordID = CKRecord.ID(recordName: suiteInfo.suiteId)
-            let record = try await cloudKitDatabase.record(for: recordID)
+            let record = try await self.publicCloudKitDatabase.record(for: recordID)
             
             if let updatedSuiteInfo = SharedSuiteInfo.fromCloudKitRecord(record) {
                 await MainActor.run {
@@ -2731,12 +3330,618 @@ class SharedSuiteManager: ObservableObject {
             }
         }
     }
+    
+    func syncConcertData() async {
+        guard isCloudKitAvailable, let suiteInfo = currentSuiteInfo else { return }
+        
+        print("🔧 DEBUG: Syncing concert data for suite: \(suiteInfo.suiteId)")
+        
+        do {
+            // Query for all concerts in this suite from public database
+            let predicate = NSPredicate(format: "suiteId == %@", suiteInfo.suiteId)
+            let query = CKQuery(recordType: CloudKitRecordType.concert, predicate: predicate)
+            
+            let (matchResults, _) = try await self.publicCloudKitDatabase.records(matching: query)
+            
+            var syncedConcerts: [Concert] = []
+            for (_, result) in matchResults {
+                switch result {
+                case .success(let record):
+                    if let concert = Concert.fromCloudKitRecord(record) {
+                        syncedConcerts.append(concert)
+                    }
+                case .failure(let error):
+                    print("❌ DEBUG: Failed to fetch concert record: \(error)")
+                }
+            }
+            
+            print("✅ DEBUG: Found \(syncedConcerts.count) concerts for suite")
+            
+            // Update concert data via notification
+            NotificationCenter.default.post(
+                name: .concertDataSynced, 
+                object: nil, 
+                userInfo: ["concerts": syncedConcerts]
+            )
+        } catch {
+            print("❌ DEBUG: Failed to sync concert data: \(error)")
+        }
+    }
+    
+    // MARK: - App Update Migrations
+    
+    func runAppUpdateMigrations() async {
+        let migrationKey = "concertSuiteIdMigrationCompleted"
+        
+        // Check if migration has already been completed
+        guard !userDefaults.bool(forKey: migrationKey),
+              isCloudKitAvailable,
+              let suiteInfo = currentSuiteInfo else {
+            return
+        }
+        
+        print("🔄 Running concert suiteId migration for suite: \(suiteInfo.suiteId)")
+        
+        // Create backup before migration
+        do {
+            try await createMigrationBackup()
+            print("✅ Pre-migration backup created successfully")
+        } catch {
+            print("❌ Failed to create backup, aborting migration for safety: \(error)")
+            return
+        }
+        
+        do {
+            // Query all concert records from public database that might belong to this suite
+            let predicate = NSPredicate(format: "createdBy == %@", self.currentUserId)
+            let query = CKQuery(recordType: CloudKitRecordType.concert, predicate: predicate)
+            
+            let (matchResults, _) = try await self.publicCloudKitDatabase.records(matching: query)
+            
+            var migratedCount = 0
+            var totalRecords = 0
+            var failedRecords: [String] = []
+            
+            for (recordID, result) in matchResults {
+                switch result {
+                case .success(let record):
+                    totalRecords += 1
+                    // Check if this record already has a suiteId
+                    if record["suiteId"] == nil {
+                        // Add the suiteId to the record
+                        record["suiteId"] = suiteInfo.suiteId
+                        
+                        do {
+                            _ = try await self.publicCloudKitDatabase.save(record)
+                            migratedCount += 1
+                            print("✅ Migrated concert record: \(recordID.recordName)")
+                        } catch {
+                            failedRecords.append(recordID.recordName)
+                            print("⚠️ Failed to migrate concert record \(recordID.recordName): \(error)")
+                        }
+                    } else {
+                        print("ℹ️ Concert record \(recordID.recordName) already has suiteId, skipping")
+                    }
+                case .failure(let error):
+                    totalRecords += 1
+                    failedRecords.append(recordID.recordName)
+                    print("❌ Failed to fetch concert record \(recordID.recordName): \(error)")
+                }
+            }
+            
+            // Only mark as completed if migration was mostly successful
+            if failedRecords.isEmpty {
+                print("✅ Migration complete: Updated \(migratedCount)/\(totalRecords) concert records successfully")
+                self.userDefaults.set(true, forKey: migrationKey)
+            } else if failedRecords.count <= totalRecords / 2 {
+                print("⚠️ Migration partially complete: \(migratedCount) succeeded, \(failedRecords.count) failed")
+                print("⚠️ Failed records: \(failedRecords.joined(separator: ", "))")
+                self.userDefaults.set(true, forKey: migrationKey) // Mark as done to avoid infinite retries
+            } else {
+                print("❌ Migration failed: Too many failed records (\(failedRecords.count)/\(totalRecords))")
+                print("❌ Will retry on next app launch. Failed records: \(failedRecords.joined(separator: ", "))")
+                // Don't mark as completed - will retry next time
+            }
+            
+        } catch {
+            print("❌ Migration failed: \(error)")
+        }
+    }
+    
+    private func createMigrationBackup() async throws {
+        let backupKey = "concertMigrationBackup_\(Date().timeIntervalSince1970)"
+        
+        guard let suiteInfo = currentSuiteInfo else {
+            throw NSError(domain: "MigrationBackup", code: 1, userInfo: [NSLocalizedDescriptionKey: "No suite info available"])
+        }
+        
+        print("📦 Creating migration backup...")
+        
+        // Backup: Query and store all current concert records
+        do {
+            let predicate = NSPredicate(format: "createdBy == %@", self.currentUserId)
+            let query = CKQuery(recordType: CloudKitRecordType.concert, predicate: predicate)
+            
+            let (matchResults, _) = try await self.publicCloudKitDatabase.records(matching: query)
+            
+            var backupData: [String: Any] = [:]
+            backupData["timestamp"] = Date()
+            backupData["suiteId"] = suiteInfo.suiteId
+            backupData["userId"] = self.currentUserId
+            backupData["migrationReason"] = "suiteId field addition"
+            
+            var concertBackups: [[String: Any]] = []
+            
+            for (recordID, result) in matchResults {
+                switch result {
+                case .success(let record):
+                    var recordBackup: [String: Any] = [:]
+                    recordBackup["recordName"] = recordID.recordName
+                    recordBackup["recordType"] = record.recordType
+                    
+                    // Store all field values
+                    for key in record.allKeys() {
+                        let value = record[key]
+                        if let stringValue = value as? String {
+                            recordBackup[key] = stringValue
+                        } else if let numberValue = value as? NSNumber {
+                            recordBackup[key] = numberValue
+                        } else if let dateValue = value as? Date {
+                            recordBackup[key] = dateValue.timeIntervalSince1970
+                        } else if let dataValue = value as? Data {
+                            recordBackup[key] = dataValue.base64EncodedString()
+                        }
+                        // Note: We'll store JSON-encodable types for safety
+                    }
+                    
+                    concertBackups.append(recordBackup)
+                    
+                case .failure(let error):
+                    print("⚠️ Could not backup record \(recordID.recordName): \(error)")
+                }
+            }
+            
+            backupData["concerts"] = concertBackups
+            backupData["concertCount"] = concertBackups.count
+            
+            // Store backup in UserDefaults
+            if let backupJsonData = try? JSONSerialization.data(withJSONObject: backupData),
+               let backupString = String(data: backupJsonData, encoding: .utf8) {
+                userDefaults.set(backupString, forKey: backupKey)
+                
+                // Also save backup metadata for easy access
+                let backupMetadataKey = "migrationBackupMetadata"
+                var existingBackups = userDefaults.stringArray(forKey: backupMetadataKey) ?? []
+                existingBackups.append(backupKey)
+                userDefaults.set(existingBackups, forKey: backupMetadataKey)
+                
+                print("✅ Backup created: \(concertBackups.count) concert records saved as \(backupKey)")
+            } else {
+                throw NSError(domain: "MigrationBackup", code: 2, userInfo: [NSLocalizedDescriptionKey: "Could not serialize backup data"])
+            }
+            
+        } catch {
+            throw NSError(domain: "MigrationBackup", code: 3, userInfo: [NSLocalizedDescriptionKey: "Backup failed: \(error.localizedDescription)"])
+        }
+    }
+    
+    // Helper function to restore from backup if needed (for emergency use)
+    func restoreFromMigrationBackup(backupKey: String) async throws {
+        print("🔄 Attempting to restore from backup: \(backupKey)")
+        
+        guard let backupString = userDefaults.string(forKey: backupKey),
+              let backupData = backupString.data(using: .utf8),
+              let backup = try? JSONSerialization.jsonObject(with: backupData) as? [String: Any] else {
+            throw NSError(domain: "BackupRestore", code: 1, userInfo: [NSLocalizedDescriptionKey: "Could not load backup data"])
+        }
+        
+        guard let concerts = backup["concerts"] as? [[String: Any]] else {
+            throw NSError(domain: "BackupRestore", code: 2, userInfo: [NSLocalizedDescriptionKey: "Invalid backup format"])
+        }
+        
+        print("📦 Found backup with \(concerts.count) concert records from \(backup["timestamp"] ?? "unknown time")")
+        print("⚠️  WARNING: This will overwrite current CloudKit records. Use only in emergency!")
+        
+        // This would be used manually in extreme cases - not automatically called
+        // Implementation would restore the backed up field values to CloudKit records
+    }
+    
+    // MARK: - Real-time Updates with CloudKit Subscriptions
+    
+    func setupCloudKitSubscriptions() async {
+        guard isCloudKitAvailable, isInSharedSuite else { return }
+        
+        do {
+            // Remove any existing subscriptions first
+            try await removeCloudKitSubscriptions()
+            
+            // Create a query subscription for shared suite updates
+            let predicate = NSPredicate(format: "TRUEPREDICATE")
+            let subscription = CKQuerySubscription(
+                recordType: CloudKitRecordType.sharedSuite,
+                predicate: predicate,
+                subscriptionID: subscriptionID,
+                options: [.firesOnRecordUpdate, .firesOnRecordCreation, .firesOnRecordDeletion]
+            )
+            
+            // Configure the notification info
+            let notificationInfo = CKSubscription.NotificationInfo()
+            notificationInfo.shouldSendContentAvailable = true
+            notificationInfo.shouldBadge = false
+            subscription.notificationInfo = notificationInfo
+            
+            _ = try await cloudKitDatabase.save(subscription)
+            
+            await MainActor.run {
+                cloudKitStatus = "Real-time updates enabled"
+            }
+        } catch {
+            await MainActor.run {
+                cloudKitStatus = "Failed to setup subscriptions: \(error.localizedDescription)"
+            }
+        }
+    }
+    
+    func removeCloudKitSubscriptions() async throws {
+        guard isCloudKitAvailable else { return }
+        
+        do {
+            // Fetch existing subscriptions
+            let subscriptions = try await cloudKitDatabase.allSubscriptions()
+            
+            // Remove subscriptions with our ID
+            let subscriptionIDs = subscriptions
+                .filter { $0.subscriptionID == subscriptionID }
+                .map { $0.subscriptionID }
+            
+            if !subscriptionIDs.isEmpty {
+                _ = try await cloudKitDatabase.modifySubscriptions(saving: [], deleting: subscriptionIDs)
+            }
+        } catch {
+            // Subscription might not exist, which is fine
+        }
+    }
+    
+    func handleCloudKitNotification(_ notification: CKNotification) {
+        guard let queryNotification = notification as? CKQueryNotification,
+              isInSharedSuite else { return }
+        
+        // Sync with CloudKit when we receive notifications
+        Task {
+            await syncWithCloudKit()
+        }
+    }
+}
+
+// MARK: - Conflict Resolution and Data Merging
+extension SharedSuiteManager {
+    func mergeConflictingChanges(localConcert: Concert, remoteConcert: Concert) -> Concert {
+        var mergedConcert = remoteConcert // Start with remote version
+        
+        // Merge seat-by-seat using modification timestamps
+        for (index, localSeat) in localConcert.seats.enumerated() {
+            let remoteSeat = remoteConcert.seats[index]
+            
+            // Use the seat with the most recent modification
+            if let localModified = localSeat.lastModifiedDate,
+               let remoteModified = remoteSeat.lastModifiedDate {
+                
+                if localModified > remoteModified {
+                    // Local seat is newer, use local version
+                    mergedConcert.seats[index] = localSeat
+                } else if localModified < remoteModified {
+                    // Remote seat is newer, already using remote
+                    continue
+                } else {
+                    // Same timestamp, check conflict resolution version
+                    let localVersion = localSeat.conflictResolutionVersion ?? 1
+                    let remoteVersion = remoteSeat.conflictResolutionVersion ?? 1
+                    
+                    if localVersion > remoteVersion {
+                        mergedConcert.seats[index] = localSeat
+                    }
+                }
+            } else if localSeat.lastModifiedDate != nil {
+                // Only local has modification date, prefer local
+                mergedConcert.seats[index] = localSeat
+            }
+        }
+        
+        // Update merged concert metadata
+        mergedConcert.lastModifiedBy = self.currentUserId
+        mergedConcert.lastModifiedDate = Date()
+        mergedConcert.sharedVersion = (mergedConcert.sharedVersion ?? 1) + 1
+        
+        return mergedConcert
+    }
+    
+    func detectConflicts(localData: [Concert], remoteData: [Concert]) -> [(local: Concert, remote: Concert)] {
+        var conflicts: [(local: Concert, remote: Concert)] = []
+        
+        for localConcert in localData {
+            if let remoteConcert = remoteData.first(where: { $0.id == localConcert.id }) {
+                // Check if there are actual conflicts
+                if hasConflicts(local: localConcert, remote: remoteConcert) {
+                    conflicts.append((local: localConcert, remote: remoteConcert))
+                }
+            }
+        }
+        
+        return conflicts
+    }
+    
+    private func hasConflicts(local: Concert, remote: Concert) -> Bool {
+        // Check if concerts have different modification dates and versions
+        guard let localModified = local.lastModifiedDate,
+              let remoteModified = remote.lastModifiedDate else {
+            return false
+        }
+        
+        let timeDifference = abs(localModified.timeIntervalSince(remoteModified))
+        
+        // If modified within 5 seconds, check for actual content differences
+        if timeDifference < 5 {
+            return hasSeatConflicts(local: local, remote: remote)
+        }
+        
+        return false
+    }
+    
+    private func hasSeatConflicts(local: Concert, remote: Concert) -> Bool {
+        for (index, localSeat) in local.seats.enumerated() {
+            let remoteSeat = remote.seats[index]
+            
+            // Check if seats have different statuses or prices
+            if localSeat.status != remoteSeat.status ||
+               localSeat.price != remoteSeat.price ||
+               localSeat.source != remoteSeat.source {
+                return true
+            }
+        }
+        return false
+    }
+    
+    func syncWithConflictResolution(localConcerts: [Concert]) async throws -> [Concert] {
+        guard isCloudKitAvailable, let suiteInfo = currentSuiteInfo else {
+            throw CloudKitError.notAvailable
+        }
+        
+        await MainActor.run {
+            cloudKitStatus = "Syncing with conflict resolution..."
+            isSyncing = true
+        }
+        
+        do {
+            // Fetch all concerts from CloudKit
+            let query = CKQuery(recordType: CloudKitRecordType.concert, predicate: NSPredicate(format: "TRUEPREDICATE"))
+            let (matchResults, _) = try await cloudKitDatabase.records(matching: query, inZoneWith: CKRecordZone.default().zoneID)
+            
+            var remoteConcerts: [Concert] = []
+            for (_, result) in matchResults {
+                switch result {
+                case .success(let record):
+                    if let concert = Concert.fromCloudKitRecord(record) {
+                        remoteConcerts.append(concert)
+                    }
+                case .failure:
+                    continue
+                }
+            }
+            
+            // Detect conflicts
+            let conflicts = detectConflicts(localData: localConcerts, remoteData: remoteConcerts)
+            var resolvedConcerts = localConcerts
+            
+            // Resolve conflicts
+            for conflict in conflicts {
+                let mergedConcert = mergeConflictingChanges(localConcert: conflict.local, remoteConcert: conflict.remote)
+                
+                // Update the local concert with merged data
+                if let index = resolvedConcerts.firstIndex(where: { $0.id == mergedConcert.id }) {
+                    resolvedConcerts[index] = mergedConcert
+                }
+                
+                // Save merged concert back to CloudKit
+                let record = mergedConcert.toCloudKitRecord()
+                _ = try await self.publicCloudKitDatabase.save(record)
+            }
+            
+            // Add any remote concerts that don't exist locally
+            for remoteConcert in remoteConcerts {
+                if !resolvedConcerts.contains(where: { $0.id == remoteConcert.id }) {
+                    resolvedConcerts.append(remoteConcert)
+                }
+            }
+            
+            await MainActor.run {
+                cloudKitStatus = "Sync with conflict resolution complete"
+                isSyncing = false
+            }
+            
+            return resolvedConcerts
+        } catch {
+            await MainActor.run {
+                cloudKitStatus = "Sync failed: \(error.localizedDescription)"
+                isSyncing = false
+            }
+            throw error
+        }
+    }
+}
+
+// MARK: - CloudKit Notification Handling
+extension SharedSuiteManager {
+    static func handleRemoteNotification(userInfo: [AnyHashable: Any]) async {
+        if let notification = CKNotification(fromRemoteNotificationDictionary: userInfo) {
+            // This should be called from the shared instance in your app
+            // You might want to implement a singleton pattern or pass this through the app delegate
+        }
+    }
+}
+
+// MARK: - Offline Support and Error Handling
+extension SharedSuiteManager {
+    private func loadOfflineQueue() {
+        if let data = userDefaults.data(forKey: offlineQueueKey),
+           let queue = try? JSONDecoder().decode([OfflineOperation].self, from: data) {
+            offlineQueue = queue
+            pendingOperationsCount = queue.count
+        }
+    }
+    
+    private func saveOfflineQueue() {
+        if let encoded = try? JSONEncoder().encode(offlineQueue) {
+            userDefaults.set(encoded, forKey: offlineQueueKey)
+            pendingOperationsCount = offlineQueue.count
+        }
+    }
+    
+    private func addToOfflineQueue(_ operation: OfflineOperation) {
+        offlineQueue.append(operation)
+        saveOfflineQueue()
+    }
+    
+    private func startRetryTimer() {
+        retryTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
+            Task {
+                await self.processOfflineQueue()
+            }
+        }
+    }
+    
+    private func processOfflineQueue() async {
+        guard isCloudKitAvailable && !offlineQueue.isEmpty else { return }
+        
+        var successfulOperations: [UUID] = []
+        
+        for operation in offlineQueue {
+            // Skip operations that have exceeded retry limit
+            if operation.retryCount >= 5 {
+                successfulOperations.append(operation.id)
+                continue
+            }
+            
+            do {
+                try await processOfflineOperation(operation)
+                successfulOperations.append(operation.id)
+            } catch {
+                // Update retry count
+                if let index = offlineQueue.firstIndex(where: { $0.id == operation.id }) {
+                    offlineQueue[index].retryCount += 1
+                }
+            }
+        }
+        
+        // Remove successful operations
+        offlineQueue.removeAll { successfulOperations.contains($0.id) }
+        saveOfflineQueue()
+        
+        await MainActor.run {
+            isOffline = !offlineQueue.isEmpty
+            if offlineQueue.isEmpty {
+                cloudKitStatus = "All changes synced"
+            }
+        }
+    }
+    
+    private func processOfflineOperation(_ operation: OfflineOperation) async throws {
+        switch operation.type {
+        case .updateConcert:
+            if let concert = try? JSONDecoder().decode(Concert.self, from: operation.data) {
+                let record = concert.toCloudKitRecord()
+                _ = try await self.publicCloudKitDatabase.save(record)
+            }
+        case .updateSuiteInfo:
+            if let suiteInfo = try? JSONDecoder().decode(SharedSuiteInfo.self, from: operation.data) {
+                let record = suiteInfo.toCloudKitRecord()
+                _ = try await self.publicCloudKitDatabase.save(record)
+            }
+        default:
+            break
+        }
+    }
+    
+    func handleCloudKitError(_ error: Error) -> CloudKitError {
+        if let ckError = error as? CKError {
+            switch ckError.code {
+            case .networkUnavailable, .networkFailure:
+                return .networkUnavailable
+            case .quotaExceeded:
+                return .quotaExceeded
+            case .serviceUnavailable, .internalError:
+                return .serverError
+            case .serverRecordChanged:
+                return .conflictError
+            case .unknownItem:
+                return .recordNotFound
+            case .permissionFailure:
+                return .permissionDenied
+            default:
+                return .serverError
+            }
+        }
+        return .serverError
+    }
+    
+    func executeWithRetry<T>(
+        operation: @escaping () async throws -> T,
+        maxRetries: Int = 3,
+        initialDelay: TimeInterval = 1.0
+    ) async throws -> T {
+        var lastError: Error?
+        
+        for attempt in 0...maxRetries {
+            do {
+                return try await operation()
+            } catch {
+                lastError = error
+                let cloudKitError = handleCloudKitError(error)
+                
+                // Don't retry unrecoverable errors
+                if !cloudKitError.isRecoverable || attempt == maxRetries {
+                    throw cloudKitError
+                }
+                
+                // Exponential backoff
+                let delay = initialDelay * pow(2.0, Double(attempt))
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            }
+        }
+        
+        throw lastError ?? CloudKitError.retryLimitExceeded
+    }
+    
+    func withTimeout<T>(seconds: TimeInterval, operation: @escaping () async throws -> T) async throws -> T {
+        return try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask {
+                return try await operation()
+            }
+            
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw CloudKitError.timeout
+            }
+            
+            guard let result = try await group.next() else {
+                throw CloudKitError.timeout
+            }
+            
+            group.cancelAll()
+            return result
+        }
+    }
 }
 
 enum CloudKitError: Error, LocalizedError {
     case notAvailable
     case recordNotFound
     case permissionDenied
+    case networkUnavailable
+    case quotaExceeded
+    case serverError
+    case conflictError
+    case retryLimitExceeded
+    case timeout
     
     var errorDescription: String? {
         switch self {
@@ -2746,7 +3951,136 @@ enum CloudKitError: Error, LocalizedError {
             return "The requested suite could not be found."
         case .permissionDenied:
             return "You don't have permission to access this suite."
+        case .networkUnavailable:
+            return "Network connection unavailable. Changes will be saved locally and synced when connection is restored."
+        case .quotaExceeded:
+            return "iCloud storage quota exceeded. Please free up space in iCloud."
+        case .serverError:
+            return "CloudKit server error. Please try again later."
+        case .conflictError:
+            return "Data conflict detected. Changes have been merged automatically."
+        case .retryLimitExceeded:
+            return "Operation failed after multiple attempts. Please try again later."
+        case .timeout:
+            return "Operation timed out. Please check your network connection and try again."
         }
+    }
+    
+    var isRecoverable: Bool {
+        switch self {
+        case .networkUnavailable, .serverError, .conflictError:
+            return true
+        case .notAvailable, .recordNotFound, .permissionDenied, .quotaExceeded, .retryLimitExceeded, .timeout:
+            return false
+        }
+    }
+    
+    /// Public method to perform migration with backup (called from UI)
+    func performMigrationWithBackup() async {
+        let migrationKey = "concertSuiteIdMigrationCompleted"
+        
+        // Check if migration has already been completed
+        guard !self.userDefaults.bool(forKey: migrationKey),
+              self.isCloudKitAvailable,
+              let suiteInfo = self.currentSuiteInfo else {
+            return
+        }
+        
+        print("🔄 Running manual concert suiteId migration for suite: \(suiteInfo.suiteId)")
+        
+        // Create backup before migration
+        do {
+            try await self.createMigrationBackup()
+            print("✅ Pre-migration backup created successfully")
+        } catch {
+            print("❌ Failed to create backup, aborting migration for safety: \(error)")
+            return
+        }
+        
+        do {
+            // Query all concert records from public database that might belong to this suite
+            let predicate = NSPredicate(format: "createdBy == %@", self.currentUserId)
+            let query = CKQuery(recordType: CloudKitRecordType.concert, predicate: predicate)
+            
+            let (matchResults, _) = try await self.publicCloudKitDatabase.records(matching: query)
+            
+            var migratedCount = 0
+            var totalRecords = 0
+            var failedRecords: [String] = []
+            
+            for (recordID, result) in matchResults {
+                switch result {
+                case .success(let record):
+                    totalRecords += 1
+                    
+                    // Check if suiteId already exists
+                    if record["suiteId"] != nil {
+                        print("⏭️ Record \(recordID.recordName) already has suiteId, skipping")
+                        migratedCount += 1
+                        continue
+                    }
+                    
+                    // Add suiteId to record
+                    record["suiteId"] = suiteInfo.suiteId
+                    
+                    // Save updated record
+                    do {
+                        let _ = try await self.publicCloudKitDatabase.save(record)
+                        print("✅ Updated record \(recordID.recordName) with suiteId")
+                        migratedCount += 1
+                    } catch {
+                        print("❌ Failed to update record \(recordID.recordName): \(error)")
+                        failedRecords.append(recordID.recordName)
+                    }
+                    
+                case .failure(let error):
+                    print("❌ Failed to retrieve record \(recordID.recordName): \(error)")
+                    totalRecords += 1
+                    failedRecords.append(recordID.recordName)
+                }
+            }
+            
+            // Only mark as completed if migration was mostly successful
+            if failedRecords.isEmpty {
+                print("✅ Migration complete: Updated \(migratedCount)/\(totalRecords) concert records successfully")
+                self.userDefaults.set(true, forKey: migrationKey)
+            } else if failedRecords.count <= totalRecords / 2 {
+                print("⚠️ Migration partially complete: \(migratedCount) succeeded, \(failedRecords.count) failed")
+                print("⚠️ Failed records: \(failedRecords.joined(separator: ", "))")
+                self.userDefaults.set(true, forKey: migrationKey) // Mark as done to avoid infinite retries
+            } else {
+                print("❌ Migration failed: Too many failed records (\(failedRecords.count)/\(totalRecords))")
+                print("❌ Will retry on next app launch. Failed records: \(failedRecords.joined(separator: ", "))")
+                // Don't mark as completed - will retry next time
+            }
+            
+        } catch {
+            print("❌ Migration failed: \(error)")
+        }
+    }
+}
+
+// MARK: - Offline Operation Queue
+struct OfflineOperation: Codable, Identifiable {
+    let id: UUID
+    let type: OperationType
+    let data: Data
+    let timestamp: Date
+    var retryCount: Int = 0
+    
+    enum OperationType: String, Codable {
+        case createSuite
+        case updateSeat
+        case updateConcert
+        case deleteConcert
+        case updateSuiteInfo
+    }
+    
+    init(type: OperationType, data: Data) {
+        self.id = UUID()
+        self.type = type
+        self.data = data
+        self.timestamp = Date()
     }
 }
 
@@ -2759,7 +4093,13 @@ class ConcertDataManager: ObservableObject {
     private let userDefaults = UserDefaults.standard
     private let iCloudStore = NSUbiquitousKeyValueStore.default
     private let cloudKitContainer = CKContainer.default()
-    private var cloudKitDatabase: CKDatabase { cloudKitContainer.privateCloudDatabase }
+    private var cloudKitDatabase: CKDatabase { 
+        return cloudKitContainer.privateCloudDatabase 
+    }
+    
+    private var self.publicCloudKitDatabase: CKDatabase {
+        return cloudKitContainer.publicCloudDatabase
+    }
     private let concertsKey = "SavedConcerts"
     private var iCloudObserver: NSObjectProtocol?
     
@@ -2771,6 +4111,7 @@ class ConcertDataManager: ObservableObject {
         setupiCloudSync()
         migrateDataIfNeeded()
         loadConcerts()
+        setupConcertSyncListener()
     }
     
     private func migrateDataIfNeeded() {
@@ -2811,8 +4152,8 @@ class ConcertDataManager: ObservableObject {
                     // Only update if sharing properties are nil (backward compatibility)
                     if concerts[i].suiteId == nil {
                         concerts[i].suiteId = nil // Will remain nil for non-shared suites
-                        concerts[i].createdBy = sharedSuiteManager?.currentUserId
-                        concerts[i].lastModifiedBy = sharedSuiteManager?.currentUserId
+                        concerts[i].createdBy = sharedSuiteManager?.self.currentUserId
+                        concerts[i].lastModifiedBy = sharedSuiteManager?.self.currentUserId
                         concerts[i].lastModifiedDate = Date()
                         concerts[i].sharedVersion = 1
                     }
@@ -2820,7 +4161,7 @@ class ConcertDataManager: ObservableObject {
                     // Update seats with sharing metadata
                     for j in 0..<concerts[i].seats.count {
                         if concerts[i].seats[j].lastModifiedBy == nil {
-                            concerts[i].seats[j].lastModifiedBy = sharedSuiteManager?.currentUserId
+                            concerts[i].seats[j].lastModifiedBy = sharedSuiteManager?.self.currentUserId
                             concerts[i].seats[j].lastModifiedDate = Date()
                             concerts[i].seats[j].modificationHistory = []
                             concerts[i].seats[j].conflictResolutionVersion = 1
@@ -2893,6 +4234,28 @@ class ConcertDataManager: ObservableObject {
         }
     }
     
+    func updateWithSyncedConcerts(_ syncedConcerts: [Concert]) {
+        print("🔄 Updating local concerts with \(syncedConcerts.count) synced concerts")
+        DispatchQueue.main.async { [weak self] in
+            self?.concerts = syncedConcerts
+            self?.syncStatus = "Synced from cloud"
+            self?.lastSyncDate = Date()
+        }
+        saveConcerts()
+    }
+    
+    private func setupConcertSyncListener() {
+        NotificationCenter.default.addObserver(
+            forName: .concertDataSynced,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            if let concerts = notification.userInfo?["concerts"] as? [Concert] {
+                self?.updateWithSyncedConcerts(concerts)
+            }
+        }
+    }
+    
     func saveConcerts() {
         do {
             let encoded = try JSONEncoder().encode(concerts)
@@ -2952,14 +4315,14 @@ class ConcertDataManager: ObservableObject {
         if let sharedSuiteManager = sharedSuiteManager,
            let suiteInfo = sharedSuiteManager.currentSuiteInfo {
             updatedConcert.suiteId = suiteInfo.suiteId
-            updatedConcert.createdBy = sharedSuiteManager.currentUserId
-            updatedConcert.lastModifiedBy = sharedSuiteManager.currentUserId
+            updatedConcert.createdBy = sharedSuiteManager.self.currentUserId
+            updatedConcert.lastModifiedBy = sharedSuiteManager.self.currentUserId
             updatedConcert.lastModifiedDate = Date()
             updatedConcert.sharedVersion = 1
         } else if let sharedSuiteManager = sharedSuiteManager {
             // Non-shared suite, just track the user
-            updatedConcert.createdBy = sharedSuiteManager.currentUserId
-            updatedConcert.lastModifiedBy = sharedSuiteManager.currentUserId
+            updatedConcert.createdBy = sharedSuiteManager.self.currentUserId
+            updatedConcert.lastModifiedBy = sharedSuiteManager.self.currentUserId
             updatedConcert.lastModifiedDate = Date()
         }
         
@@ -2973,7 +4336,7 @@ class ConcertDataManager: ObservableObject {
             
             // Update sharing metadata
             if let sharedSuiteManager = sharedSuiteManager {
-                updatedConcert.recordModification(by: sharedSuiteManager.currentUserId)
+                updatedConcert.recordModification(by: sharedSuiteManager.self.currentUserId)
             }
             
             concerts[index] = updatedConcert
@@ -3011,14 +4374,14 @@ class ConcertDataManager: ObservableObject {
         // Add sharing metadata
         if let sharedSuiteManager = sharedSuiteManager {
             newSeat.recordModification(
-                by: sharedSuiteManager.currentUserId,
+                by: sharedSuiteManager.self.currentUserId,
                 userName: sharedSuiteManager.currentUserName,
                 previousStatus: previousStatus
             )
         }
         
         concerts[concertIndex].seats[seatIndex] = newSeat
-        concerts[concertIndex].recordModification(by: sharedSuiteManager?.currentUserId ?? "")
+        concerts[concertIndex].recordModification(by: sharedSuiteManager?.self.currentUserId ?? "")
         
         saveConcerts()
     }
@@ -3229,7 +4592,7 @@ class ConcertDataManager: ObservableObject {
             let suiteRecord = suiteInfo.toCloudKitRecord()
             let concertRecord = concert.toCloudKitRecord(suiteRecord: suiteRecord)
             
-            _ = try await cloudKitDatabase.save(concertRecord)
+            _ = try await self.publicCloudKitDatabase.save(concertRecord)
             
             await MainActor.run {
                 syncStatus = "Concert synced"
@@ -3242,23 +4605,51 @@ class ConcertDataManager: ObservableObject {
         }
     }
     
-    // Update the existing saveConcerts method to include CloudKit sync
+    // Update the existing saveConcerts method to include CloudKit sync with conflict resolution
     private func syncToCloudKitAfterSave() {
-        // If we're in a shared suite, sync to CloudKit
+        // If we're in a shared suite, sync to CloudKit with conflict resolution
         if let sharedSuiteManager = sharedSuiteManager,
            sharedSuiteManager.isSharedSuite {
             Task {
-                await MainActor.run {
-                    sharedSuiteManager.isSyncing = true
+                do {
+                    // Use the SharedSuiteManager's conflict resolution
+                    let resolvedConcerts = try await sharedSuiteManager.syncWithConflictResolution(localConcerts: concerts)
+                    
+                    await MainActor.run {
+                        // Update local concerts with resolved data
+                        self.concerts = resolvedConcerts.sorted { $0.date > $1.date }
+                        
+                        // Save resolved concerts back to local storage
+                        self.saveToLocalStorage()
+                    }
+                } catch {
+                    await MainActor.run {
+                        syncStatus = "Sync with conflict resolution failed: \(error.localizedDescription)"
+                    }
                 }
-                
-                for concert in concerts {
-                    await syncConcertToCloudKit(concert)
-                }
-                
-                await MainActor.run {
-                    sharedSuiteManager.isSyncing = false
-                }
+            }
+        }
+    }
+    
+    // Enhanced sync method for manual sync with conflict resolution
+    func syncWithConflictResolution() async {
+        guard let sharedSuiteManager = sharedSuiteManager,
+              sharedSuiteManager.isSharedSuite else {
+            return
+        }
+        
+        do {
+            let resolvedConcerts = try await sharedSuiteManager.syncWithConflictResolution(localConcerts: concerts)
+            
+            await MainActor.run {
+                self.concerts = resolvedConcerts.sorted { $0.date > $1.date }
+                self.syncStatus = "Sync complete with conflict resolution"
+                self.lastSyncDate = Date()
+                self.saveToLocalStorage()
+            }
+        } catch {
+            await MainActor.run {
+                self.syncStatus = "Sync failed: \(error.localizedDescription)"
             }
         }
     }
@@ -5302,6 +6693,7 @@ struct InteractiveSeatView: View {
     @State private var isPressed = false
     @State private var isAnimating = false
     @State private var isHovering = false
+    @EnvironmentObject var sharedSuiteManager: SharedSuiteManager
     
     var seatGradient: LinearGradient {
         if isBatchMode && isSelected {
@@ -5364,6 +6756,27 @@ struct InteractiveSeatView: View {
         case .sold:
             return "checkmark.circle.fill"
         }
+    }
+    
+    var modificationInfo: String {
+        guard sharedSuiteManager.isInSharedSuite else { return "" }
+        
+        if let lastModifiedBy = seat.lastModifiedBy,
+           let modificationDate = seat.lastModifiedDate {
+            let isCurrentUser = lastModifiedBy == sharedSuiteManager.self.currentUserId
+            let userDisplayName = isCurrentUser ? "You" : (getUserDisplayName(userId: lastModifiedBy) ?? "User")
+            
+            let formatter = RelativeDateTimeFormatter()
+            formatter.unitsStyle = .abbreviated
+            let timeString = formatter.localizedString(for: modificationDate, relativeTo: Date())
+            
+            return "\(userDisplayName) • \(timeString)"
+        }
+        return ""
+    }
+    
+    private func getUserDisplayName(userId: String) -> String? {
+        return sharedSuiteManager.currentSuiteInfo?.members.first(where: { $0.userId == userId })?.displayName
     }
     
     var body: some View {
@@ -5454,6 +6867,24 @@ struct InteractiveSeatView: View {
                         // Status indicators
                         VStack {
                             HStack {
+                                // Sync status indicator for shared suites
+                                if sharedSuiteManager.isInSharedSuite && sharedSuiteManager.isSyncing {
+                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.blue)
+                                        .rotationEffect(Angle(degrees: isAnimating ? 360 : 0))
+                                        .animation(Animation.linear(duration: 1.5).repeatForever(autoreverses: false), value: isAnimating)
+                                }
+                                
+                                // Recent modification indicator
+                                if let lastModified = seat.lastModifiedDate,
+                                   Date().timeIntervalSince(lastModified) < 300, // 5 minutes
+                                   sharedSuiteManager.isInSharedSuite {
+                                    Image(systemName: "clock.badge.fill")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.orange)
+                                }
+                                
                                 if isBatchMode && isSelected {
                                     // Batch selection indicator
                                     Image(systemName: "checkmark.circle.fill")
@@ -5555,6 +6986,11 @@ struct InteractiveSeatView: View {
     }
     
     private var secondaryStatusText: String {
+        // Show modification info if in shared suite and seat has been modified recently
+        if sharedSuiteManager.isInSharedSuite && !modificationInfo.isEmpty {
+            return modificationInfo
+        }
+        
         switch seat.status {
         case .available:
             return ""
@@ -6988,8 +8424,64 @@ struct SettingsView: View {
                         .buttonStyle(PrimaryButtonStyle())
                         .padding(.horizontal)
                         
-                        // Suite Sharing Section - Coming Soon
+                        // Multi-Tenant Suite Section
                         VStack(alignment: .leading, spacing: 20) {
+                            SectionHeader("Multi-Tenant Suite Settings")
+                            
+                            ConsistentCard(padding: 24) {
+                                VStack(alignment: .leading, spacing: 16) {
+                                    Toggle(isOn: $settingsManager.enableMultiTenantSuites) {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text("Enable Multi-Tenant Suite Sharing")
+                                                .font(.system(size: 16, weight: .semibold))
+                                                .foregroundColor(.modernText)
+                                            Text("Allow multiple people to share and manage this suite together")
+                                                .font(.system(size: 14))
+                                                .foregroundColor(.modernTextSecondary)
+                                        }
+                                    }
+                                    .toggleStyle(SwitchToggleStyle(tint: .modernAccent))
+                                    
+                                    if settingsManager.enableMultiTenantSuites {
+                                        VStack(alignment: .leading, spacing: 12) {
+                                            Divider()
+                                            
+                                            Text("Update Required")
+                                                .font(.system(size: 14, weight: .semibold))
+                                                .foregroundColor(.orange)
+                                            
+                                            Text("Your existing concerts need to be updated to support multi-tenant functionality. This will add a unique suite identifier to all your concerts.")
+                                                .font(.system(size: 13))
+                                                .foregroundColor(.modernTextSecondary)
+                                                .fixedSize(horizontal: false, vertical: true)
+                                            
+                                            Button(action: {
+                                                Task {
+                                                    await sharedSuiteManager.performMigrationWithBackup()
+                                                    HapticManager.shared.notification(type: .success)
+                                                }
+                                            }) {
+                                                HStack {
+                                                    Image(systemName: "arrow.clockwise")
+                                                        .font(.system(size: 14, weight: .medium))
+                                                    Text("Update Records")
+                                                        .font(.system(size: 14, weight: .semibold))
+                                                }
+                                                .padding(.vertical, 8)
+                                                .padding(.horizontal, 16)
+                                                .background(Color.modernAccent.opacity(0.1))
+                                                .foregroundColor(.modernAccent)
+                                                .cornerRadius(8)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Suite Sharing Section (only show if multi-tenant is enabled)
+                        if settingsManager.enableMultiTenantSuites {
+                            VStack(alignment: .leading, spacing: 20) {
                             HStack {
                                 Text("Suite Sharing")
                                     .font(.system(size: 20, weight: .semibold))
@@ -6997,52 +8489,186 @@ struct SettingsView: View {
                                 
                                 Spacer()
                                 
-                                // Coming Soon Badge
-                                Text("Coming Soon")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .fill(Color.orange)
-                                    )
+                                if sharedSuiteManager.isInSharedSuite {
+                                    HStack(spacing: 6) {
+                                        Circle()
+                                            .fill(Color.green)
+                                            .frame(width: 8, height: 8)
+                                        Text("Active")
+                                            .font(.system(size: 12, weight: .semibold))
+                                            .foregroundColor(.green)
+                                    }
+                                } else {
+                                    Text("Not Active")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundColor(.modernTextSecondary)
+                                }
                             }
                             
-                            VStack(alignment: .leading, spacing: 12) {
-                                Text("Multi-investor collaboration")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(.modernText)
-                                
-                                Text("Share your fire suite with co-investors, business partners, or investment group members. Coordinate ticket sales, track revenue distribution, and manage seat allocations across your investor network in real-time.")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.modernTextSecondary)
-                                    .multilineTextAlignment(.leading)
-                                
-                                VStack(alignment: .leading, spacing: 8) {
+                            if sharedSuiteManager.isInSharedSuite {
+                                // Active suite display
+                                VStack(alignment: .leading, spacing: 12) {
                                     HStack {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundColor(.green)
-                                        Text("Real-time revenue tracking across all devices")
-                                            .font(.system(size: 14))
-                                            .foregroundColor(.modernTextSecondary)
+                                        Image(systemName: "person.3.fill")
+                                            .foregroundColor(.modernAccent)
+                                        Text("Currently sharing '\(sharedSuiteManager.currentSuiteInfo?.suiteName ?? "Unknown Suite")'")
+                                            .font(.system(size: 16, weight: .medium))
+                                            .foregroundColor(.modernText)
                                     }
                                     
                                     HStack {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundColor(.green)
-                                        Text("Investor permissions (Owner, Partner, Viewer)")
+                                        Text("Your role:")
                                             .font(.system(size: 14))
                                             .foregroundColor(.modernTextSecondary)
+                                        
+                                        Text(sharedSuiteManager.userRole.displayName)
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundColor(.modernAccent)
                                     }
                                     
                                     HStack {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundColor(.green)
-                                        Text("Secure investment data with iCloud protection")
+                                        Text("Members:")
                                             .font(.system(size: 14))
                                             .foregroundColor(.modernTextSecondary)
+                                        
+                                        Text("\(sharedSuiteManager.currentSuiteInfo?.members.count ?? 0)")
+                                            .font(.system(size: 14, weight: .semibold))
+                                            .foregroundColor(.modernAccent)
                                     }
+                                    
+                                    HStack(spacing: 12) {
+                                        if sharedSuiteManager.userRole.canManageUsers {
+                                            Button("Invite Member") {
+                                                print("🔥 DEBUG: Invite Member button tapped")
+                                                print("🔥 DEBUG: isCloudKitAvailable: \(sharedSuiteManager.isCloudKitAvailable)")
+                                                print("🔥 DEBUG: userRole: \(sharedSuiteManager.userRole)")
+                                                print("🔥 DEBUG: canManageUsers: \(sharedSuiteManager.userRole.canManageUsers)")
+                                                print("🔥 DEBUG: currentSuiteInfo exists: \(sharedSuiteManager.currentSuiteInfo != nil)")
+                                                
+                                                Task {
+                                                    do {
+                                                        print("🔥 DEBUG: About to generate invitation link...")
+                                                        let code = try await sharedSuiteManager.generateInvitationLink(role: .viewer)
+                                                        print("🔥 DEBUG: Generated code: \(code)")
+                                                        let activityVC = UIActivityViewController(activityItems: [code], applicationActivities: nil)
+                                                        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                                                           let window = windowScene.windows.first {
+                                                            print("🔥 DEBUG: Presenting activity view controller")
+                                                            window.rootViewController?.present(activityVC, animated: true)
+                                                        } else {
+                                                            print("❌ DEBUG: Could not find window to present activity VC")
+                                                        }
+                                                    } catch {
+                                                        print("❌ Error generating invitation: \(error)")
+                                                    }
+                                                }
+                                            }
+                                            .buttonStyle(.bordered)
+                                            
+                                            Button("Manage Members") {
+                                                activeSheet = .memberManagement
+                                            }
+                                            .buttonStyle(.bordered)
+                                        }
+                                        
+                                        Button("Sync Now") {
+                                            Task {
+                                                await sharedSuiteManager.syncWithCloudKit()
+                                                await sharedSuiteManager.syncConcertData()
+                                            }
+                                        }
+                                        .buttonStyle(.borderedProminent)
+                                        .disabled(sharedSuiteManager.isSyncing)
+                                    }
+                                    
+                                    if sharedSuiteManager.userRole == .owner {
+                                        Button("Delete Shared Suite") {
+                                            sharedSuiteManager.leaveSharedSuite()
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .foregroundColor(.red)
+                                    } else {
+                                        Button("Leave Suite") {
+                                            sharedSuiteManager.leaveSharedSuite()
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .foregroundColor(.red)
+                                    }
+                                }
+                            } else {
+                                // Not in a shared suite - show create/join options
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("Multi-investor collaboration")
+                                        .font(.system(size: 16, weight: .medium))
+                                        .foregroundColor(.modernText)
+                                    
+                                    Text("Share your fire suite with co-investors, business partners, or investment group members. Coordinate ticket sales, track revenue distribution, and manage seat allocations across your investor network in real-time.")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.modernTextSecondary)
+                                        .multilineTextAlignment(.leading)
+                                    
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        HStack {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .foregroundColor(.green)
+                                            Text("Real-time revenue tracking across all devices")
+                                                .font(.system(size: 14))
+                                                .foregroundColor(.modernTextSecondary)
+                                        }
+                                        
+                                        HStack {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .foregroundColor(.green)
+                                            Text("Investor permissions (Owner, Editor, Viewer)")
+                                                .font(.system(size: 14))
+                                                .foregroundColor(.modernTextSecondary)
+                                        }
+                                        
+                                        HStack {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .foregroundColor(.green)
+                                            Text("Secure investment data with iCloud protection")
+                                                .font(.system(size: 14))
+                                                .foregroundColor(.modernTextSecondary)
+                                        }
+                                    }
+                                    
+                                    HStack(spacing: 12) {
+                                        Button("Create Shared Suite") {
+                                            Task {
+                                                do {
+                                                    _ = try await sharedSuiteManager.createSharedSuiteInCloud(
+                                                        suiteName: settingsManager.suiteName,
+                                                        venueLocation: settingsManager.venueLocation
+                                                    )
+                                                } catch {
+                                                    // Handle error
+                                                }
+                                            }
+                                        }
+                                        .buttonStyle(.borderedProminent)
+                                        .disabled(!sharedSuiteManager.isCloudKitAvailable || sharedSuiteManager.isSyncing)
+                                        
+                                        Button("Join Suite") {
+                                            activeSheet = .joinSuite
+                                        }
+                                        .buttonStyle(.bordered)
+                                        .disabled(!sharedSuiteManager.isCloudKitAvailable || sharedSuiteManager.isSyncing)
+                                    }
+                                    
+                                    if !sharedSuiteManager.isCloudKitAvailable {
+                                        HStack {
+                                            Image(systemName: "exclamationmark.triangle.fill")
+                                                .foregroundColor(.orange)
+                                            Text("iCloud account required for sharing")
+                                                .font(.system(size: 12))
+                                                .foregroundColor(.orange)
+                                        }
+                                    }
+                                    
+                                    Text("Status: \(sharedSuiteManager.cloudKitStatus)")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(.modernTextSecondary)
                                 }
                             }
                         }
@@ -7110,6 +8736,7 @@ struct SettingsView: View {
                                 RoundedRectangle(cornerRadius: 16)
                                     .fill(Color.modernSecondary)
                             )
+                        }
                         }
                         
                         // Backup & Restore Section
@@ -7418,7 +9045,7 @@ struct JoinSharedSuiteView: View {
                             .font(.system(size: 28, weight: .bold))
                             .foregroundColor(.modernText)
                         
-                        Text("Enter the suite ID or paste a sharing link to join an existing shared suite.")
+                        Text("Enter the invitation code or suite ID to join an existing shared suite.")
                             .font(.system(size: 16))
                             .foregroundColor(.modernTextSecondary)
                             .multilineTextAlignment(.center)
@@ -7427,11 +9054,11 @@ struct JoinSharedSuiteView: View {
                     
                     // Form
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Suite ID or Sharing Link")
+                        Text("Invitation Code or Suite ID")
                             .font(.system(size: 16, weight: .medium))
                             .foregroundColor(.modernText)
                         
-                        TextField("Enter suite ID or paste link", text: $suiteId)
+                        TextField("Enter invitation code or suite ID", text: $suiteId)
                             .font(.system(size: 16))
                             .foregroundColor(.modernText)
                             .padding(16)
@@ -7439,12 +9066,39 @@ struct JoinSharedSuiteView: View {
                                 RoundedRectangle(cornerRadius: 12)
                                     .fill(Color.modernSecondary)
                             )
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
                             .onChange(of: suiteId) { newValue in
                                 // Extract suite ID from sharing link if needed
-                                if newValue.hasPrefix("suitekeeper://join/") {
-                                    suiteId = String(newValue.dropFirst("suitekeeper://join/".count))
+                                if newValue.hasPrefix("suitekeep://invite/") {
+                                    suiteId = String(newValue.dropFirst("suitekeep://invite/".count))
                                 }
                             }
+                        
+                        // Paste button
+                        Button(action: {
+                            if let clipboard = UIPasteboard.general.string {
+                                suiteId = clipboard
+                            }
+                        }) {
+                            HStack {
+                                Image(systemName: "doc.on.clipboard")
+                                    .font(.system(size: 14, weight: .medium))
+                                Text("Paste from Clipboard")
+                                    .font(.system(size: 14, weight: .medium))
+                            }
+                            .foregroundColor(.modernAccent)
+                            .padding(.vertical, 8)
+                            .padding(.horizontal, 12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color.modernAccent.opacity(0.1))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.modernAccent.opacity(0.3), lineWidth: 1)
+                                    )
+                            )
+                        }
                     }
                     .padding(20)
                     .background(
@@ -7512,11 +9166,18 @@ struct JoinSharedSuiteView: View {
         isJoining = true
         errorMessage = ""
         
+        let inputValue = suiteId.trimmingCharacters(in: .whitespacesAndNewlines)
+        
         Task {
             do {
-                try await sharedSuiteManager.joinSharedSuiteFromCloud(
-                    suiteId: suiteId.trimmingCharacters(in: .whitespacesAndNewlines)
-                )
+                // Check if input looks like an invitation token (UUID format) or suite ID
+                if inputValue.count == 36 && inputValue.contains("-") {
+                    // This looks like an invitation token (UUID format)
+                    try await sharedSuiteManager.joinSuiteWithInvitation(inputValue)
+                } else {
+                    // This looks like a suite ID
+                    try await sharedSuiteManager.joinSharedSuiteFromCloud(suiteId: inputValue)
+                }
                 
                 await MainActor.run {
                     dismiss()
@@ -7574,7 +9235,7 @@ struct MemberManagementView: View {
                                     
                                     HStack {
                                         VStack(alignment: .leading, spacing: 4) {
-                                            Text(suiteInfo.ownerId == sharedSuiteManager.currentUserId ? "You" : "Owner")
+                                            Text(suiteInfo.ownerId == sharedSuiteManager.self.currentUserId ? "You" : "Owner")
                                                 .font(.system(size: 16, weight: .medium))
                                                 .foregroundColor(.modernText)
                                             
@@ -7647,6 +9308,101 @@ struct MemberManagementView: View {
                                 }
                             }
                         }
+                        
+                        // Add Member Button
+                        if sharedSuiteManager.canManageMembers() {
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text("Invite New Member")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(.modernText)
+                                
+                                Button(action: {
+                                    Task {
+                                        do {
+                                            let code = try await sharedSuiteManager.generateInvitationLink(role: .viewer)
+                                            let activityVC = UIActivityViewController(activityItems: [code], applicationActivities: nil)
+                                            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                                               let window = windowScene.windows.first {
+                                                window.rootViewController?.present(activityVC, animated: true)
+                                            }
+                                        } catch {
+                                            print("❌ Error generating invitation: \(error)")
+                                        }
+                                    }
+                                }) {
+                                    HStack {
+                                        Image(systemName: "person.badge.plus")
+                                            .font(.system(size: 16, weight: .medium))
+                                        Text("Generate Invitation Link")
+                                            .font(.system(size: 16, weight: .medium))
+                                        Spacer()
+                                        Image(systemName: "square.and.arrow.up")
+                                            .font(.system(size: 14))
+                                    }
+                                    .foregroundColor(.modernAccent)
+                                    .padding(16)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 12)
+                                            .fill(Color.modernSecondary)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .stroke(Color.modernAccent.opacity(0.3), lineWidth: 1)
+                                            )
+                                    )
+                                }
+                            }
+                            .padding(.top)
+                        }
+                        
+                        // Suite Info
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Suite Information")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.modernText)
+                            
+                            VStack(spacing: 8) {
+                                HStack {
+                                    Text("Created:")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.modernTextSecondary)
+                                    Spacer()
+                                    Text(suiteInfo.createdDate, style: .date)
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.modernText)
+                                }
+                                
+                                HStack {
+                                    Text("Last Updated:")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.modernTextSecondary)
+                                    Spacer()
+                                    Text(suiteInfo.lastModified, style: .relative)
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(.modernText)
+                                }
+                                
+                                HStack {
+                                    Text("CloudKit Status:")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.modernTextSecondary)
+                                    Spacer()
+                                    HStack(spacing: 4) {
+                                        Circle()
+                                            .fill(sharedSuiteManager.isCloudKitAvailable ? Color.green : Color.red)
+                                            .frame(width: 8, height: 8)
+                                        Text(sharedSuiteManager.cloudKitStatus)
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundColor(.modernText)
+                                    }
+                                }
+                            }
+                            .padding(16)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color.modernSecondary)
+                            )
+                        }
+                        .padding(.top)
                         
                         Spacer()
                     } else {
