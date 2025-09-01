@@ -1565,7 +1565,27 @@ struct DynamicFirepitView: View {
     }
 }
 
-
+// MARK: - Powered by SuiteKeep Advertising View
+struct PoweredBySuiteKeepView: View {
+    var body: some View {
+        VStack(spacing: 4) {
+            // "Powered by" text above flame
+            Text("Powered by")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundColor(.white)
+            
+            // Single orange flame (smaller)
+            Image(systemName: "flame.fill")
+                .font(.system(size: 24))
+                .foregroundColor(.orange)
+            
+            // "SuiteKeep" text below flame
+            Text("SuiteKeep")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(.white)
+        }
+    }
+}
 
 // MARK: - Enhanced Performance Metrics View
 struct PerformanceMetricsView: View {
@@ -5539,7 +5559,8 @@ struct ConcertDetailView: View {
                             settingsManager: settingsManager,
                             isBatchMode: $isBatchMode,
                             selectedSeats: $selectedSeats,
-                            showingBatchOptions: $showingBatchOptions
+                            showingBatchOptions: $showingBatchOptions,
+                            isBuyerView: $isBuyerView
                         )
                     case .seatView:
                         // Interactive Fire Suite Layout for seat selection
@@ -5642,6 +5663,7 @@ struct SeatListView: View {
     @Binding var isBatchMode: Bool
     @Binding var selectedSeats: Set<Int>
     @Binding var showingBatchOptions: Bool
+    @Binding var isBuyerView: Bool
     @State private var selectedSeatIndex: Int?
     @State private var isUpdatingData = false
     
@@ -5682,13 +5704,28 @@ struct SeatListView: View {
     
     private var seatListHeader: some View {
         VStack(spacing: 12) {
-            Text("Seating List")
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundColor(.modernText)
-            
-            Text(isBatchMode ? "Select multiple seats for batch operations" : "Tap seats to manage tickets")
-                .font(.system(size: 14))
-                .foregroundColor(.modernTextSecondary)
+            if isBuyerView {
+                PoweredBySuiteKeepView()
+                    .padding(.vertical, 5)
+                
+                VStack(spacing: 4) {
+                    Text(concert.artist)
+                        .font(.system(size: 28, weight: .bold))
+                        .foregroundColor(.modernText)
+                    
+                    Text(formatConcertDate(concert.date))
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.modernTextSecondary)
+                }
+            } else {
+                Text("Seating List")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(.modernText)
+                
+                Text(isBatchMode ? "Select multiple seats for batch operations" : "Tap seats to manage tickets")
+                    .font(.system(size: 14))
+                    .foregroundColor(.modernTextSecondary)
+            }
             
             
             // Batch selection status
@@ -5950,6 +5987,12 @@ struct SeatListView: View {
             return .red.opacity(0.2)
         }
     }
+    
+    private func formatConcertDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMMM d, yyyy"
+        return formatter.string(from: date)
+    }
 }
 
 // MARK: - Interactive Fire Suite View
@@ -5973,13 +6016,28 @@ struct InteractiveFireSuiteView: View {
         VStack(spacing: 16) {
             // Title and instructions
             VStack(spacing: 12) {
-                Text("Seating")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundColor(.modernText)
-                
-                Text(isBatchMode ? "Select multiple seats for batch operations" : "Tap seats to manage tickets")
-                    .font(.system(size: 14))
-                    .foregroundColor(.modernTextSecondary)
+                if isBuyerView {
+                    PoweredBySuiteKeepView()
+                        .padding(.vertical, 5)
+                    
+                    VStack(spacing: 4) {
+                        Text(concert.artist)
+                            .font(.system(size: 28, weight: .bold))
+                            .foregroundColor(.modernText)
+                        
+                        Text(formatConcertDate(concert.date))
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.modernTextSecondary)
+                    }
+                } else {
+                    Text("Seating")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(.modernText)
+                    
+                    Text(isBatchMode ? "Select multiple seats for batch operations" : "Tap seats to manage tickets")
+                        .font(.system(size: 14))
+                        .foregroundColor(.modernTextSecondary)
+                }
                 
                 
                 // Batch selection status
@@ -6383,6 +6441,12 @@ struct InteractiveFireSuiteView: View {
         withAnimation(.easeInOut(duration: 3.0).repeatForever()) {
             pulseFirepit.toggle()
         }
+    }
+    
+    private func formatConcertDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMMM d, yyyy"
+        return formatter.string(from: date)
     }
 }
 
