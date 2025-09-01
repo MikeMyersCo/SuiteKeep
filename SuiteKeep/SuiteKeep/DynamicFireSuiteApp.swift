@@ -1136,8 +1136,8 @@ struct SuiteSummaryView: View {
     
     var body: some View {
         VStack(spacing: 20) {
-            // Sync Status Indicator for Shared Suites
-            if sharedSuiteManager.isInSharedSuite {
+            // Sync Status Indicator for Shared Suites (only show if multi-tenant is enabled)
+            if sharedSuiteManager.isInSharedSuite && settingsManager.enableMultiTenantSuites {
                 HStack {
                     HStack(spacing: 6) {
                         if sharedSuiteManager.isSyncing {
@@ -5628,12 +5628,12 @@ struct ConcertDetailView: View {
             for index in selectedSeats {
                 concert.seats[index].status = status
                 
-                // Clear price and source for available seats
+                // Clear price and source for available seats (but preserve cost)
                 if status == .available {
                     concert.seats[index].price = nil
                     concert.seats[index].source = nil
                     concert.seats[index].note = nil
-                    concert.seats[index].cost = nil
+                    // Keep cost - don't set to nil
                     concert.seats[index].dateSold = nil
                     concert.seats[index].datePaid = nil
                     concert.seats[index].familyPersonName = nil
@@ -5650,6 +5650,7 @@ struct ConcertDetailView: View {
             
             concertManager.updateConcert(concert)
             selectedSeats.removeAll()
+            isBatchMode = false
         }
     }
 }
@@ -5757,6 +5758,7 @@ struct SeatListView: View {
             Button("Clear Selection") {
                 withAnimation(.easeInOut(duration: 0.2)) {
                     selectedSeats.removeAll()
+                    isBatchMode = false
                 }
             }
             .font(.system(size: 12, weight: .medium))
@@ -6052,6 +6054,7 @@ struct InteractiveFireSuiteView: View {
                         Button("Clear Selection") {
                             withAnimation(.easeInOut(duration: 0.2)) {
                                 selectedSeats.removeAll()
+                                isBatchMode = false
                             }
                         }
                         .font(.system(size: 12, weight: .medium))
@@ -6103,6 +6106,7 @@ struct InteractiveFireSuiteView: View {
                                         onTap: { handleSeatTap(5) },
                                         onLongPress: { handleSeatLongPress(5) }
                                     )
+                                    .id("seat-5-\(isBuyerView)")
                                     CompactSeatView(
                                         seatNumber: 5,
                                         seat: concert.seats[4],
@@ -6112,6 +6116,7 @@ struct InteractiveFireSuiteView: View {
                                         onTap: { handleSeatTap(4) },
                                         onLongPress: { handleSeatLongPress(4) }
                                     )
+                                    .id("seat-4-\(isBuyerView)")
                                     CompactSeatView(
                                         seatNumber: 4,
                                         seat: concert.seats[3],
@@ -6121,6 +6126,7 @@ struct InteractiveFireSuiteView: View {
                                         onTap: { handleSeatTap(3) },
                                         onLongPress: { handleSeatLongPress(3) }
                                     )
+                                    .id("seat-3-\(isBuyerView)")
                                     CompactSeatView(
                                         seatNumber: 3,
                                         seat: concert.seats[2],
@@ -6130,6 +6136,7 @@ struct InteractiveFireSuiteView: View {
                                         onTap: { handleSeatTap(2) },
                                         onLongPress: { handleSeatLongPress(2) }
                                     )
+                                    .id("seat-2-\(isBuyerView)")
                                 }
                                 .padding(.bottom, 8)  // Moved closer to bottom edge, leaving minimal space for text
                             }
@@ -6146,6 +6153,7 @@ struct InteractiveFireSuiteView: View {
                                         onTap: { handleSeatTap(7) },
                                         onLongPress: { handleSeatLongPress(7) }
                                     )
+                                    .id("seat-7-\(isBuyerView)")
                                     CompactSeatView(
                                         seatNumber: 7,
                                         seat: concert.seats[6],
@@ -6155,6 +6163,7 @@ struct InteractiveFireSuiteView: View {
                                         onTap: { handleSeatTap(6) },
                                         onLongPress: { handleSeatLongPress(6) }
                                     )
+                                    .id("seat-6-\(isBuyerView)")
                                     Spacer()
                                         .frame(height: 72) // Adjusted space to align with lower bottom row
                                 }
@@ -6177,6 +6186,7 @@ struct InteractiveFireSuiteView: View {
                                         onTap: { handleSeatTap(0) },
                                         onLongPress: { handleSeatLongPress(0) }
                                     )
+                                    .id("seat-0-\(isBuyerView)")
                                     CompactSeatView(
                                         seatNumber: 2,
                                         seat: concert.seats[1],
@@ -6186,6 +6196,7 @@ struct InteractiveFireSuiteView: View {
                                         onTap: { handleSeatTap(1) },
                                         onLongPress: { handleSeatLongPress(1) }
                                     )
+                                    .id("seat-1-\(isBuyerView)")
                                     Spacer()
                                         .frame(height: 72) // Adjusted space to align with lower bottom row
                                 }
@@ -7235,6 +7246,8 @@ struct SeatOptionsView: View {
                 .background(Circle().fill(Color.white))
                 .shadow(radius: 4)
                 .padding()
+                .allowsHitTesting(true)
+                .zIndex(999)
                 , alignment: .topTrailing
             )
         }
@@ -10340,8 +10353,12 @@ struct BatchSeatOptionsView: View {
         }
         
         onUpdate(updatedSeats)
-        onComplete()
         dismiss()
+        
+        // Call onComplete after dismissal to ensure proper state cleanup
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            onComplete()
+        }
     }
 }
 
