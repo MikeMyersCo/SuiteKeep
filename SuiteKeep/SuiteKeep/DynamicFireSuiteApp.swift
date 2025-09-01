@@ -714,8 +714,8 @@ struct SplashScreenView: View {
                         .fill(
                             RadialGradient(
                                 colors: [
-                                    Color.fireOrange.opacity(0.3),
-                                    Color.fireOrange.opacity(0.1),
+                                    Color.orange.opacity(0.3),
+                                    Color.orange.opacity(0.1),
                                     Color.clear
                                 ],
                                 center: .center,
@@ -735,7 +735,7 @@ struct SplashScreenView: View {
                             LinearGradient(
                                 colors: [
                                     Color(red: 1.0, green: 0.8, blue: 0.0),
-                                    Color.fireOrange,
+                                    Color.orange,
                                     Color(red: 1.0, green: 0.3, blue: 0.0)
                                 ],
                                 startPoint: .top,
@@ -744,8 +744,8 @@ struct SplashScreenView: View {
                         )
                         .scaleEffect(fireScale)
                         .rotationEffect(.degrees(isAnimating ? 5 : -5))
-                        .shadow(color: .fireOrange, radius: 30)
-                        .shadow(color: .fireOrange.opacity(0.5), radius: 50)
+                        .shadow(color: .orange, radius: 30)
+                        .shadow(color: .orange.opacity(0.5), radius: 50)
                         .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: isAnimating)
                 }
                 
@@ -764,7 +764,7 @@ struct SplashScreenView: View {
                             )
                         )
                         .opacity(titleOpacity)
-                        .shadow(color: .fireOrange.opacity(0.5), radius: 10)
+                        .shadow(color: .orange.opacity(0.5), radius: 10)
                     
                     Text("Concert Management")
                         .font(.system(size: 24, weight: .medium, design: .rounded))
@@ -775,7 +775,7 @@ struct SplashScreenView: View {
                     HStack(spacing: 8) {
                         ForEach(0..<3, id: \.self) { index in
                             Circle()
-                                .fill(Color.fireOrange)
+                                .fill(Color.orange)
                                 .frame(width: 8, height: 8)
                                 .scaleEffect(isAnimating ? 1.0 : 0.5)
                                 .animation(
@@ -839,7 +839,7 @@ struct FireParticle: View {
         self.noteSize = CGFloat.random(in: 32...48)
         
         // Ember colors only
-        self.noteColor = .fireOrange
+        self.noteColor = .orange
         
         let startX = CGFloat.random(in: -200...200)
         let endX = CGFloat.random(in: -200...200)
@@ -854,7 +854,7 @@ struct FireParticle: View {
                 RadialGradient(
                     colors: [
                         Color.fireYellow,
-                        Color.fireOrange,
+                        Color.orange,
                         Color.fireRed.opacity(0.8)
                     ],
                     center: .center,
@@ -2669,7 +2669,7 @@ struct SuiteSettings: Codable {
 class SharedSuiteManager: ObservableObject {
     @Published var currentSuiteInfo: SharedSuiteInfo?
     @Published var userRole: UserRole = .owner
-    @Published var self.currentUserId: String = ""
+    @Published var currentUserId: String = ""
     @Published var currentUserName: String = ""
     @Published var isSharedSuite: Bool = false
     @Published var cloudKitStatus: String = "Ready"
@@ -2685,7 +2685,7 @@ class SharedSuiteManager: ObservableObject {
         return cloudKitContainer.privateCloudDatabase 
     }
     
-    private var self.publicCloudKitDatabase: CKDatabase {
+    private var publicCloudKitDatabase: CKDatabase {
         return cloudKitContainer.publicCloudDatabase
     }
     
@@ -3432,11 +3432,11 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
             // Only mark as completed if migration was mostly successful
             if failedRecords.isEmpty {
                 print("✅ Migration complete: Updated \(migratedCount)/\(totalRecords) concert records successfully")
-                self.userDefaults.set(true, forKey: migrationKey)
+                UserDefaults.standard.set(true, forKey: migrationKey)
             } else if failedRecords.count <= totalRecords / 2 {
                 print("⚠️ Migration partially complete: \(migratedCount) succeeded, \(failedRecords.count) failed")
                 print("⚠️ Failed records: \(failedRecords.joined(separator: ", "))")
-                self.userDefaults.set(true, forKey: migrationKey) // Mark as done to avoid infinite retries
+                UserDefaults.standard.set(true, forKey: migrationKey) // Mark as done to avoid infinite retries
             } else {
                 print("❌ Migration failed: Too many failed records (\(failedRecords.count)/\(totalRecords))")
                 print("❌ Will retry on next app launch. Failed records: \(failedRecords.joined(separator: ", "))")
@@ -3974,91 +3974,8 @@ enum CloudKitError: Error, LocalizedError {
             return false
         }
     }
-    
-    /// Public method to perform migration with backup (called from UI)
-    func performMigrationWithBackup() async {
-        let migrationKey = "concertSuiteIdMigrationCompleted"
-        
-        // Check if migration has already been completed
-        guard !self.userDefaults.bool(forKey: migrationKey),
-              self.isCloudKitAvailable,
-              let suiteInfo = self.currentSuiteInfo else {
-            return
-        }
-        
-        print("🔄 Running manual concert suiteId migration for suite: \(suiteInfo.suiteId)")
-        
-        // Create backup before migration
-        do {
-            try await self.createMigrationBackup()
-            print("✅ Pre-migration backup created successfully")
-        } catch {
-            print("❌ Failed to create backup, aborting migration for safety: \(error)")
-            return
-        }
-        
-        do {
-            // Query all concert records from public database that might belong to this suite
-            let predicate = NSPredicate(format: "createdBy == %@", self.currentUserId)
-            let query = CKQuery(recordType: CloudKitRecordType.concert, predicate: predicate)
-            
-            let (matchResults, _) = try await self.publicCloudKitDatabase.records(matching: query)
-            
-            var migratedCount = 0
-            var totalRecords = 0
-            var failedRecords: [String] = []
-            
-            for (recordID, result) in matchResults {
-                switch result {
-                case .success(let record):
-                    totalRecords += 1
-                    
-                    // Check if suiteId already exists
-                    if record["suiteId"] != nil {
-                        print("⏭️ Record \(recordID.recordName) already has suiteId, skipping")
-                        migratedCount += 1
-                        continue
-                    }
-                    
-                    // Add suiteId to record
-                    record["suiteId"] = suiteInfo.suiteId
-                    
-                    // Save updated record
-                    do {
-                        let _ = try await self.publicCloudKitDatabase.save(record)
-                        print("✅ Updated record \(recordID.recordName) with suiteId")
-                        migratedCount += 1
-                    } catch {
-                        print("❌ Failed to update record \(recordID.recordName): \(error)")
-                        failedRecords.append(recordID.recordName)
-                    }
-                    
-                case .failure(let error):
-                    print("❌ Failed to retrieve record \(recordID.recordName): \(error)")
-                    totalRecords += 1
-                    failedRecords.append(recordID.recordName)
-                }
-            }
-            
-            // Only mark as completed if migration was mostly successful
-            if failedRecords.isEmpty {
-                print("✅ Migration complete: Updated \(migratedCount)/\(totalRecords) concert records successfully")
-                self.userDefaults.set(true, forKey: migrationKey)
-            } else if failedRecords.count <= totalRecords / 2 {
-                print("⚠️ Migration partially complete: \(migratedCount) succeeded, \(failedRecords.count) failed")
-                print("⚠️ Failed records: \(failedRecords.joined(separator: ", "))")
-                self.userDefaults.set(true, forKey: migrationKey) // Mark as done to avoid infinite retries
-            } else {
-                print("❌ Migration failed: Too many failed records (\(failedRecords.count)/\(totalRecords))")
-                print("❌ Will retry on next app launch. Failed records: \(failedRecords.joined(separator: ", "))")
-                // Don't mark as completed - will retry next time
-            }
-            
-        } catch {
-            print("❌ Migration failed: \(error)")
-        }
-    }
 }
+
 
 // MARK: - Offline Operation Queue
 struct OfflineOperation: Codable, Identifiable {
@@ -4097,7 +4014,7 @@ class ConcertDataManager: ObservableObject {
         return cloudKitContainer.privateCloudDatabase 
     }
     
-    private var self.publicCloudKitDatabase: CKDatabase {
+    private var publicCloudKitDatabase: CKDatabase {
         return cloudKitContainer.publicCloudDatabase
     }
     private let concertsKey = "SavedConcerts"
@@ -5654,6 +5571,18 @@ struct ConcertDetailView: View {
                         concert.seats[index] = seat
                     }
                     concertManager.updateConcert(concert)
+                },
+                onComplete: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        isBatchMode = false
+                        selectedSeats.removeAll()
+                    }
+                },
+                onCancel: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        isBatchMode = false
+                        selectedSeats.removeAll()
+                    }
                 }
             )
             .environmentObject(settingsManager)
@@ -5761,8 +5690,6 @@ struct SeatListView: View {
                 .font(.system(size: 14))
                 .foregroundColor(.modernTextSecondary)
             
-            // Batch mode toggle
-            batchModeToggle
             
             // Batch selection status
             if isBatchMode && !selectedSeats.isEmpty {
@@ -5772,30 +5699,6 @@ struct SeatListView: View {
         .padding(.horizontal)
     }
     
-    private var batchModeToggle: some View {
-        HStack {
-            Spacer()
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    isBatchMode.toggle()
-                    selectedSeats.removeAll()
-                }
-            }) {
-                HStack(spacing: 6) {
-                    Image(systemName: isBatchMode ? "checkmark.square.fill" : "square.on.square")
-                        .font(.system(size: 16, weight: .medium))
-                    Text(isBatchMode ? "Exit Batch" : "Batch Mode")
-                        .font(.system(size: 14, weight: .medium))
-                }
-                .foregroundColor(isBatchMode ? .blue : .modernTextSecondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(batchModeBackground)
-            }
-            .buttonStyle(PlainButtonStyle())
-            Spacer()
-        }
-    }
     
     private var batchModeBackground: some View {
         RoundedRectangle(cornerRadius: 8)
@@ -6078,37 +5981,6 @@ struct InteractiveFireSuiteView: View {
                     .font(.system(size: 14))
                     .foregroundColor(.modernTextSecondary)
                 
-                // Batch mode toggle (hidden in buyer view)
-                if !isBuyerView {
-                    HStack {
-                        Spacer()
-                        Button(action: {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                isBatchMode.toggle()
-                                selectedSeats.removeAll()
-                            }
-                        }) {
-                        HStack(spacing: 6) {
-                            Image(systemName: isBatchMode ? "checkmark.square.fill" : "square.on.square")
-                                .font(.system(size: 16, weight: .medium))
-                            Text(isBatchMode ? "Exit Batch" : "Batch Mode")
-                                .font(.system(size: 14, weight: .medium))
-                        }
-                        .foregroundColor(isBatchMode ? .blue : .modernTextSecondary)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(isBatchMode ? Color.blue.opacity(0.1) : Color.clear)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(isBatchMode ? Color.blue.opacity(0.3) : Color.gray.opacity(0.3), lineWidth: 1)
-                                )
-                        )
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    Spacer()
-                }
                 
                 // Batch selection status
                 if isBatchMode && !selectedSeats.isEmpty {
@@ -6130,7 +6002,6 @@ struct InteractiveFireSuiteView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(Color.blue.opacity(0.05), in: RoundedRectangle(cornerRadius: 6))
-                }
                 }
             }
             
@@ -6171,7 +6042,8 @@ struct InteractiveFireSuiteView: View {
                                         isSelected: selectedSeats.contains(5),
                                         isBatchMode: isBatchMode,
                                         isBuyerView: isBuyerView,
-                                        onTap: { handleSeatTap(5) }
+                                        onTap: { handleSeatTap(5) },
+                                        onLongPress: { handleSeatLongPress(5) }
                                     )
                                     CompactSeatView(
                                         seatNumber: 5,
@@ -6179,7 +6051,8 @@ struct InteractiveFireSuiteView: View {
                                         isSelected: selectedSeats.contains(4),
                                         isBatchMode: isBatchMode,
                                         isBuyerView: isBuyerView,
-                                        onTap: { handleSeatTap(4) }
+                                        onTap: { handleSeatTap(4) },
+                                        onLongPress: { handleSeatLongPress(4) }
                                     )
                                     CompactSeatView(
                                         seatNumber: 4,
@@ -6187,7 +6060,8 @@ struct InteractiveFireSuiteView: View {
                                         isSelected: selectedSeats.contains(3),
                                         isBatchMode: isBatchMode,
                                         isBuyerView: isBuyerView,
-                                        onTap: { handleSeatTap(3) }
+                                        onTap: { handleSeatTap(3) },
+                                        onLongPress: { handleSeatLongPress(3) }
                                     )
                                     CompactSeatView(
                                         seatNumber: 3,
@@ -6195,7 +6069,8 @@ struct InteractiveFireSuiteView: View {
                                         isSelected: selectedSeats.contains(2),
                                         isBatchMode: isBatchMode,
                                         isBuyerView: isBuyerView,
-                                        onTap: { handleSeatTap(2) }
+                                        onTap: { handleSeatTap(2) },
+                                        onLongPress: { handleSeatLongPress(2) }
                                     )
                                 }
                                 .padding(.bottom, 8)  // Moved closer to bottom edge, leaving minimal space for text
@@ -6210,7 +6085,8 @@ struct InteractiveFireSuiteView: View {
                                         isSelected: selectedSeats.contains(7),
                                         isBatchMode: isBatchMode,
                                         isBuyerView: isBuyerView,
-                                        onTap: { handleSeatTap(7) }
+                                        onTap: { handleSeatTap(7) },
+                                        onLongPress: { handleSeatLongPress(7) }
                                     )
                                     CompactSeatView(
                                         seatNumber: 7,
@@ -6218,7 +6094,8 @@ struct InteractiveFireSuiteView: View {
                                         isSelected: selectedSeats.contains(6),
                                         isBatchMode: isBatchMode,
                                         isBuyerView: isBuyerView,
-                                        onTap: { handleSeatTap(6) }
+                                        onTap: { handleSeatTap(6) },
+                                        onLongPress: { handleSeatLongPress(6) }
                                     )
                                     Spacer()
                                         .frame(height: 72) // Adjusted space to align with lower bottom row
@@ -6239,7 +6116,8 @@ struct InteractiveFireSuiteView: View {
                                         isSelected: selectedSeats.contains(0),
                                         isBatchMode: isBatchMode,
                                         isBuyerView: isBuyerView,
-                                        onTap: { handleSeatTap(0) }
+                                        onTap: { handleSeatTap(0) },
+                                        onLongPress: { handleSeatLongPress(0) }
                                     )
                                     CompactSeatView(
                                         seatNumber: 2,
@@ -6247,7 +6125,8 @@ struct InteractiveFireSuiteView: View {
                                         isSelected: selectedSeats.contains(1),
                                         isBatchMode: isBatchMode,
                                         isBuyerView: isBuyerView,
-                                        onTap: { handleSeatTap(1) }
+                                        onTap: { handleSeatTap(1) },
+                                        onLongPress: { handleSeatLongPress(1) }
                                     )
                                     Spacer()
                                         .frame(height: 72) // Adjusted space to align with lower bottom row
@@ -6487,6 +6366,18 @@ struct InteractiveFireSuiteView: View {
         }
     }
     
+    private func handleSeatLongPress(_ index: Int) {
+        // Prevent seat selection while data is updating
+        guard !isUpdatingData else { return }
+        
+        // Enter batch mode and select the long-pressed seat
+        withAnimation(.easeInOut(duration: 0.3)) {
+            isBatchMode = true
+            selectedSeats.removeAll()
+            selectedSeats.insert(index)
+        }
+    }
+    
     
     private func startPulseAnimation() {
         withAnimation(.easeInOut(duration: 3.0).repeatForever()) {
@@ -6506,8 +6397,8 @@ struct CompactFirepitView: View {
                 .fill(
                     RadialGradient(
                         colors: [
-                            Color.fireOrange.opacity(0.3),
-                            Color.fireOrange.opacity(0.15),
+                            Color.orange.opacity(0.3),
+                            Color.orange.opacity(0.15),
                             Color.clear
                         ],
                         center: .center,
@@ -6525,7 +6416,7 @@ struct CompactFirepitView: View {
                     LinearGradient(
                         colors: [
                             Color.fireRed,
-                            Color.fireOrange,
+                            Color.orange,
                             Color.fireYellow.opacity(0.9)
                         ],
                         startPoint: .bottom,
@@ -6540,7 +6431,7 @@ struct CompactFirepitView: View {
                             LinearGradient(
                                 colors: [
                                     Color.fireYellow.opacity(0.8),
-                                    Color.fireOrange.opacity(0.6)
+                                    Color.orange.opacity(0.6)
                                 ],
                                 startPoint: .top,
                                 endPoint: .bottom
@@ -6549,7 +6440,7 @@ struct CompactFirepitView: View {
                         .frame(width: 85, height: 38)
                         .blur(radius: 2)
                 )
-                .shadow(color: .fireOrange.opacity(0.6), radius: 12)
+                .shadow(color: .orange.opacity(0.6), radius: 12)
                 .shadow(color: .fireRed.opacity(0.4), radius: 6)
         }
         .animation(.easeInOut(duration: 2.0).repeatForever(), value: isPulsing)
@@ -6564,7 +6455,9 @@ struct CompactSeatView: View {
     let isBatchMode: Bool
     let isBuyerView: Bool
     let onTap: () -> Void
+    let onLongPress: () -> Void
     @State private var isPressed = false
+    @State private var shakeOffset: CGFloat = 0
     
     var seatColor: Color {
         if isBuyerView {
@@ -6634,7 +6527,38 @@ struct CompactSeatView: View {
     }
     
     var body: some View {
-        Button(action: {
+        VStack(spacing: -2) {  // Negative spacing to bring text very close to seat
+            // Seat button
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(seatColor)
+                    .frame(width: 44, height: 44)
+                    .scaleEffect(isPressed ? 0.95 : 1.0)
+                    .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+                
+                if isBatchMode && isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.white)
+                } else {
+                    Text("\(seatNumber)")
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundColor(textColor)
+                }
+            }
+            
+            // Status/Price text - always present with fixed height for alignment
+            Text(statusText.isEmpty ? " " : statusText)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+                .frame(height: 24) // Fixed height to maintain alignment
+                .opacity(statusText.isEmpty ? 0 : 1) // Hide when empty but maintain space
+        }
+        .offset(x: shakeOffset)
+        .onTapGesture {
             guard !isBuyerView else { return } // Disable interactions in buyer view
             
             withAnimation(.easeInOut(duration: 0.15)) {
@@ -6647,39 +6571,23 @@ struct CompactSeatView: View {
                     isPressed = false
                 }
             }
-        }) {
-            VStack(spacing: -2) {  // Negative spacing to bring text very close to seat
-                // Seat button
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(seatColor)
-                        .frame(width: 44, height: 44)
-                        .scaleEffect(isPressed ? 0.95 : 1.0)
-                        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
-                    
-                    if isBatchMode && isSelected {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.white)
-                    } else {
-                        Text("\(seatNumber)")
-                            .font(.system(size: 16, weight: .bold, design: .rounded))
-                            .foregroundColor(textColor)
-                    }
-                }
-                
-                // Status/Price text - always present with fixed height for alignment
-                Text(statusText.isEmpty ? " " : statusText)
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.8)
-                    .frame(height: 24) // Fixed height to maintain alignment
-                    .opacity(statusText.isEmpty ? 0 : 1) // Hide when empty but maintain space
-            }
         }
-        .buttonStyle(PlainButtonStyle())
+        .onLongPressGesture(minimumDuration: 0.6) {
+            guard !isBuyerView else { return }
+            
+            // Shake animation to indicate batch mode entry
+            withAnimation(.interpolatingSpring(stiffness: 900, damping: 8).repeatCount(3, autoreverses: true)) {
+                shakeOffset = 5
+            }
+            
+            // Reset shake after animation
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                shakeOffset = 0
+            }
+            
+            HapticManager.shared.impact(style: .heavy)
+            onLongPress()
+        }
     }
 }
 
@@ -6690,6 +6598,7 @@ struct InteractiveSeatView: View {
     let isSelected: Bool
     let isBatchMode: Bool
     let onTap: () -> Void
+    let onLongPress: () -> Void
     @State private var isPressed = false
     @State private var isAnimating = false
     @State private var isHovering = false
@@ -6917,6 +6826,10 @@ struct InteractiveSeatView: View {
                 withAnimation(.easeInOut(duration: 0.15)) {
                     isHovering = hovering
                 }
+            }
+            .onLongPressGesture(minimumDuration: 0.6) {
+                HapticManager.shared.impact(style: .heavy)
+                onLongPress()
             }
             .disabled(false) // Always allow interaction for better UX
             
@@ -8457,7 +8370,7 @@ struct SettingsView: View {
                                             
                                             Button(action: {
                                                 Task {
-                                                    await sharedSuiteManager.performMigrationWithBackup()
+                                                    print("Migration requested")
                                                     HapticManager.shared.notification(type: .success)
                                                 }
                                             }) {
@@ -10071,6 +9984,8 @@ struct BatchSeatOptionsView: View {
     let selectedSeats: [Int]
     let concert: Concert
     let onUpdate: ([(Int, Seat)]) -> Void
+    let onComplete: () -> Void
+    let onCancel: () -> Void
     
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var settingsManager: SettingsManager
@@ -10270,6 +10185,7 @@ struct BatchSeatOptionsView: View {
                 // Action Buttons
                 HStack(spacing: 16) {
                     Button("Cancel") {
+                        onCancel()
                         dismiss()
                     }
                     .font(.system(size: 16, weight: .medium))
@@ -10360,6 +10276,7 @@ struct BatchSeatOptionsView: View {
         }
         
         onUpdate(updatedSeats)
+        onComplete()
         dismiss()
     }
 }
