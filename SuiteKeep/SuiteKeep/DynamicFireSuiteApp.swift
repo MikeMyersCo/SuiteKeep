@@ -19,6 +19,7 @@ extension CGFloat {
 
 extension Notification.Name {
     static let concertDataSynced = Notification.Name("concertDataSynced")
+    static let migrateLocalConcerts = Notification.Name("migrateLocalConcerts")
 }
 
 
@@ -2348,7 +2349,7 @@ extension Concert {
         record["concertId"] = Int64(id)
         record["artist"] = artist
         record["date"] = date
-        record["suiteId"] = suiteId  // Add the missing suiteId field
+        // Store suiteId for backward compatibility, but use reference as primary
         record["createdBy"] = createdBy
         record["lastModifiedBy"] = lastModifiedBy
         record["lastModifiedDate"] = lastModifiedDate
@@ -2398,7 +2399,7 @@ extension Concert {
             date: date,
             seats: seats,
             parkingTicket: parkingTicket,
-            suiteId: record["suiteId"] as? String,
+            suiteId: record["suite"] != nil ? (record["suite"] as? CKRecord.Reference)?.recordID.recordName : nil,
             createdBy: record["createdBy"] as? String,
             lastModifiedBy: record["lastModifiedBy"] as? String,
             lastModifiedDate: record["lastModifiedDate"] as? Date,
@@ -3010,6 +3011,8 @@ class SharedSuiteManager: ObservableObject {
             // Set up real-time updates for the new suite
             Task {
                 await setupCloudKitSubscriptions()
+                // Migrate existing local concerts to the shared suite
+                await self.migrateLocalConcertsToSuite()
             }
             
             return savedRecord.recordID.recordName
@@ -3357,8 +3360,10 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
         print("🔧 DEBUG: Syncing concert data for suite: \(suiteInfo.suiteId)")
         
         do {
-            // Query for all concerts in this suite from public database
-            let predicate = NSPredicate(format: "suiteId == %@", suiteInfo.suiteId)
+            // Query for all concerts in this suite using the suite reference
+            let suiteRecordID = CKRecord.ID(recordName: suiteInfo.suiteId)
+            let suiteReference = CKRecord.Reference(recordID: suiteRecordID, action: .none)
+            let predicate = NSPredicate(format: "suite == %@", suiteReference)
             let query = CKQuery(recordType: CloudKitRecordType.concert, predicate: predicate)
             
             let (matchResults, _) = try await self.publicCloudKitDatabase.records(matching: query)
@@ -3377,12 +3382,14 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
             
             print("✅ DEBUG: Found \(syncedConcerts.count) concerts for suite")
             
-            // Update concert data via notification
-            NotificationCenter.default.post(
-                name: .concertDataSynced, 
-                object: nil, 
-                userInfo: ["concerts": syncedConcerts]
-            )
+            // Update concert data via notification on main thread
+            await MainActor.run {
+                NotificationCenter.default.post(
+                    name: .concertDataSynced, 
+                    object: nil, 
+                    userInfo: ["concerts": syncedConcerts]
+                )
+            }
         } catch {
             print("❌ DEBUG: Failed to sync concert data: \(error)")
         }
@@ -3426,10 +3433,11 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
                 switch result {
                 case .success(let record):
                     totalRecords += 1
-                    // Check if this record already has a suiteId
-                    if record["suiteId"] == nil {
-                        // Add the suiteId to the record
-                        record["suiteId"] = suiteInfo.suiteId
+                    // Check if this record already has a suite reference
+                    if record["suite"] == nil {
+                        // Add the suite reference to the record
+                        let suiteRecordID = CKRecord.ID(recordName: suiteInfo.suiteId)
+                        record["suite"] = CKRecord.Reference(recordID: suiteRecordID, action: .deleteSelf)
                         
                         do {
                             _ = try await self.publicCloudKitDatabase.save(record)
@@ -3440,7 +3448,7 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
                             print("⚠️ Failed to migrate concert record \(recordID.recordName): \(error)")
                         }
                     } else {
-                        print("ℹ️ Concert record \(recordID.recordName) already has suiteId, skipping")
+                        print("ℹ️ Concert record \(recordID.recordName) already has suite reference, skipping")
                     }
                 case .failure(let error):
                     totalRecords += 1
@@ -3732,9 +3740,12 @@ extension SharedSuiteManager {
         }
         
         do {
-            // Fetch all concerts from CloudKit
-            let query = CKQuery(recordType: CloudKitRecordType.concert, predicate: NSPredicate(format: "TRUEPREDICATE"))
-            let (matchResults, _) = try await cloudKitDatabase.records(matching: query, inZoneWith: CKRecordZone.default().zoneID)
+            // Fetch all concerts from CloudKit for this suite using reference
+            let suiteRecordID = CKRecord.ID(recordName: suiteInfo.suiteId)
+            let suiteReference = CKRecord.Reference(recordID: suiteRecordID, action: .none)
+            let predicate = NSPredicate(format: "suite == %@", suiteReference)
+            let query = CKQuery(recordType: CloudKitRecordType.concert, predicate: predicate)
+            let (matchResults, _) = try await publicCloudKitDatabase.records(matching: query)
             
             var remoteConcerts: [Concert] = []
             for (_, result) in matchResults {
@@ -3948,6 +3959,39 @@ extension SharedSuiteManager {
             
             group.cancelAll()
             return result
+        }
+    }
+    
+    // MARK: - Concert CloudKit Operations
+    func saveConcertToCloudKit(_ concert: Concert) async throws {
+        guard let suiteInfo = currentSuiteInfo,
+              isCloudKitAvailable else {
+            throw CloudKitError.notAvailable
+        }
+        
+        // Create suite record reference and concert record
+        let suiteRecord = suiteInfo.toCloudKitRecord()
+        let concertRecord = concert.toCloudKitRecord(suiteRecord: suiteRecord)
+        
+        // Save to CloudKit
+        _ = try await publicCloudKitDatabase.save(concertRecord)
+        print("✅ DEBUG: Concert saved to CloudKit: \(concert.artist) - \(concertRecord.recordID.recordName)")
+    }
+    
+    // MARK: - Concert Migration
+    func migrateLocalConcertsToSuite() async {
+        guard let suiteInfo = currentSuiteInfo,
+              isCloudKitAvailable else {
+            return
+        }
+        
+        // Notify ConcertDataManager to migrate local concerts
+        await MainActor.run {
+            NotificationCenter.default.post(
+                name: .migrateLocalConcerts,
+                object: nil,
+                userInfo: ["suiteId": suiteInfo.suiteId]
+            )
         }
     }
 }
@@ -4189,6 +4233,17 @@ class ConcertDataManager: ObservableObject {
         ) { [weak self] notification in
             if let concerts = notification.userInfo?["concerts"] as? [Concert] {
                 self?.updateWithSyncedConcerts(concerts)
+            }
+        }
+        
+        // Listen for local concert migration to shared suite
+        NotificationCenter.default.addObserver(
+            forName: .migrateLocalConcerts,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            if let suiteId = notification.userInfo?["suiteId"] as? String {
+                self?.migrateLocalConcertsToSharedSuite(suiteId: suiteId)
             }
         }
     }
@@ -4525,11 +4580,8 @@ class ConcertDataManager: ObservableObject {
         }
         
         do {
-            // Create suite record reference
-            let suiteRecord = suiteInfo.toCloudKitRecord()
-            let concertRecord = concert.toCloudKitRecord(suiteRecord: suiteRecord)
-            
-            _ = try await self.publicCloudKitDatabase.save(concertRecord)
+            // Use SharedSuiteManager to save the concert to CloudKit
+            try await sharedSuiteManager.saveConcertToCloudKit(concert)
             
             await MainActor.run {
                 syncStatus = "Concert synced"
@@ -4544,25 +4596,24 @@ class ConcertDataManager: ObservableObject {
     
     // Update the existing saveConcerts method to include CloudKit sync with conflict resolution
     private func syncToCloudKitAfterSave() {
-        // If we're in a shared suite, sync to CloudKit with conflict resolution
+        // If we're in a shared suite, sync each concert to CloudKit
         if let sharedSuiteManager = sharedSuiteManager,
            sharedSuiteManager.isSharedSuite {
             Task {
-                do {
-                    // Use the SharedSuiteManager's conflict resolution
-                    let resolvedConcerts = try await sharedSuiteManager.syncWithConflictResolution(localConcerts: concerts)
-                    
-                    await MainActor.run {
-                        // Update local concerts with resolved data
-                        self.concerts = resolvedConcerts.sorted { $0.date > $1.date }
-                        
-                        // Save resolved concerts back to local storage
-                        self.saveToLocalStorage()
+                await MainActor.run {
+                    syncStatus = "Syncing concerts to CloudKit..."
+                }
+                
+                // Upload all concerts that belong to this suite to CloudKit
+                for concert in concerts {
+                    if concert.suiteId != nil {
+                        await syncConcertToCloudKit(concert)
                     }
-                } catch {
-                    await MainActor.run {
-                        syncStatus = "Sync with conflict resolution failed: \(error.localizedDescription)"
-                    }
+                }
+                
+                await MainActor.run {
+                    syncStatus = "Concerts synced to CloudKit"
+                    lastSyncDate = Date()
                 }
             }
         }
@@ -4589,6 +4640,27 @@ class ConcertDataManager: ObservableObject {
                 self.syncStatus = "Sync failed: \(error.localizedDescription)"
             }
         }
+    }
+    
+    // MARK: - Concert Migration to Shared Suite
+    private func migrateLocalConcertsToSharedSuite(suiteId: String) {
+        print("🔄 Migrating \(concerts.count) local concerts to shared suite: \(suiteId)")
+        
+        // Update all existing concerts to be associated with the shared suite
+        for i in 0..<concerts.count {
+            if concerts[i].suiteId == nil {
+                concerts[i].suiteId = suiteId
+                concerts[i].createdBy = sharedSuiteManager?.currentUserId
+                concerts[i].lastModifiedBy = sharedSuiteManager?.currentUserId
+                concerts[i].lastModifiedDate = Date()
+                concerts[i].sharedVersion = 1
+            }
+        }
+        
+        // Save the updated concerts to trigger CloudKit sync
+        saveConcerts()
+        
+        print("✅ Migration complete: \(concerts.count) concerts now associated with suite")
     }
 }
 
