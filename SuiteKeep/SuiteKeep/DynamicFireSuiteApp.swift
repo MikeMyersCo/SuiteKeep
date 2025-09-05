@@ -1131,7 +1131,9 @@ struct SuiteSummaryView: View {
         if sharedSuiteManager.pendingOperationsCount > 0 {
             return "\(sharedSuiteManager.pendingOperationsCount) pending changes"
         } else {
-            return "Shared with \(sharedSuiteManager.currentSuiteInfo?.members.count ?? 0) members"
+            // Total members = owner + members array
+            let totalMembers = 1 + (sharedSuiteManager.currentSuiteInfo?.members.count ?? 0)
+            return "Shared with \(totalMembers) members"
         }
     }
     
@@ -3380,6 +3382,10 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
         
         print("🔧 DEBUG: Syncing concert data for suite: \(suiteInfo.suiteId)")
         
+        // Add small delay to account for CloudKit consistency
+        try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
+        print("🔧 DEBUG: Waited 2 seconds for CloudKit consistency")
+        
         do {
             print("🔧 DEBUG: Using direct record fetch approach (no queries due to schema limitations)")
             
@@ -3406,8 +3412,9 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
             
             print("🔧 DEBUG: Attempting to fetch \(recordsToFetch.count) known concert record IDs")
             
-            // Try to fetch known records
+            // Try to fetch known records with fresh data (bypass cache)
             if !recordsToFetch.isEmpty {
+                print("🔧 DEBUG: Fetching records with fresh data (bypassing cache)")
                 let fetchResults = try await publicCloudKitDatabase.records(for: recordsToFetch)
                 
                 for (recordID, result) in fetchResults {
@@ -4154,15 +4161,51 @@ extension SharedSuiteManager {
             throw CloudKitError.notAvailable
         }
         
-        // Create concert record with suite reference ID (consistent with query approach)
         let suiteRecordID = CKRecord.ID(recordName: suiteInfo.suiteId)
-        let concertRecord = concert.toCloudKitRecord(suiteRecordID: suiteRecordID)
+        let concertRecordID = CKRecord.ID(recordName: "concert_\(concert.id)")
         
         print("🔧 DEBUG: Saving concert to CloudKit with suite reference ID: \(suiteRecordID)")
         
-        // Save to CloudKit
-        _ = try await publicCloudKitDatabase.save(concertRecord)
-        print("✅ DEBUG: Concert saved to CloudKit: \(concert.artist) - \(concertRecord.recordID.recordName)")
+        // Try to fetch existing record first, then update it
+        do {
+            // Attempt to fetch existing record
+            let existingRecord = try await publicCloudKitDatabase.record(for: concertRecordID)
+            print("🔧 DEBUG: Found existing record for concert \(concert.id), updating it")
+            
+            // Update the existing record with current concert data
+            existingRecord["concertId"] = Int64(concert.id)
+            existingRecord["artist"] = concert.artist
+            existingRecord["date"] = concert.date
+            existingRecord["createdBy"] = concert.createdBy
+            existingRecord["lastModifiedBy"] = concert.lastModifiedBy
+            existingRecord["lastModifiedDate"] = concert.lastModifiedDate
+            existingRecord["sharedVersion"] = Int64(concert.sharedVersion ?? 1)
+            
+            // Store seats and parking ticket as JSON data
+            if let seatsData = try? JSONEncoder().encode(concert.seats) {
+                existingRecord["seatsData"] = seatsData
+            }
+            
+            if let parkingTicket = concert.parkingTicket,
+               let parkingData = try? JSONEncoder().encode(parkingTicket) {
+                existingRecord["parkingTicketData"] = parkingData
+            }
+            
+            // Ensure suite reference is set
+            existingRecord["suite"] = CKRecord.Reference(recordID: suiteRecordID, action: .none)
+            existingRecord["suiteId"] = suiteInfo.suiteId
+            
+            // Save the updated record
+            _ = try await publicCloudKitDatabase.save(existingRecord)
+            print("✅ DEBUG: Updated existing concert record: \(concert.artist) - \(concertRecordID.recordName)")
+            
+        } catch let ckError as CKError where ckError.code == .unknownItem {
+            // Record doesn't exist, create a new one
+            print("🔧 DEBUG: Record doesn't exist for concert \(concert.id), creating new one")
+            let concertRecord = concert.toCloudKitRecord(suiteRecordID: suiteRecordID)
+            _ = try await publicCloudKitDatabase.save(concertRecord)
+            print("✅ DEBUG: Created new concert record: \(concert.artist) - \(concertRecordID.recordName)")
+        }
         
         // Update suite record with concert IDs (only if we're the owner)
         if userRole == .owner {
@@ -4444,12 +4487,83 @@ class ConcertDataManager: ObservableObject {
     
     func updateWithSyncedConcerts(_ syncedConcerts: [Concert]) {
         print("🔄 Updating local concerts with \(syncedConcerts.count) synced concerts")
-        // Update state and save on main thread
+        
         DispatchQueue.main.async { [weak self] in
-            self?.concerts = syncedConcerts
-            self?.syncStatus = "Synced from cloud"
-            self?.lastSyncDate = Date()
-            self?.saveConcerts()
+            guard let self = self else { return }
+            
+            let localConcertCount = self.concerts.count
+            let isOwner = (self.sharedSuiteManager?.userRole == .owner) ?? false
+            
+            print("🔄 DEBUG: Local concerts: \(localConcertCount), Synced concerts: \(syncedConcerts.count), User role: \(isOwner ? "owner" : "member")")
+            
+            // If local is empty (like on fresh non-owning phones), accept all synced data
+            if localConcertCount == 0 {
+                print("🔄 DEBUG: No local concerts, accepting all \(syncedConcerts.count) synced concerts")
+                self.objectWillChange.send()
+                self.concerts = syncedConcerts
+                self.saveLocalOnly()
+            } else if !isOwner && syncedConcerts.count > localConcertCount {
+                // For non-owners, if CloudKit has more recent data, accept it
+                print("🔄 DEBUG: Non-owner with outdated data, accepting \(syncedConcerts.count) CloudKit concerts")
+                self.objectWillChange.send()
+                self.concerts = syncedConcerts
+                self.saveLocalOnly()
+            } else if isOwner {
+                // For owners, preserve local changes but add any new concerts from CloudKit
+                var mergedConcerts = self.concerts
+                var hasChanges = false
+                
+                for syncedConcert in syncedConcerts {
+                    if let localIndex = mergedConcerts.firstIndex(where: { $0.id == syncedConcert.id }) {
+                        // Concert exists locally - keep local version to preserve recent changes
+                        print("🔄 DEBUG: Owner keeping local version of concert \(syncedConcert.id)")
+                    } else {
+                        // New concert from CloudKit - add it
+                        print("✅ DEBUG: Owner adding new synced concert: \(syncedConcert.artist)")
+                        mergedConcerts.append(syncedConcert)
+                        hasChanges = true
+                    }
+                }
+                
+                if hasChanges {
+                    self.objectWillChange.send()
+                    self.concerts = mergedConcerts
+                    self.saveLocalOnly()
+                    print("🔄 DEBUG: Owner added \(syncedConcerts.count - localConcertCount) new concerts")
+                    
+                    // Owner should also upload their current local changes to CloudKit
+                    Task {
+                        print("🔧 DEBUG: Owner uploading local changes to CloudKit after sync")
+                        await self.uploadLocalChangesToCloudKit()
+                    }
+                } else {
+                    print("🔄 DEBUG: Owner keeping all local data intact")
+                    
+                    // Even when no new concerts were added, owner should upload any local changes
+                    Task {
+                        print("🔧 DEBUG: Owner uploading local changes to CloudKit (no new remote data)")
+                        await self.uploadLocalChangesToCloudKit()
+                    }
+                }
+            } else {
+                // For non-owners with same count, update with CloudKit data
+                print("🔄 DEBUG: Non-owner with same concert count, updating with CloudKit data")
+                print("🔄 DEBUG: Before update - First concert: \(self.concerts.first?.artist ?? "none")")
+                print("🔄 DEBUG: Before update - All concerts: \(self.concerts.map { $0.artist }.joined(separator: ", "))")
+                
+                // Force UI refresh BEFORE updating data
+                self.objectWillChange.send()
+                self.concerts = syncedConcerts
+                
+                print("🔄 DEBUG: After update - First concert: \(self.concerts.first?.artist ?? "none")")  
+                print("🔄 DEBUG: After update - All concerts: \(self.concerts.map { $0.artist }.joined(separator: ", "))")
+                print("🔄 DEBUG: UI refresh triggered for \(syncedConcerts.count) concerts")
+                print("🔄 DEBUG: concerts array count is now: \(self.concerts.count)")
+                self.saveLocalOnly()
+            }
+            
+            self.syncStatus = "Synced from cloud"
+            self.lastSyncDate = Date()
         }
     }
     
@@ -4492,6 +4606,27 @@ class ConcertDataManager: ObservableObject {
             // Successfully saved \(concerts.count) concerts
         } catch {
             // Failed to save concerts: \(error)
+        }
+    }
+    
+    func saveLocalOnly() {
+        // Ensure we're on main thread when accessing @Published properties
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                self?.saveLocalOnly()
+            }
+            return
+        }
+        
+        do {
+            let encoded = try JSONEncoder().encode(concerts)
+            
+            // Save to local storage only (no CloudKit sync)
+            saveToLocalStorage()
+            
+            print("✅ DEBUG: Saved concerts locally only (no CloudKit sync)")
+        } catch {
+            print("❌ DEBUG: Failed to save concerts locally: \(error)")
         }
     }
     
@@ -4810,15 +4945,9 @@ class ConcertDataManager: ObservableObject {
         do {
             // Use SharedSuiteManager to save the concert to CloudKit
             try await sharedSuiteManager.saveConcertToCloudKit(concert)
-            
-            await MainActor.run {
-                syncStatus = "Concert synced"
-                lastSyncDate = Date()
-            }
+            // Don't update syncStatus here to avoid thread warnings
         } catch {
-            await MainActor.run {
-                syncStatus = "Sync failed: \(error.localizedDescription)"
-            }
+            print("❌ Failed to sync concert \(concert.id) to CloudKit: \(error.localizedDescription)")
         }
     }
     
@@ -4845,6 +4974,37 @@ class ConcertDataManager: ObservableObject {
                 }
             }
         }
+    }
+    
+    // Upload all local concert changes to CloudKit (for owners)
+    func uploadLocalChangesToCloudKit() async {
+        guard let sharedSuiteManager = sharedSuiteManager,
+              sharedSuiteManager.isSharedSuite,
+              sharedSuiteManager.userRole == .owner else {
+            print("🔧 DEBUG: Skipping CloudKit upload - not an owner in shared suite")
+            return
+        }
+        
+        await MainActor.run {
+            syncStatus = "Uploading local changes to CloudKit..."
+        }
+        
+        print("🔧 DEBUG: Uploading \(concerts.count) concerts to CloudKit as owner")
+        
+        // Upload all concerts that belong to this suite to CloudKit
+        for concert in concerts {
+            if concert.suiteId != nil {
+                print("🔧 DEBUG: Uploading concert \(concert.id) (\(concert.artist)) to CloudKit")
+                await syncConcertToCloudKit(concert)
+            }
+        }
+        
+        await MainActor.run {
+            syncStatus = "Local changes uploaded to CloudKit"
+            lastSyncDate = Date()
+        }
+        
+        print("✅ DEBUG: Finished uploading local changes to CloudKit")
     }
     
     // Enhanced sync method for manual sync with conflict resolution
@@ -8821,7 +8981,7 @@ struct SettingsView: View {
                                             .font(.system(size: 14))
                                             .foregroundColor(.modernTextSecondary)
                                         
-                                        Text("\(sharedSuiteManager.currentSuiteInfo?.members.count ?? 0)")
+                                        Text("\(1 + (sharedSuiteManager.currentSuiteInfo?.members.count ?? 0))")
                                             .font(.system(size: 14, weight: .semibold))
                                             .foregroundColor(.modernAccent)
                                     }
