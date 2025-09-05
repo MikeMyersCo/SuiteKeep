@@ -5692,6 +5692,7 @@ struct CalendarDayView: View {
 // MARK: - Concert Detail View
 struct ConcertDetailView: View {
     @Environment(\.colorScheme) var colorScheme
+    @EnvironmentObject var sharedSuiteManager: SharedSuiteManager
     @State var concert: Concert
     @ObservedObject var concertManager: ConcertDataManager
     @ObservedObject var settingsManager: SettingsManager
@@ -5705,6 +5706,11 @@ struct ConcertDetailView: View {
     // View mode state
     @State private var viewMode: ViewMode = .seatView
     @State private var isBuyerView = false
+    
+    // Computed property for read-only state
+    private var isReadOnlyView: Bool {
+        return isBuyerView || (sharedSuiteManager.isSharedSuite && sharedSuiteManager.userRole == .viewer)
+    }
     
     enum ViewMode {
         case seatView, listView
@@ -5740,14 +5746,37 @@ struct ConcertDetailView: View {
                         
                         Spacer()
                         
-                        Button(action: {
-                            showingDeleteConfirmation = true
-                        }) {
-                            Image(systemName: "trash")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.red)
+                        // Read-only indicator for viewer users
+                        if isReadOnlyView && sharedSuiteManager.isSharedSuite && sharedSuiteManager.userRole == .viewer {
+                            HStack(spacing: 6) {
+                                Image(systemName: "eye.fill")
+                                    .font(.system(size: 12, weight: .medium))
+                                Text("Read Only")
+                                    .font(.system(size: 12, weight: .medium))
+                            }
+                            .foregroundColor(.orange)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color.orange.opacity(0.1))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                                    )
+                            )
                         }
-                        .buttonStyle(HoverableButtonStyle())
+                        
+                        if !isReadOnlyView {
+                            Button(action: {
+                                showingDeleteConfirmation = true
+                            }) {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.red)
+                            }
+                            .buttonStyle(HoverableButtonStyle())
+                        }
                     }
                     .padding(.horizontal)
                     .padding(.top, 20)
@@ -5757,23 +5786,25 @@ struct ConcertDetailView: View {
                         VStack(spacing: 12) {
                             HStack {
                                 Spacer()
-                                Button(action: {
-                                    if isEditingDetails {
-                                        // Save changes
-                                        concert.artist = editedArtist
-                                        concert.date = editedDate
-                                        concertManager.updateConcert(concert)
-                                        isEditingDetails = false
-                                    } else {
-                                        // Enter edit mode
-                                        editedArtist = concert.artist
-                                        editedDate = concert.date
-                                        isEditingDetails = true
+                                if !isReadOnlyView {
+                                    Button(action: {
+                                        if isEditingDetails {
+                                            // Save changes
+                                            concert.artist = editedArtist
+                                            concert.date = editedDate
+                                            concertManager.updateConcert(concert)
+                                            isEditingDetails = false
+                                        } else {
+                                            // Enter edit mode
+                                            editedArtist = concert.artist
+                                            editedDate = concert.date
+                                            isEditingDetails = true
+                                        }
+                                    }) {
+                                        Text(isEditingDetails ? "Save" : "Edit")
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundColor(.modernAccent)
                                     }
-                                }) {
-                                    Text(isEditingDetails ? "Save" : "Edit")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.modernAccent)
                                 }
                                 
                                 if isEditingDetails {
@@ -6020,7 +6051,7 @@ struct ConcertDetailView: View {
                             isBatchMode: $isBatchMode,
                             selectedSeats: $selectedSeats,
                             showingBatchOptions: $showingBatchOptions,
-                            isBuyerView: $isBuyerView
+                            isBuyerView: .constant(isReadOnlyView)
                         )
                     case .seatView:
                         // Interactive Fire Suite Layout for seat selection
@@ -6031,7 +6062,7 @@ struct ConcertDetailView: View {
                             isBatchMode: $isBatchMode,
                             selectedSeats: $selectedSeats,
                             showingBatchOptions: $showingBatchOptions,
-                            isBuyerView: $isBuyerView
+                            isBuyerView: .constant(isReadOnlyView)
                         )
                     }
                 }
@@ -6183,7 +6214,8 @@ struct SeatListView: View {
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundColor(.modernText)
                 
-                Text(isBatchMode ? "Select multiple seats for batch operations" : "Tap seats to manage tickets")
+                Text(isBuyerView ? "View-only mode - seat details are read-only" : 
+                     isBatchMode ? "Select multiple seats for batch operations" : "Tap seats to manage tickets")
                     .font(.system(size: 14))
                     .foregroundColor(.modernTextSecondary)
             }
@@ -6224,15 +6256,17 @@ struct SeatListView: View {
             .font(.system(size: 12, weight: .medium))
             .foregroundColor(.red)
             
-            Button("Edit Selected") {
-                showingBatchOptions = true
+            if !isBuyerView {
+                Button("Edit Selected") {
+                    showingBatchOptions = true
+                }
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+                .background(Color.blue)
+                .cornerRadius(6)
             }
-            .font(.system(size: 12, weight: .medium))
-            .foregroundColor(.white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 4)
-            .background(Color.blue)
-            .cornerRadius(6)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -6255,8 +6289,8 @@ struct SeatListView: View {
     
     private func seatRowView(for index: Int) -> some View {
         HStack(spacing: 16) {
-            // Checkbox for batch mode
-            if isBatchMode {
+            // Checkbox for batch mode (disabled in read-only view)
+            if isBatchMode && !isBuyerView {
                 batchCheckbox(for: index)
             }
             
@@ -6268,8 +6302,8 @@ struct SeatListView: View {
             
             Spacer()
             
-            // Edit button (when not in batch mode)
-            if !isBatchMode {
+            // Edit button (when not in batch mode and not in read-only view)
+            if !isBatchMode && !isBuyerView {
                 editButton(for: index)
             }
         }
@@ -6786,32 +6820,56 @@ struct InteractiveFireSuiteView: View {
             }
             .buttonStyle(PlainButtonStyle())
             
-            // Buyer View Toggle - Centered
+            // View Mode Toggle - Centered
             HStack {
                 Spacer()
-                Button(action: {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        isBuyerView.toggle()
-                    }
-                }) {
+                
+                if isBuyerView {
+                    // Read-only indicator for viewers
                     HStack(spacing: 6) {
-                        Image(systemName: isBuyerView ? "eye.fill" : "eye")
+                        Image(systemName: "eye.fill")
                             .font(.system(size: 14, weight: .medium))
-                        Text("Buyer View")
+                        Text("Read Only")
                             .font(.system(size: 13, weight: .medium))
                     }
-                    .foregroundColor(isBuyerView ? .blue : .modernTextSecondary)
+                    .foregroundColor(.orange)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
-                            .fill(isBuyerView ? Color.blue.opacity(0.1) : Color.clear)
+                            .fill(Color.orange.opacity(0.1))
                             .overlay(
                                 RoundedRectangle(cornerRadius: 8)
-                                    .stroke(isBuyerView ? Color.blue.opacity(0.3) : Color.gray.opacity(0.3), lineWidth: 1)
+                                    .stroke(Color.orange.opacity(0.3), lineWidth: 1)
                             )
                     )
+                } else {
+                    // Buyer View Toggle for non-read-only users
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            isBuyerView.toggle()
+                        }
+                    }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: isBuyerView ? "eye.fill" : "eye")
+                                .font(.system(size: 14, weight: .medium))
+                            Text("Buyer View")
+                                .font(.system(size: 13, weight: .medium))
+                        }
+                        .foregroundColor(isBuyerView ? .blue : .modernTextSecondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(isBuyerView ? Color.blue.opacity(0.1) : Color.clear)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(isBuyerView ? Color.blue.opacity(0.3) : Color.gray.opacity(0.3), lineWidth: 1)
+                                )
+                        )
+                    }
                 }
+                
                 Spacer()
             }
             .padding(.top, 8)
