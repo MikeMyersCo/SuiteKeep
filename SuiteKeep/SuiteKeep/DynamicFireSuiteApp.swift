@@ -6730,7 +6730,7 @@ struct ConcertDetailView: View {
                             isBatchMode: $isBatchMode,
                             selectedSeats: $selectedSeats,
                             showingBatchOptions: $showingBatchOptions,
-                            isBuyerView: .constant(isReadOnlyView)
+                            isBuyerView: $isBuyerView
                         )
                     case .seatView:
                         // Interactive Fire Suite Layout for seat selection
@@ -6741,7 +6741,7 @@ struct ConcertDetailView: View {
                             isBatchMode: $isBatchMode,
                             selectedSeats: $selectedSeats,
                             showingBatchOptions: $showingBatchOptions,
-                            isBuyerView: .constant(isReadOnlyView)
+                            isBuyerView: $isBuyerView
                         )
                     }
                 }
@@ -7172,6 +7172,7 @@ struct SeatListView: View {
 
 // MARK: - Interactive Fire Suite View
 struct InteractiveFireSuiteView: View {
+    @EnvironmentObject var sharedSuiteManager: SharedSuiteManager
     @Binding var concert: Concert
     @ObservedObject var concertManager: ConcertDataManager
     @ObservedObject var settingsManager: SettingsManager
@@ -7503,8 +7504,9 @@ struct InteractiveFireSuiteView: View {
             HStack {
                 Spacer()
                 
-                if isBuyerView {
-                    // Read-only indicator for viewers
+                // Show appropriate controls based on user permissions
+                if sharedSuiteManager.isSharedSuite && sharedSuiteManager.userRole != .owner {
+                    // Read-only indicator for non-owner users in shared suites
                     HStack(spacing: 6) {
                         Image(systemName: "eye.fill")
                             .font(.system(size: 14, weight: .medium))
@@ -7523,7 +7525,7 @@ struct InteractiveFireSuiteView: View {
                             )
                     )
                 } else {
-                    // Buyer View Toggle for non-read-only users
+                    // Buyer View Toggle for owners and individual users
                     Button(action: {
                         withAnimation(.easeInOut(duration: 0.3)) {
                             isBuyerView.toggle()
