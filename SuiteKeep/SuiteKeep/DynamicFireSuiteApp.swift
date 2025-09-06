@@ -945,8 +945,23 @@ struct DynamicFireSuiteApp: View {
         .accentColor(.modernAccent)
         .onAppear {
             startFlameAnimation()
-            // Connect SharedSuiteManager to ConcertDataManager
+            // Connect SharedSuiteManager and ConcertDataManager to each other
             concertManager.sharedSuiteManager = sharedSuiteManager
+            sharedSuiteManager.concertManager = concertManager
+            
+            // Auto-sync on app startup if in shared suite (or if we think we should be)
+            if sharedSuiteManager.isSharedSuite {
+                print("🔄 DEBUG: Auto-syncing on app startup for shared suite")
+                Task {
+                    await sharedSuiteManager.syncWithCloudKit()
+                    await sharedSuiteManager.syncConcertData()
+                }
+            }
+        }
+        .alert("Suite No Longer Available", isPresented: $sharedSuiteManager.showSuiteDeletedAlert) {
+            Button("OK") { }
+        } message: {
+            Text("The shared suite '\(sharedSuiteManager.deletedSuiteName)' has been deleted by the owner. You have been returned to your individual suite.")
         }
             }
         }
@@ -2284,6 +2299,7 @@ enum CloudKitRecordType {
     static let suiteMember = "SuiteMember"
     static let invitationToken = "InvitationToken"
     static let suiteSync = "SuiteSync"
+    static let usedTokens = "UsedTokens"
 }
 
 // MARK: - CloudKit Zone Configuration
@@ -2716,6 +2732,17 @@ class SharedSuiteManager: ObservableObject {
     @Published var isOffline: Bool = false
     @Published var pendingOperationsCount: Int = 0
     
+    // Local token tracking to prevent immediate reuse
+    @Published private var usedTokens = Set<String>()
+    @Published private var tokenUsageHistory: [String: Date] = [:]
+    
+    // Suite-level tracking to prevent using different tokens for same suite after leaving
+    @Published private var accessedSuites: [String: Date] = [:] // suiteId -> last accessed date
+    
+    // Alert state for suite deletion
+    @Published var showSuiteDeletedAlert = false
+    @Published var deletedSuiteName = ""
+    
     private let userDefaults = UserDefaults.standard
     private let iCloudStore = NSUbiquitousKeyValueStore.default
     private let cloudKitContainer = CKContainer.default()
@@ -2732,6 +2759,9 @@ class SharedSuiteManager: ObservableObject {
     private let userNameKey = "CurrentUserName"
     private let subscriptionID = "SharedSuiteUpdates"
     private let offlineQueueKey = "OfflineOperationQueue"
+    
+    // Concert data manager reference for clearing data when leaving suite
+    weak var concertManager: ConcertDataManager?
     
     // Offline operation queue
     private var offlineQueue: [OfflineOperation] = []
@@ -2839,10 +2869,15 @@ class SharedSuiteManager: ObservableObject {
     }
     
     func leaveSharedSuite() {
-        // Clean up subscriptions first
+        // Remove self from CloudKit member list and invalidate tokens before cleaning up
         Task {
+            await removeSelfFromSuite()
+            await invalidateUserInvitationTokens()
             try? await removeCloudKitSubscriptions()
         }
+        
+        // Clear all concert data when leaving shared suite
+        concertManager?.clearAllData()
         
         currentSuiteInfo = nil
         userRole = .owner
@@ -2851,6 +2886,91 @@ class SharedSuiteManager: ObservableObject {
         iCloudStore.removeObject(forKey: suiteInfoKey)
         
         cloudKitStatus = "Left shared suite"
+    }
+    
+    func deleteSharedSuite() {
+        // Delete the suite from CloudKit and remove subscriptions
+        Task {
+            await deleteSharedSuiteFromCloudKit()
+            try? await removeCloudKitSubscriptions()
+        }
+        
+        // Owner keeps their local concert data - just remove sharing state
+        currentSuiteInfo = nil
+        userRole = .owner
+        isSharedSuite = false
+        userDefaults.removeObject(forKey: suiteInfoKey)
+        iCloudStore.removeObject(forKey: suiteInfoKey)
+        
+        cloudKitStatus = "Shared suite deleted"
+    }
+    
+    private func deleteSharedSuiteFromCloudKit() async {
+        guard let suiteInfo = currentSuiteInfo, userRole == .owner else { return }
+        
+        print("🔧 DEBUG: Deleting shared suite from CloudKit: \(suiteInfo.suiteId)")
+        
+        do {
+            // Delete the suite record
+            let suiteRecordID = CKRecord.ID(recordName: "suite_\(suiteInfo.suiteId)")
+            try await publicCloudKitDatabase.deleteRecord(withID: suiteRecordID)
+            print("✅ DEBUG: Suite record deleted from CloudKit")
+            
+            // Delete associated invitation tokens
+            await deleteInvitationTokensForSuite(suiteId: suiteInfo.suiteId)
+            
+            // Delete associated concert records (they're now orphaned)
+            await deleteOrphanedConcertRecords(suiteId: suiteInfo.suiteId)
+            
+        } catch {
+            print("❌ DEBUG: Failed to delete suite from CloudKit: \(error)")
+        }
+    }
+    
+    private func deleteInvitationTokensForSuite(suiteId: String) async {
+        print("🔧 DEBUG: Deleting invitation tokens for suite: \(suiteId)")
+        
+        let predicate = NSPredicate(format: "suiteId == %@", suiteId)
+        let query = CKQuery(recordType: CloudKitRecordType.invitationToken, predicate: predicate)
+        
+        do {
+            let result = try await publicCloudKitDatabase.records(matching: query)
+            let recordIDs = result.matchResults.compactMap { _, result in
+                try? result.get().recordID
+            }
+            
+            if !recordIDs.isEmpty {
+                for recordID in recordIDs {
+                    try await publicCloudKitDatabase.deleteRecord(withID: recordID)
+                }
+                print("✅ DEBUG: Deleted \(recordIDs.count) invitation tokens")
+            }
+        } catch {
+            print("❌ DEBUG: Failed to delete invitation tokens: \(error)")
+        }
+    }
+    
+    private func deleteOrphanedConcertRecords(suiteId: String) async {
+        print("🔧 DEBUG: Deleting orphaned concert records for suite: \(suiteId)")
+        
+        let predicate = NSPredicate(format: "suiteId == %@", suiteId)
+        let query = CKQuery(recordType: CloudKitRecordType.concert, predicate: predicate)
+        
+        do {
+            let result = try await publicCloudKitDatabase.records(matching: query)
+            let recordIDs = result.matchResults.compactMap { _, result in
+                try? result.get().recordID
+            }
+            
+            if !recordIDs.isEmpty {
+                for recordID in recordIDs {
+                    try await publicCloudKitDatabase.deleteRecord(withID: recordID)
+                }
+                print("✅ DEBUG: Deleted \(recordIDs.count) orphaned concert records")
+            }
+        } catch {
+            print("❌ DEBUG: Failed to delete orphaned concert records: \(error)")
+        }
     }
     
     func updateUserRole(for userId: String, to newRole: UserRole) {
@@ -2906,6 +3026,112 @@ class SharedSuiteManager: ObservableObject {
         }
     }
     
+    private func removeSelfFromSuite() async {
+        guard var suiteInfo = currentSuiteInfo else { return }
+        
+        // Remove current user from members list
+        let originalCount = suiteInfo.members.count
+        suiteInfo.members.removeAll { $0.userId == self.currentUserId }
+        
+        // Only update CloudKit if we actually removed someone
+        if suiteInfo.members.count < originalCount {
+            suiteInfo.lastModified = Date()
+            
+            // Use fetch-then-update pattern to avoid "record to insert already exists" errors
+            do {
+                let suiteRecordID = CKRecord.ID(recordName: "suite_\(suiteInfo.suiteId)")
+                let existingRecord = try await publicCloudKitDatabase.record(for: suiteRecordID)
+                
+                // Update existing record with new member list
+                if let membersData = try? JSONEncoder().encode(suiteInfo.members) {
+                    existingRecord["membersData"] = membersData
+                }
+                existingRecord["lastModified"] = suiteInfo.lastModified
+                existingRecord["memberCount"] = Int64(suiteInfo.members.count)
+                
+                _ = try await publicCloudKitDatabase.save(existingRecord)
+                print("🔄 Successfully removed self from suite members in CloudKit")
+            } catch let ckError as CKError where ckError.code == .unknownItem {
+                // Suite record was deleted by owner - this is expected behavior
+                print("ℹ️ Suite record was already deleted by owner - no action needed")
+            } catch {
+                print("❌ Failed to remove self from suite members in CloudKit: \(error)")
+            }
+        }
+    }
+    
+    private func cleanupLocalTokenHistory() {
+        // Clean up tokens older than 24 hours to prevent memory bloat
+        let dayAgo = Date().addingTimeInterval(-86400) // 24 hours ago
+        
+        let oldTokens = tokenUsageHistory.filter { _, date in
+            date < dayAgo
+        }.map { token, _ in token }
+        
+        for token in oldTokens {
+            tokenUsageHistory.removeValue(forKey: token)
+            usedTokens.remove(token)
+        }
+        
+        // Clean up suite access history older than 24 hours
+        let oldSuites = accessedSuites.filter { _, date in
+            date < dayAgo
+        }.map { suiteId, _ in suiteId }
+        
+        for suiteId in oldSuites {
+            accessedSuites.removeValue(forKey: suiteId)
+        }
+        
+        let totalCleaned = oldTokens.count + oldSuites.count
+        if totalCleaned > 0 {
+            print("🧹 DEBUG: Cleaned up \(oldTokens.count) old token records and \(oldSuites.count) old suite access records")
+        }
+    }
+    
+    private func invalidateUserInvitationTokens() async {
+        guard let suiteInfo = currentSuiteInfo else { return }
+        
+        // Clean up old local token history
+        await MainActor.run {
+            cleanupLocalTokenHistory()
+        }
+        
+        print("🔧 DEBUG: Checking invitation tokens for user leaving suite: \(currentUserId)")
+        
+        // Query for invitation tokens that were used by this specific user
+        let predicate = NSPredicate(format: "suiteId == %@ AND usedBy == %@", suiteInfo.suiteId, currentUserId)
+        let query = CKQuery(recordType: CloudKitRecordType.invitationToken, predicate: predicate)
+        
+        do {
+            let result = try await publicCloudKitDatabase.records(matching: query)
+            let records = result.matchResults.compactMap { _, result in
+                try? result.get()
+            }
+            
+            print("🔧 DEBUG: Found \(records.count) tokens used by current user")
+            
+            if records.isEmpty {
+                print("ℹ️ DEBUG: No tokens found for current user - this is expected if tokens are properly marked as used")
+            } else {
+                // These tokens should already be marked as used=true, so they shouldn't work again
+                // But let's double-check and ensure they're definitely invalid
+                for tokenRecord in records {
+                    if let used = tokenRecord["used"] as? Bool, !used {
+                        // This shouldn't happen, but if we find an unused token, mark it as used
+                        tokenRecord["used"] = true
+                        tokenRecord["usedDate"] = Date()
+                        try await publicCloudKitDatabase.save(tokenRecord)
+                        print("🔄 DEBUG: Fixed unused token that should have been marked as used")
+                    } else {
+                        print("✅ DEBUG: Token already properly marked as used")
+                    }
+                }
+            }
+        } catch {
+            print("❌ DEBUG: Failed to check invitation tokens: \(error)")
+        }
+    }
+    
     // MARK: - Permission Checking
     
     func canModifySeats() -> Bool {
@@ -2918,6 +3144,129 @@ class SharedSuiteManager: ObservableObject {
     
     func canDeleteConcerts() -> Bool {
         return !isSharedSuite || userRole.canEdit
+    }
+    
+    // MARK: - Token Invalidation
+    
+    private func invalidateAllInvitationTokens(forSuite suiteId: String) async {
+        print("🔧 DEBUG: Invalidating all invitation tokens for suite: \(suiteId)")
+        
+        // Query for all invitation tokens for this suite
+        let predicate = NSPredicate(format: "suiteId == %@", suiteId)
+        let query = CKQuery(recordType: CloudKitRecordType.invitationToken, predicate: predicate)
+        
+        do {
+            let result = try await publicCloudKitDatabase.records(matching: query)
+            let records = result.matchResults.compactMap { _, result in
+                try? result.get()
+            }
+            
+            print("🔧 DEBUG: Found \(records.count) invitation tokens for suite")
+            
+            var invalidatedCount = 0
+            for tokenRecord in records {
+                do {
+                    // Mark token as used to invalidate it
+                    tokenRecord["used"] = true
+                    tokenRecord["usedBy"] = "INVALIDATED_AFTER_JOIN"
+                    tokenRecord["usedDate"] = Date()
+                    
+                    _ = try await publicCloudKitDatabase.save(tokenRecord)
+                    invalidatedCount += 1
+                } catch {
+                    print("⚠️ DEBUG: Failed to invalidate token \(tokenRecord.recordID): \(error)")
+                }
+            }
+            
+            print("✅ DEBUG: Successfully invalidated \(invalidatedCount) invitation tokens")
+            
+        } catch {
+            print("❌ DEBUG: Failed to query invitation tokens: \(error)")
+        }
+    }
+    
+    // MARK: - Token Usage Tracking
+    
+    private func isTokenAlreadyUsed(tokenId: String, suiteId: String) async -> Bool {
+        // Check local storage first
+        let localUsedTokensKey = "usedTokens_\(suiteId)"
+        if let usedTokens = UserDefaults.standard.stringArray(forKey: localUsedTokensKey),
+           usedTokens.contains(tokenId) {
+            print("🔧 DEBUG: Token \(tokenId) found in local used tokens list")
+            return true
+        }
+        
+        // Check CloudKit for a shared "used tokens" record
+        do {
+            let usedTokensRecordID = CKRecord.ID(recordName: "usedTokens_\(suiteId)")
+            let usedTokensRecord = try await publicCloudKitDatabase.record(for: usedTokensRecordID)
+            
+            if let usedTokensList = usedTokensRecord["tokenIds"] as? [String],
+               usedTokensList.contains(tokenId) {
+                print("🔧 DEBUG: Token \(tokenId) found in CloudKit used tokens list")
+                // Also cache locally for faster future checks
+                var localUsedTokens = UserDefaults.standard.stringArray(forKey: localUsedTokensKey) ?? []
+                if !localUsedTokens.contains(tokenId) {
+                    localUsedTokens.append(tokenId)
+                    UserDefaults.standard.set(localUsedTokens, forKey: localUsedTokensKey)
+                }
+                return true
+            }
+        } catch let ckError as CKError where ckError.code == .unknownItem {
+            // No used tokens record exists yet - this is fine
+            print("🔧 DEBUG: No used tokens record exists yet for suite \(suiteId)")
+        } catch {
+            print("❌ DEBUG: Failed to check used tokens: \(error)")
+            // If we can't check CloudKit, fall back to local check only
+        }
+        
+        return false
+    }
+    
+    private func recordTokenAsUsed(tokenId: String, suiteId: String, userId: String) async {
+        print("🔧 DEBUG: Recording token \(tokenId) as used")
+        
+        // Record locally first
+        let localUsedTokensKey = "usedTokens_\(suiteId)"
+        var localUsedTokens = UserDefaults.standard.stringArray(forKey: localUsedTokensKey) ?? []
+        if !localUsedTokens.contains(tokenId) {
+            localUsedTokens.append(tokenId)
+            UserDefaults.standard.set(localUsedTokens, forKey: localUsedTokensKey)
+            print("✅ DEBUG: Token recorded in local used tokens list")
+        }
+        
+        // Try to update CloudKit used tokens record
+        do {
+            let usedTokensRecordID = CKRecord.ID(recordName: "usedTokens_\(suiteId)")
+            
+            // Try to fetch existing record first
+            do {
+                let existingRecord = try await publicCloudKitDatabase.record(for: usedTokensRecordID)
+                var tokenIds = (existingRecord["tokenIds"] as? [String]) ?? []
+                
+                if !tokenIds.contains(tokenId) {
+                    tokenIds.append(tokenId)
+                    existingRecord["tokenIds"] = tokenIds
+                    existingRecord["lastModified"] = Date()
+                    
+                    _ = try await publicCloudKitDatabase.save(existingRecord)
+                    print("✅ DEBUG: Updated existing used tokens record in CloudKit")
+                }
+            } catch let ckError as CKError where ckError.code == .unknownItem {
+                // Create new used tokens record
+                let usedTokensRecord = CKRecord(recordType: CloudKitRecordType.usedTokens, recordID: usedTokensRecordID)
+                usedTokensRecord["suiteId"] = suiteId
+                usedTokensRecord["tokenIds"] = [tokenId]
+                usedTokensRecord["lastModified"] = Date()
+                
+                _ = try await publicCloudKitDatabase.save(usedTokensRecord)
+                print("✅ DEBUG: Created new used tokens record in CloudKit")
+            }
+            
+        } catch {
+            print("❌ DEBUG: Failed to update used tokens in CloudKit: \(error)")
+            // Local recording still worked, so not a complete failure
+        }
     }
     
     
@@ -3318,18 +3667,79 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
                 throw CloudKitError.recordNotFound
             }
             
-            // Try to mark token as used (optional - don't fail if this doesn't work)
+            // Check if current user is already a member of the suite (prevents token reuse)
+            if suiteInfo.members.contains(where: { $0.userId == self.currentUserId }) {
+                print("❌ DEBUG: User is already a member of this suite")
+                await MainActor.run {
+                    cloudKitStatus = "You are already a member of this suite"
+                    isSyncing = false
+                }
+                throw CloudKitError.permissionDenied
+            }
+            
+            // Check local token usage tracking for immediate prevention of reuse
+            if await MainActor.run(body: { self.usedTokens.contains(tokenId) }) {
+                print("❌ DEBUG: Token already used locally - preventing reuse")
+                await MainActor.run {
+                    self.cloudKitStatus = "Token already used. Please contact suite owner for access"
+                    self.isSyncing = false
+                }
+                // Create a specific error for used tokens that won't be converted by handleCloudKitError
+                throw NSError(domain: "SuiteKeepErrorDomain", code: 1001, userInfo: [
+                    NSLocalizedDescriptionKey: "Token already used. Please contact suite owner for access"
+                ])
+            }
+            
+            // Check if token was used recently (within 5 minutes) to prevent rapid reuse
+            if let lastUsed = await MainActor.run(body: { self.tokenUsageHistory[tokenId] }),
+               Date().timeIntervalSince(lastUsed) < 300 {
+                print("❌ DEBUG: Token used recently - preventing reuse within 5 minutes")
+                await MainActor.run {
+                    self.cloudKitStatus = "Please wait before reusing this invitation"
+                    self.isSyncing = false
+                }
+                throw NSError(domain: "SuiteKeepErrorDomain", code: 1002, userInfo: [
+                    NSLocalizedDescriptionKey: "Please wait before reusing this invitation"
+                ])
+            }
+            
+            // Check if user has accessed this suite recently (within 10 minutes) - prevents using different tokens
+            if let lastAccessed = await MainActor.run(body: { self.accessedSuites[token.suiteId] }),
+               Date().timeIntervalSince(lastAccessed) < 600 { // 10 minutes
+                print("❌ DEBUG: Suite accessed recently with different token - preventing abuse")
+                await MainActor.run {
+                    self.cloudKitStatus = "You recently left this suite. Please wait before rejoining."
+                    self.isSyncing = false
+                }
+                throw NSError(domain: "SuiteKeepErrorDomain", code: 1003, userInfo: [
+                    NSLocalizedDescriptionKey: "You recently left this suite. Please wait before rejoining."
+                ])
+            }
+            
+            // Immediately mark token as used locally first (provides instant protection)
+            await MainActor.run {
+                self.usedTokens.insert(tokenId)
+                self.tokenUsageHistory[tokenId] = Date()
+                self.accessedSuites[token.suiteId] = Date()
+            }
+            print("🔒 DEBUG: Token marked as used locally - immediate protection active")
+            
+            // Also invalidate in CloudKit for distributed protection
+            print("🔒 DEBUG: Token validated successfully - invalidating in CloudKit to prevent reuse")
+            
+            // Try to mark the specific token as used first
             do {
-                token.used = true
-                token.usedBy = self.currentUserId
-                token.usedDate = Date()
+                tokenRecord["used"] = true
+                tokenRecord["usedBy"] = self.currentUserId
+                tokenRecord["usedDate"] = Date()
                 
-                let updatedTokenRecord = token.toCloudKitRecord()
-                _ = try await self.publicCloudKitDatabase.save(updatedTokenRecord)
-                print("✅ DEBUG: Token marked as used successfully")
+                _ = try await self.publicCloudKitDatabase.save(tokenRecord)
+                print("✅ DEBUG: Token marked as used in CloudKit successfully")
             } catch {
-                print("⚠️ DEBUG: Could not mark token as used (continuing anyway): \(error)")
-                // Don't fail the entire operation - invitation can still work
+                print("⚠️ DEBUG: Could not mark token as used directly: \(error)")
+                // If we can't mark this token, invalidate ALL tokens as a safety measure
+                print("🔒 DEBUG: Falling back to invalidating all tokens for suite")
+                await invalidateAllInvitationTokens(forSuite: token.suiteId)
             }
             
             await MainActor.run {
@@ -3340,6 +3750,12 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
             return suiteInfo
             
         } catch {
+            // Check if this is one of our specific SuiteKeep errors (already handled with user-friendly message)
+            if let nsError = error as? NSError, nsError.domain == "SuiteKeepErrorDomain" {
+                // Status already set above, just re-throw the original error
+                throw nsError
+            }
+            
             let cloudKitError = handleCloudKitError(error)
             await MainActor.run {
                 cloudKitStatus = "Failed to validate invitation: \(cloudKitError.localizedDescription)"
@@ -3355,7 +3771,16 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
     }
     
     func syncWithCloudKit() async {
-        guard isCloudKitAvailable, let suiteInfo = currentSuiteInfo else { return }
+        guard isCloudKitAvailable else { return }
+        
+        // If we're supposed to be in a shared suite but have no suite info, we need to clean up
+        if isSharedSuite && currentSuiteInfo == nil {
+            print("🔄 DEBUG: In shared suite mode but no suite info - cleaning up orphaned state")
+            await cleanupDeletedSuite()
+            return
+        }
+        
+        guard let suiteInfo = currentSuiteInfo else { return }
         
         cloudKitStatus = "Syncing with CloudKit..."
         
@@ -3370,6 +3795,10 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
                     saveSuiteInfo()
                 }
             }
+        } catch let ckError as CKError where ckError.code == .unknownItem {
+            // Suite was deleted by owner - clean up local data
+            print("🔄 DEBUG: Shared suite was deleted by owner - cleaning up local data")
+            await cleanupDeletedSuite()
         } catch {
             await MainActor.run {
                 cloudKitStatus = "Sync failed: \(error.localizedDescription)"
@@ -3378,7 +3807,16 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
     }
     
     func syncConcertData() async {
-        guard isCloudKitAvailable, let suiteInfo = currentSuiteInfo else { return }
+        guard isCloudKitAvailable else { return }
+        
+        // If we're supposed to be in a shared suite but have no suite info, we need to clean up
+        if isSharedSuite && currentSuiteInfo == nil {
+            print("🔄 DEBUG: In shared suite mode but no suite info during concert sync - cleaning up orphaned state")
+            await cleanupDeletedSuite()
+            return
+        }
+        
+        guard let suiteInfo = currentSuiteInfo else { return }
         
         print("🔧 DEBUG: Syncing concert data for suite: \(suiteInfo.suiteId)")
         
@@ -3417,6 +3855,7 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
                 print("🔧 DEBUG: Fetching records with fresh data (bypassing cache)")
                 let fetchResults = try await publicCloudKitDatabase.records(for: recordsToFetch)
                 
+                var fetchFailures = 0
                 for (recordID, result) in fetchResults {
                     switch result {
                     case .success(let record):
@@ -3437,13 +3876,33 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
                         }
                     case .failure(let error):
                         print("⚠️ DEBUG: Could not fetch concert \(recordID.recordName): \(error)")
+                        if let ckError = error as? CKError, ckError.code == .unknownItem {
+                            fetchFailures += 1
+                        }
                     }
+                }
+                
+                // If ALL concert records failed to fetch with "Unknown Item", suite was likely deleted
+                if fetchFailures > 0 && fetchFailures == recordsToFetch.count && !recordsToFetch.isEmpty {
+                    print("⚠️ DEBUG: All \(fetchFailures) concert records not found - suite was deleted by owner")
+                    await cleanupDeletedSuite()
+                    return
                 }
             }
             
-            // If we have no local concerts or found nothing, create a placeholder for demonstration
+            // Check if this looks like a deleted suite (had concerts before but now has none)
             if syncedConcerts.isEmpty {
-                print("ℹ️ DEBUG: No concerts found - this may be the first sync or no concerts have been created yet")
+                // If this is the first sync after joining, that's normal
+                // But if we had concerts before and now have none, the suite might have been deleted
+                let hadConcertsIds = suiteInfo.concertIds?.isEmpty == false
+                
+                if hadConcertsIds {
+                    print("⚠️ DEBUG: Suite previously had concerts but now has none - likely deleted by owner")
+                    await cleanupDeletedSuite()
+                    return
+                } else {
+                    print("ℹ️ DEBUG: No concerts found - this may be the first sync or no concerts have been created yet")
+                }
             }
             
             print("✅ DEBUG: Found \(syncedConcerts.count) concerts for suite")
@@ -3456,9 +3915,70 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
                     userInfo: ["concerts": syncedConcerts]
                 )
             }
+        } catch let ckError as CKError where ckError.code == .unknownItem {
+            // Suite was deleted by owner - clean up local data
+            print("🔄 DEBUG: Shared suite was deleted by owner during concert sync - cleaning up local data")
+            await cleanupDeletedSuite()
         } catch {
             print("❌ DEBUG: Failed to sync concert data: \(error)")
         }
+    }
+    
+    private func cleanupDeletedSuite() async {
+        let suiteNameForAlert = currentSuiteInfo?.suiteName ?? "Unknown Suite"
+        let suiteIdToRemove = currentSuiteInfo?.suiteId
+        
+        print("🧹 DEBUG: Starting cleanup for deleted suite: \(suiteNameForAlert)")
+        
+        await MainActor.run {
+            // Show alert to user
+            deletedSuiteName = suiteNameForAlert
+            showSuiteDeletedAlert = true
+            
+            // Clear shared suite info
+            currentSuiteInfo = nil
+            userRole = .owner
+            isSharedSuite = false
+            cloudKitStatus = "Suite was deleted by owner"
+            
+            // Clear concerts by posting empty array
+            NotificationCenter.default.post(
+                name: .concertDataSynced,
+                object: nil,
+                userInfo: ["concerts": [] as [Concert]]
+            )
+            
+            print("🧹 DEBUG: Cleared shared suite data and concerts")
+        }
+        
+        // Remove from UserDefaults
+        userDefaults.removeObject(forKey: "SharedSuiteInfo")
+        userDefaults.removeObject(forKey: "UserRole")
+        userDefaults.removeObject(forKey: "IsSharedSuite")
+        
+        // Clear iCloud KV store
+        iCloudStore.removeObject(forKey: "SharedSuiteInfo")
+        iCloudStore.removeObject(forKey: "UserRole") 
+        iCloudStore.removeObject(forKey: "IsSharedSuite")
+        
+        // Clean up local token history for this suite
+        await MainActor.run {
+            // Remove any tokens related to this suite
+            let tokensToRemove = tokenUsageHistory.keys.filter { _ in true } // Keep all for now, could be more selective
+            for token in tokensToRemove {
+                tokenUsageHistory.removeValue(forKey: token)
+                usedTokens.remove(token)
+            }
+            
+            // Remove suite from accessed suites if we have the suite ID
+            if let suiteId = suiteIdToRemove {
+                accessedSuites.removeValue(forKey: suiteId)
+            }
+            
+            print("🧹 DEBUG: Cleaned up local token and suite access history")
+        }
+        
+        print("✅ DEBUG: Suite cleanup complete - app returned to individual suite mode")
     }
     
     // MARK: - Concert Migration for suiteId Field  
@@ -5709,7 +6229,7 @@ struct ConcertDetailView: View {
     
     // Computed property for read-only state
     private var isReadOnlyView: Bool {
-        return isBuyerView || (sharedSuiteManager.isSharedSuite && sharedSuiteManager.userRole == .viewer)
+        return isBuyerView || (sharedSuiteManager.isSharedSuite && sharedSuiteManager.userRole != .owner)
     }
     
     enum ViewMode {
@@ -5746,8 +6266,8 @@ struct ConcertDetailView: View {
                         
                         Spacer()
                         
-                        // Read-only indicator for viewer users
-                        if isReadOnlyView && sharedSuiteManager.isSharedSuite && sharedSuiteManager.userRole == .viewer {
+                        // Read-only indicator for non-owner users
+                        if isReadOnlyView && sharedSuiteManager.isSharedSuite && sharedSuiteManager.userRole != .owner {
                             HStack(spacing: 6) {
                                 Image(systemName: "eye.fill")
                                     .font(.system(size: 12, weight: .medium))
@@ -8774,6 +9294,7 @@ struct SettingsView: View {
     @State private var tempDefaultSeatCost: String = ""
     @State private var activeSheet: SheetType?
     @State private var joinSuiteId: String = ""
+    @State private var showLeaveConfirmation = false
     
     var body: some View {
         NavigationView {
@@ -9101,13 +9622,13 @@ struct SettingsView: View {
                                     
                                     if sharedSuiteManager.userRole == .owner {
                                         Button("Delete Shared Suite") {
-                                            sharedSuiteManager.leaveSharedSuite()
+                                            showLeaveConfirmation = true
                                         }
                                         .buttonStyle(.bordered)
                                         .foregroundColor(.red)
                                     } else {
                                         Button("Leave Suite") {
-                                            sharedSuiteManager.leaveSharedSuite()
+                                            showLeaveConfirmation = true
                                         }
                                         .buttonStyle(.bordered)
                                         .foregroundColor(.red)
@@ -9357,6 +9878,22 @@ struct SettingsView: View {
                     MemberManagementView(sharedSuiteManager: sharedSuiteManager)
                 default:
                     EmptyView()
+                }
+            }
+            .alert(sharedSuiteManager.userRole == .owner ? "Delete Shared Suite" : "Leave Suite", isPresented: $showLeaveConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button(sharedSuiteManager.userRole == .owner ? "Delete" : "Leave", role: .destructive) {
+                    if sharedSuiteManager.userRole == .owner {
+                        sharedSuiteManager.deleteSharedSuite()
+                    } else {
+                        sharedSuiteManager.leaveSharedSuite()
+                    }
+                }
+            } message: {
+                if sharedSuiteManager.userRole == .owner {
+                    Text("This will permanently delete the shared suite for all members. Your local concert data will be preserved. This action cannot be undone.")
+                } else {
+                    Text("You will be removed from this shared suite and your invitation code will be invalidated. You'll need to request a new invitation code from the suite owner to rejoin.")
                 }
             }
         }
