@@ -501,7 +501,155 @@ struct LoadingView: View {
     }
 }
 
-// Consistent settings field component
+// Clean Settings Components for Redesigned Settings
+struct CleanSettingsCard<Content: View>: View {
+    let title: String
+    let icon: String
+    let content: Content
+    
+    init(title: String, icon: String, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.icon = icon
+        self.content = content()
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundColor(.modernAccent)
+                    .frame(width: 24, height: 24)
+                
+                Text(title)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(.modernText)
+                
+                Spacer()
+            }
+            
+            content
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.modernSecondary)
+                .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+        )
+    }
+}
+
+struct CleanSettingsField: View {
+    let title: String
+    let value: String
+    let placeholder: String
+    let onChange: (String) -> Void
+    @State private var editableValue: String = ""
+    @FocusState private var isFocused: Bool
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.modernText)
+            
+            TextField(placeholder, text: $editableValue)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .focused($isFocused)
+                .onSubmit {
+                    onChange(editableValue)
+                    isFocused = false
+                }
+                .onChange(of: isFocused) { focused in
+                    if !focused && editableValue != value {
+                        onChange(editableValue)
+                    }
+                }
+        }
+        .onAppear {
+            editableValue = value
+        }
+        .onChange(of: value) { newValue in
+            if !isFocused {
+                editableValue = newValue
+            }
+        }
+    }
+}
+
+struct CleanPriceField: View {
+    let title: String
+    let value: Double
+    let actionButton: (() -> AnyView)?
+    let onChange: (Double) -> Void
+    @State private var editableValue: String = ""
+    @FocusState private var isFocused: Bool
+    
+    init(title: String, value: Double, actionButton: (() -> AnyView)? = nil, onChange: @escaping (Double) -> Void) {
+        self.title = title
+        self.value = value
+        self.actionButton = actionButton
+        self.onChange = onChange
+        self._editableValue = State(initialValue: String(format: "%.0f", value))
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.modernText)
+            
+            HStack {
+                HStack {
+                    Text("$")
+                        .foregroundColor(.modernTextSecondary)
+                    TextField("0", text: $editableValue)
+                        .keyboardType(.numberPad)
+                        .focused($isFocused)
+                        .onChange(of: editableValue) { newValue in
+                            let filtered = newValue.filter { "0123456789".contains($0) }
+                            if filtered != newValue {
+                                editableValue = filtered
+                            }
+                        }
+                        .onSubmit {
+                            if let newPrice = Double(editableValue), newPrice >= 0 {
+                                onChange(newPrice)
+                            }
+                            isFocused = false
+                        }
+                        .onChange(of: isFocused) { focused in
+                            if !focused {
+                                if let newPrice = Double(editableValue), newPrice >= 0 {
+                                    onChange(newPrice)
+                                } else {
+                                    editableValue = String(format: "%.0f", value)
+                                }
+                            }
+                        }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(Color(.systemGray6))
+                .cornerRadius(8)
+                
+                if let actionButton = actionButton {
+                    actionButton()
+                }
+            }
+        }
+        .onAppear {
+            editableValue = String(format: "%.0f", value)
+        }
+        .onChange(of: value) { newValue in
+            if !isFocused {
+                editableValue = String(format: "%.0f", newValue)
+            }
+        }
+    }
+}
+
+// Legacy settings field component (kept for compatibility)
 struct SettingsField: View {
     let title: String
     let subtitle: String?
@@ -5013,8 +5161,19 @@ class ConcertDataManager: ObservableObject {
             
             let localConcertCount = self.concerts.count
             let isOwner = (self.sharedSuiteManager?.userRole == .owner) ?? false
+            let isInSharedSuite = (self.sharedSuiteManager?.isInSharedSuite) ?? false
             
-            print("🔄 DEBUG: Local concerts: \(localConcertCount), Synced concerts: \(syncedConcerts.count), User role: \(isOwner ? "owner" : "member")")
+            print("🔄 DEBUG: Local concerts: \(localConcertCount), Synced concerts: \(syncedConcerts.count), User role: \(isOwner ? "owner" : "member"), In shared suite: \(isInSharedSuite)")
+            
+            // Special case: If we're receiving an empty concert list and we're no longer in a shared suite,
+            // this means the suite was deleted and we need to clear local data
+            if syncedConcerts.isEmpty && !isInSharedSuite && localConcertCount > 0 {
+                print("🧹 DEBUG: Suite deleted - clearing local concert data for guest")
+                self.objectWillChange.send()
+                self.concerts = []
+                self.saveLocalOnly()
+                return
+            }
             
             // If local is empty (like on fresh non-owning phones), accept all synced data
             if localConcertCount == 0 {
@@ -9288,20 +9447,16 @@ struct SettingsView: View {
     @ObservedObject var concertManager: ConcertDataManager
     @ObservedObject var sharedSuiteManager: SharedSuiteManager
     @Binding var selectedTab: Int
-    @State private var tempSuiteName: String = ""
-    @State private var tempVenueLocation: String = ""
-    @State private var tempFamilyTicketPrice: String = ""
-    @State private var tempDefaultSeatCost: String = ""
     @State private var activeSheet: SheetType?
-    @State private var joinSuiteId: String = ""
     @State private var showLeaveConfirmation = false
+    @State private var showDataSection = false
+    @State private var showAboutSection = false
     
     var body: some View {
         NavigationView {
             ZStack {
-                // Dynamic background that adapts to light/dark mode
                 Color(.systemBackground)
-                .ignoresSafeArea()
+                    .ignoresSafeArea()
                 
                 ScrollView {
                     VStack(spacing: 24) {
@@ -9310,507 +9465,213 @@ struct SettingsView: View {
                             Text("Settings")
                                 .font(.system(size: 34, weight: .bold, design: .rounded))
                                 .foregroundColor(.modernText)
-                            
-                            Text("Customize your suite experience")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.modernTextSecondary)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 20)
                         
-                        // Suite Customization Section
-                        VStack(alignment: .leading, spacing: 20) {
-                            SectionHeader("Suite Information")
-                            
-                            ConsistentCard(padding: 24) {
-                                VStack(spacing: 24) {
-                                // Suite Name
-                                SettingsField(
+                        // Suite Setup Section
+                        CleanSettingsCard(title: "Suite Setup", icon: "building.2") {
+                            VStack(spacing: 16) {
+                                CleanSettingsField(
                                     title: "Suite Name",
-                                    subtitle: nil,
-                                    placeholder: "Enter suite name",
-                                    text: $tempSuiteName
-                                ) {
-                                    settingsManager.suiteName = tempSuiteName
+                                    value: settingsManager.suiteName,
+                                    placeholder: "Fire Suite"
+                                ) { newValue in
+                                    settingsManager.suiteName = newValue
                                 }
                                 
-                                // Venue Location
-                                SettingsField(
-                                    title: "Venue Location",
-                                    subtitle: nil,
-                                    placeholder: "Enter venue location",
-                                    text: $tempVenueLocation
-                                ) {
-                                    settingsManager.venueLocation = tempVenueLocation
+                                CleanSettingsField(
+                                    title: "Venue Location", 
+                                    value: settingsManager.venueLocation,
+                                    placeholder: "Ford Amphitheater"
+                                ) { newValue in
+                                    settingsManager.venueLocation = newValue
                                 }
                                 
-                                // Family Ticket Price
-                                SettingsField(
-                                    title: "Family Ticket Price",
-                                    subtitle: "Default price automatically populated when 'Family' is selected as the ticket sale type",
-                                    placeholder: "50",
-                                    text: $tempFamilyTicketPrice,
-                                    keyboardType: .numberPad,
-                                    prefix: "$"
-                                ) {
-                                    if let price = Double(tempFamilyTicketPrice), price > 0 {
-                                        settingsManager.familyTicketPrice = price
-                                    }
-                                }
-                                .onChange(of: tempFamilyTicketPrice) { newValue in
-                                    // Only allow numeric input
-                                    let filtered = newValue.filter { "0123456789".contains($0) }
-                                    if filtered != newValue {
-                                        tempFamilyTicketPrice = filtered
-                                    }
+                                Divider()
+                                
+                                CleanPriceField(
+                                    title: "Default Family Price",
+                                    value: settingsManager.familyTicketPrice
+                                ) { newPrice in
+                                    settingsManager.familyTicketPrice = newPrice
                                 }
                                 
-                                // Default Seat Cost with integrated Apply button
-                                SettingsField(
+                                CleanPriceField(
                                     title: "Default Seat Cost",
-                                    subtitle: "Default price for new seats (still editable per seat)",
-                                    placeholder: "25",
-                                    text: $tempDefaultSeatCost,
-                                    keyboardType: .numberPad,
-                                    prefix: "$",
+                                    value: settingsManager.defaultSeatCost,
                                     actionButton: {
                                         AnyView(
-                                            Button(action: {
-                                                guard let newCost = Double(tempDefaultSeatCost), newCost >= 0 else { return }
-                                                
-                                                // Update all existing seats across all concerts
+                                            Button("Apply to All") {
                                                 for i in 0..<concertManager.concerts.count {
                                                     for j in 0..<concertManager.concerts[i].seats.count {
-                                                        concertManager.concerts[i].seats[j].cost = newCost
+                                                        concertManager.concerts[i].seats[j].cost = settingsManager.defaultSeatCost
                                                     }
                                                 }
-                                                
-                                                // Save concerts to persist the changes
                                                 concertManager.saveConcerts()
-                                                
-                                                // Also update the settings manager default
-                                                settingsManager.defaultSeatCost = newCost
-                                                
-                                                // Haptic feedback
                                                 HapticManager.shared.notification(type: .success)
-                                            }) {
-                                                VStack(spacing: 2) {
-                                                    Image(systemName: "arrow.triangle.2.circlepath")
-                                                        .font(.system(size: 16, weight: .semibold))
-                                                    Text("Apply")
-                                                        .font(.system(size: 11, weight: .semibold))
-                                                    Text("to All")
-                                                        .font(.system(size: 11, weight: .semibold))
-                                                }
-                                                .foregroundColor(.white)
-                                                .frame(width: 60, height: 50)
-                                                .background(
-                                                    RoundedRectangle(cornerRadius: 10)
-                                                        .fill(tempDefaultSeatCost.isEmpty || Double(tempDefaultSeatCost) == nil ? Color.gray.opacity(0.3) : Color.modernAccent)
-                                                )
                                             }
-                                            .disabled(tempDefaultSeatCost.isEmpty || Double(tempDefaultSeatCost) == nil)
+                                            .buttonStyle(.bordered)
                                         )
                                     }
-                                ) {
-                                    if let cost = Double(tempDefaultSeatCost), cost >= 0 {
-                                        settingsManager.defaultSeatCost = cost
-                                    }
-                                }
-                                .onChange(of: tempDefaultSeatCost) { newValue in
-                                    // Only allow numeric input
-                                    let filtered = newValue.filter { "0123456789".contains($0) }
-                                    if filtered != newValue {
-                                        tempDefaultSeatCost = filtered
-                                    }
-                                }
-                                
+                                ) { newPrice in
+                                    settingsManager.defaultSeatCost = newPrice
                                 }
                             }
                         }
                         
-                        // Save Button
-                        Button(action: {
-                            settingsManager.suiteName = tempSuiteName
-                            settingsManager.venueLocation = tempVenueLocation
-                            if let price = Double(tempFamilyTicketPrice), price > 0 {
-                                settingsManager.familyTicketPrice = price
-                            }
-                            if let cost = Double(tempDefaultSeatCost), cost >= 0 {
-                                settingsManager.defaultSeatCost = cost
-                            }
-                            HapticManager.shared.notification(type: .success)
-                            // Navigate back to dashboard
-                            selectedTab = 0
-                        }) {
-                            HStack {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.system(size: 18))
-                                Text("Save All Changes")
-                                    .font(.system(size: 16, weight: .semibold))
-                            }
-                        }
-                        .buttonStyle(PrimaryButtonStyle())
-                        .padding(.horizontal)
-                        
-                        // Multi-Tenant Suite Section
-                        VStack(alignment: .leading, spacing: 20) {
-                            SectionHeader("Multi-Tenant Suite Settings")
-                            
-                            ConsistentCard(padding: 24) {
-                                VStack(alignment: .leading, spacing: 16) {
-                                    Toggle(isOn: $settingsManager.enableMultiTenantSuites) {
-                                        VStack(alignment: .leading, spacing: 4) {
-                                            Text("Enable Multi-Tenant Suite Sharing")
-                                                .font(.system(size: 16, weight: .semibold))
-                                                .foregroundColor(.modernText)
-                                            Text("Allow multiple people to share and manage this suite together")
-                                                .font(.system(size: 14))
-                                                .foregroundColor(.modernTextSecondary)
-                                        }
-                                    }
-                                    .toggleStyle(SwitchToggleStyle(tint: .modernAccent))
-                                    
-                                    if settingsManager.enableMultiTenantSuites {
-                                        VStack(alignment: .leading, spacing: 12) {
-                                            Divider()
-                                            
-                                            Text("Update Required")
-                                                .font(.system(size: 14, weight: .semibold))
-                                                .foregroundColor(.orange)
-                                            
-                                            Text("Your existing concerts need to be updated to support multi-tenant functionality. This will add a unique suite identifier to all your concerts.")
-                                                .font(.system(size: 13))
-                                                .foregroundColor(.modernTextSecondary)
-                                                .fixedSize(horizontal: false, vertical: true)
-                                            
-                                            Button(action: {
-                                                Task {
-                                                    print("Migration requested")
-                                                    HapticManager.shared.notification(type: .success)
-                                                }
-                                            }) {
-                                                HStack {
-                                                    Image(systemName: "arrow.clockwise")
-                                                        .font(.system(size: 14, weight: .medium))
-                                                    Text("Update Records")
-                                                        .font(.system(size: 14, weight: .semibold))
-                                                }
-                                                .padding(.vertical, 8)
-                                                .padding(.horizontal, 16)
-                                                .background(Color.modernAccent.opacity(0.1))
-                                                .foregroundColor(.modernAccent)
-                                                .cornerRadius(8)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // Suite Sharing Section (only show if multi-tenant is enabled)
-                        if settingsManager.enableMultiTenantSuites {
-                            VStack(alignment: .leading, spacing: 20) {
-                            HStack {
-                                Text("Suite Sharing")
-                                    .font(.system(size: 20, weight: .semibold))
-                                    .foregroundColor(.modernText)
-                                
-                                Spacer()
-                                
+                        // Collaboration Section - Always show so users can enable it
+                        CleanSettingsCard(title: "Collaboration", icon: "person.3") {
+                            VStack(alignment: .leading, spacing: 16) {
                                 if sharedSuiteManager.isInSharedSuite {
-                                    HStack(spacing: 6) {
-                                        Circle()
-                                            .fill(Color.green)
-                                            .frame(width: 8, height: 8)
-                                        Text("Active")
-                                            .font(.system(size: 12, weight: .semibold))
-                                            .foregroundColor(.green)
-                                    }
-                                } else {
-                                    Text("Not Active")
-                                        .font(.system(size: 12, weight: .medium))
-                                        .foregroundColor(.modernTextSecondary)
-                                }
-                            }
-                            
-                            if sharedSuiteManager.isInSharedSuite {
-                                // Active suite display
-                                VStack(alignment: .leading, spacing: 12) {
-                                    HStack {
-                                        Image(systemName: "person.3.fill")
-                                            .foregroundColor(.modernAccent)
-                                        Text("Currently sharing '\(sharedSuiteManager.currentSuiteInfo?.suiteName ?? "Unknown Suite")'")
-                                            .font(.system(size: 16, weight: .medium))
-                                            .foregroundColor(.modernText)
-                                    }
-                                    
-                                    HStack {
-                                        Text("Your role:")
-                                            .font(.system(size: 14))
-                                            .foregroundColor(.modernTextSecondary)
+                                        // Active sharing state
+                                        HStack {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .foregroundColor(.green)
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text("Sharing '\(sharedSuiteManager.currentSuiteInfo?.suiteName ?? "Suite")'")
+                                                    .font(.system(size: 16, weight: .medium))
+                                                Text("Role: \(sharedSuiteManager.userRole.displayName)")
+                                                    .font(.system(size: 14))
+                                                    .foregroundColor(.modernTextSecondary)
+                                            }
+                                            Spacer()
+                                        }
                                         
-                                        Text(sharedSuiteManager.userRole.displayName)
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .foregroundColor(.modernAccent)
-                                    }
-                                    
-                                    HStack {
-                                        Text("Members:")
-                                            .font(.system(size: 14))
-                                            .foregroundColor(.modernTextSecondary)
-                                        
-                                        Text("\(1 + (sharedSuiteManager.currentSuiteInfo?.members.count ?? 0))")
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .foregroundColor(.modernAccent)
-                                    }
-                                    
-                                    HStack(spacing: 12) {
-                                        if sharedSuiteManager.userRole.canManageUsers {
-                                            Button("Invite Member") {
-                                                print("🔥 DEBUG: Invite Member button tapped")
-                                                print("🔥 DEBUG: isCloudKitAvailable: \(sharedSuiteManager.isCloudKitAvailable)")
-                                                print("🔥 DEBUG: userRole: \(sharedSuiteManager.userRole)")
-                                                print("🔥 DEBUG: canManageUsers: \(sharedSuiteManager.userRole.canManageUsers)")
-                                                print("🔥 DEBUG: currentSuiteInfo exists: \(sharedSuiteManager.currentSuiteInfo != nil)")
-                                                
-                                                Task {
-                                                    do {
-                                                        print("🔥 DEBUG: About to generate invitation link...")
-                                                        let code = try await sharedSuiteManager.generateInvitationLink(role: .viewer)
-                                                        print("🔥 DEBUG: Generated code: \(code)")
-                                                        let activityVC = UIActivityViewController(activityItems: [code], applicationActivities: nil)
-                                                        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                                                           let window = windowScene.windows.first {
-                                                            print("🔥 DEBUG: Presenting activity view controller")
-                                                            window.rootViewController?.present(activityVC, animated: true)
-                                                        } else {
-                                                            print("❌ DEBUG: Could not find window to present activity VC")
+                                        HStack(spacing: 12) {
+                                            if sharedSuiteManager.userRole.canManageUsers {
+                                                Button("Invite") {
+                                                    Task {
+                                                        do {
+                                                            let code = try await sharedSuiteManager.generateInvitationLink(role: .viewer)
+                                                            let activityVC = UIActivityViewController(activityItems: [code], applicationActivities: nil)
+                                                            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                                                               let window = windowScene.windows.first {
+                                                                window.rootViewController?.present(activityVC, animated: true)
+                                                            }
+                                                        } catch {
+                                                            print("Error generating invitation: \(error)")
                                                         }
-                                                    } catch {
-                                                        print("❌ Error generating invitation: \(error)")
                                                     }
                                                 }
+                                                .buttonStyle(.bordered)
+                                                
+                                                Button("Manage") {
+                                                    activeSheet = .memberManagement
+                                                }
+                                                .buttonStyle(.bordered)
                                             }
-                                            .buttonStyle(.bordered)
                                             
-                                            Button("Manage Members") {
-                                                activeSheet = .memberManagement
+                                            Button("Sync") {
+                                                Task {
+                                                    await sharedSuiteManager.syncWithCloudKit()
+                                                    if sharedSuiteManager.userRole == .owner {
+                                                        let concertIds = concertManager.concerts.map { $0.id }
+                                                        await sharedSuiteManager.populateSuiteRecordWithLocalConcertIds(concertIds)
+                                                        await sharedSuiteManager.migrateConcertsToCurrentSuite(concertIds)
+                                                    }
+                                                    await sharedSuiteManager.syncConcertData()
+                                                }
                                             }
-                                            .buttonStyle(.bordered)
+                                            .buttonStyle(.borderedProminent)
+                                            .disabled(sharedSuiteManager.isSyncing)
                                         }
                                         
-                                        Button("Sync Now") {
-                                            Task {
-                                                await sharedSuiteManager.syncWithCloudKit()
-                                                
-                                                // First, populate suite record with local concert IDs if we're the owner
-                                                if sharedSuiteManager.userRole == .owner {
-                                                    let concertIds = concertManager.concerts.map { $0.id }
-                                                    await sharedSuiteManager.populateSuiteRecordWithLocalConcertIds(concertIds)
-                                                    
-                                                    // Also migrate existing concerts to current suite
-                                                    await sharedSuiteManager.migrateConcertsToCurrentSuite(concertIds)
-                                                }
-                                                
-                                                await sharedSuiteManager.syncConcertData()
-                                            }
-                                        }
-                                        .buttonStyle(.borderedProminent)
-                                        .disabled(sharedSuiteManager.isSyncing)
-                                    }
-                                    
-                                    if sharedSuiteManager.userRole == .owner {
-                                        Button("Delete Shared Suite") {
+                                        Button(sharedSuiteManager.userRole == .owner ? "Delete Suite" : "Leave Suite") {
                                             showLeaveConfirmation = true
                                         }
                                         .buttonStyle(.bordered)
                                         .foregroundColor(.red)
+                                        
                                     } else {
-                                        Button("Leave Suite") {
-                                            showLeaveConfirmation = true
-                                        }
-                                        .buttonStyle(.bordered)
-                                        .foregroundColor(.red)
-                                    }
-                                }
-                            } else {
-                                // Not in a shared suite - show create/join options
-                                VStack(alignment: .leading, spacing: 12) {
-                                    Text("Multi-investor collaboration")
-                                        .font(.system(size: 16, weight: .medium))
-                                        .foregroundColor(.modernText)
-                                    
-                                    Text("Share your fire suite with co-investors, business partners, or investment group members. Coordinate ticket sales, track revenue distribution, and manage seat allocations across your investor network in real-time.")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.modernTextSecondary)
-                                        .multilineTextAlignment(.leading)
-                                    
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        HStack {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .foregroundColor(.green)
-                                            Text("Real-time revenue tracking across all devices")
-                                                .font(.system(size: 14))
-                                                .foregroundColor(.modernTextSecondary)
-                                        }
-                                        
-                                        HStack {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .foregroundColor(.green)
-                                            Text("Investor permissions (Owner, Editor, Viewer)")
-                                                .font(.system(size: 14))
-                                                .foregroundColor(.modernTextSecondary)
-                                        }
-                                        
-                                        HStack {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .foregroundColor(.green)
-                                            Text("Secure investment data with iCloud protection")
-                                                .font(.system(size: 14))
-                                                .foregroundColor(.modernTextSecondary)
-                                        }
-                                    }
-                                    
-                                    HStack(spacing: 12) {
-                                        Button("Create Shared Suite") {
-                                            Task {
-                                                do {
-                                                    _ = try await sharedSuiteManager.createSharedSuiteInCloud(
-                                                        suiteName: settingsManager.suiteName,
-                                                        venueLocation: settingsManager.venueLocation
-                                                    )
-                                                } catch {
-                                                    // Handle error
-                                                }
+                                        // Setup sharing
+                                        Toggle(isOn: $settingsManager.enableMultiTenantSuites) {
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text("Enable Suite Sharing")
+                                                    .font(.system(size: 16, weight: .medium))
+                                                Text("Collaborate with co-investors")
+                                                    .font(.system(size: 14))
+                                                    .foregroundColor(.modernTextSecondary)
                                             }
                                         }
-                                        .buttonStyle(.borderedProminent)
-                                        .disabled(!sharedSuiteManager.isCloudKitAvailable || sharedSuiteManager.isSyncing)
+                                        .toggleStyle(SwitchToggleStyle(tint: .modernAccent))
                                         
-                                        Button("Join Suite") {
-                                            activeSheet = .joinSuite
+                                        if settingsManager.enableMultiTenantSuites {
+                                            HStack(spacing: 12) {
+                                                Button("Create Suite") {
+                                                    Task {
+                                                        do {
+                                                            _ = try await sharedSuiteManager.createSharedSuiteInCloud(
+                                                                suiteName: settingsManager.suiteName,
+                                                                venueLocation: settingsManager.venueLocation
+                                                            )
+                                                        } catch {
+                                                            print("Error creating suite: \(error)")
+                                                        }
+                                                    }
+                                                }
+                                                .buttonStyle(.borderedProminent)
+                                                .disabled(!sharedSuiteManager.isCloudKitAvailable)
+                                                
+                                                Button("Join Suite") {
+                                                    activeSheet = .joinSuite
+                                                }
+                                                .buttonStyle(.bordered)
+                                                .disabled(!sharedSuiteManager.isCloudKitAvailable)
+                                            }
+                                            
+                                            if !sharedSuiteManager.isCloudKitAvailable {
+                                                Text("iCloud required for sharing")
+                                                    .font(.system(size: 12))
+                                                    .foregroundColor(.orange)
+                                            }
                                         }
-                                        .buttonStyle(.bordered)
-                                        .disabled(!sharedSuiteManager.isCloudKitAvailable || sharedSuiteManager.isSyncing)
                                     }
-                                    
-                                    if !sharedSuiteManager.isCloudKitAvailable {
-                                        HStack {
-                                            Image(systemName: "exclamationmark.triangle.fill")
-                                                .foregroundColor(.orange)
-                                            Text("iCloud account required for sharing")
-                                                .font(.system(size: 12))
-                                                .foregroundColor(.orange)
-                                        }
-                                    }
-                                    
-                                    Text("Status: \(sharedSuiteManager.cloudKitStatus)")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(.modernTextSecondary)
                                 }
                             }
                         }
-                        .padding(20)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(Color.modernSecondary)
-                        )
                         
-                        // Data Storage Section
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("Data Storage")
-                                .font(.system(size: 20, weight: .semibold))
-                                .foregroundColor(.modernText)
-                            
-                            VStack(alignment: .leading, spacing: 12) {
-                                VStack(alignment: .leading, spacing: 8) {
+                        // Data Management Section
+                        CleanSettingsCard(title: "Data Management", icon: "externaldrive") {
+                            VStack(spacing: 12) {
+                                Button(action: {
+                                    showDataSection.toggle()
+                                }) {
                                     HStack {
-                                        Image(systemName: "iphone")
-                                            .foregroundColor(.modernAccent)
-                                        Text("Local Storage")
+                                        Text("Storage & Privacy Info")
                                             .font(.system(size: 16, weight: .medium))
                                             .foregroundColor(.modernText)
+                                        Spacer()
+                                        Image(systemName: showDataSection ? "chevron.down" : "chevron.right")
+                                            .foregroundColor(.modernTextSecondary)
                                     }
-                                    Text("Your concert data is stored locally on this device using secure UserDefaults with automatic backups")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.modernTextSecondary)
-                                        .multilineTextAlignment(.leading)
+                                }
+                                
+                                if showDataSection {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("• Data stored locally with iCloud sync")
+                                        Text("• No external servers or tracking")
+                                        Text("• Full privacy within Apple ecosystem")
+                                    }
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.modernTextSecondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
                                 }
                                 
                                 Divider()
                                 
-                                VStack(alignment: .leading, spacing: 8) {
-                                    HStack {
-                                        Image(systemName: "icloud")
-                                            .foregroundColor(.blue)
-                                        Text("iCloud Sync")
-                                            .font(.system(size: 16, weight: .medium))
-                                            .foregroundColor(.modernText)
-                                    }
-                                    Text("Data automatically syncs across all your Apple devices using your iCloud account. No data leaves Apple's ecosystem.")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.modernTextSecondary)
-                                        .multilineTextAlignment(.leading)
-                                }
-                                
-                                Divider()
-                                
-                                VStack(alignment: .leading, spacing: 8) {
-                                    HStack {
-                                        Image(systemName: "lock.shield")
-                                            .foregroundColor(.green)
-                                        Text("Privacy & Security")
-                                            .font(.system(size: 16, weight: .medium))
-                                            .foregroundColor(.modernText)
-                                    }
-                                    Text("All data remains private to you. We don't collect, access, or share any of your concert or suite information.")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.modernTextSecondary)
-                                        .multilineTextAlignment(.leading)
-                                }
+                                BackupRestoreSection(concertManager: concertManager, settingsManager: settingsManager)
                             }
-                            .padding(16)
-                            .background(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(Color.modernSecondary)
-                            )
                         }
-                        }
-                        
-                        // Backup & Restore Section
-                        BackupRestoreSection(concertManager: concertManager, settingsManager: settingsManager)
                         
                         // About Section
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("About")
-                                .font(.system(size: 20, weight: .semibold))
-                                .foregroundColor(.modernText)
-                            
-                            VStack(alignment: .leading, spacing: 12) {
+                        CleanSettingsCard(title: "About", icon: "info.circle") {
+                            VStack(spacing: 12) {
                                 HStack {
-                                    Text("Version")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.modernTextSecondary)
+                                    Text("Version 1.0.0")
+                                        .font(.system(size: 16, weight: .medium))
                                     Spacer()
-                                    Text("1.0.0")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.modernText)
                                 }
-                                
-                                Divider()
-                                
-                                HStack {
-                                    Text("Developer")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.modernTextSecondary)
-                                    Spacer()
-                                    Text("Mike Myers")
-                                        .font(.system(size: 14, weight: .medium))
-                                        .foregroundColor(.modernText)
-                                }
-                                
-                                Divider()
                                 
                                 Button(action: {
                                     if let url = URL(string: "https://suitekeepsupport.netlify.app") {
@@ -9819,41 +9680,32 @@ struct SettingsView: View {
                                 }) {
                                     HStack {
                                         Text("Support & Manual")
-                                            .font(.system(size: 14))
+                                            .foregroundColor(.modernAccent)
+                                        Spacer()
+                                        Image(systemName: "arrow.up.right")
+                                            .foregroundColor(.modernAccent)
+                                    }
+                                }
+                                
+                                Button(action: {
+                                    showAboutSection.toggle()
+                                }) {
+                                    HStack {
+                                        Text("Disclaimer")
                                             .foregroundColor(.modernTextSecondary)
                                         Spacer()
-                                        HStack(spacing: 4) {
-                                            Text("Help Center")
-                                                .font(.system(size: 14, weight: .medium))
-                                                .foregroundColor(.modernAccent)
-                                            Image(systemName: "arrow.up.right")
-                                                .font(.system(size: 12, weight: .medium))
-                                                .foregroundColor(.modernAccent)
-                                        }
+                                        Image(systemName: showAboutSection ? "chevron.down" : "chevron.right")
+                                            .foregroundColor(.modernTextSecondary)
                                     }
                                 }
                                 
-                                Divider()
-                                
-                                VStack(alignment: .leading, spacing: 8) {
-                                    HStack {
-                                        Image(systemName: "exclamationmark.triangle")
-                                            .foregroundColor(.orange)
-                                        Text("Disclaimer")
-                                            .font(.system(size: 14, weight: .medium))
-                                            .foregroundColor(.modernText)
-                                    }
-                                    Text("This app is provided \"as is\" without any warranties. The developer makes no guarantees about the accuracy, reliability, or functionality of this software. Use at your own risk.")
+                                if showAboutSection {
+                                    Text("This app is provided \"as is\" without warranties. Use at your own risk.")
                                         .font(.system(size: 12))
                                         .foregroundColor(.modernTextSecondary)
-                                        .multilineTextAlignment(.leading)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                 }
                             }
-                            .padding(20)
-                            .background(
-                                RoundedRectangle(cornerRadius: 20)
-                                    .fill(Color.modernSecondary)
-                            )
                         }
                         
                         Spacer(minLength: 100)
@@ -9862,12 +9714,6 @@ struct SettingsView: View {
                 }
             }
             .navigationBarHidden(true)
-            .onAppear {
-                tempSuiteName = settingsManager.suiteName
-                tempVenueLocation = settingsManager.venueLocation
-                tempFamilyTicketPrice = String(format: "%.0f", settingsManager.familyTicketPrice)
-                tempDefaultSeatCost = String(format: "%.0f", settingsManager.defaultSeatCost)
-            }
             .sheet(item: $activeSheet) { sheetType in
                 switch sheetType {
                 case .shareSheet:
@@ -9890,15 +9736,12 @@ struct SettingsView: View {
                     }
                 }
             } message: {
-                if sharedSuiteManager.userRole == .owner {
-                    Text("This will permanently delete the shared suite for all members. Your local concert data will be preserved. This action cannot be undone.")
-                } else {
-                    Text("You will be removed from this shared suite and your invitation code will be invalidated. You'll need to request a new invitation code from the suite owner to rejoin.")
-                }
+                Text(sharedSuiteManager.userRole == .owner ? 
+                    "This will permanently delete the shared suite for all members." : 
+                    "You will be removed from this shared suite.")
             }
         }
     }
-}
 
 // MARK: - Sharing Views
 
