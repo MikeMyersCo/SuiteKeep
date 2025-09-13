@@ -386,6 +386,778 @@ class HapticManager {
     }
 }
 
+// MARK: - Share Manager
+@MainActor
+class ShareManager: ObservableObject {
+    static let shared = ShareManager()
+    
+    enum ShareFormat {
+        case square      // 1:1 for Instagram feed
+        case story       // 9:16 for Instagram/Snapchat stories
+        case wide        // 16:9 for Twitter/Facebook
+        case print       // High-res with contact details
+        
+        var size: CGSize {
+            switch self {
+            case .square: return CGSize(width: 1080, height: 1080)
+            case .story: return CGSize(width: 1080, height: 1920)
+            case .wide: return CGSize(width: 1920, height: 1080)
+            case .print: return CGSize(width: 2400, height: 1600)
+            }
+        }
+        
+        var displayName: String {
+            switch self {
+            case .square: return "Instagram Feed"
+            case .story: return "Instagram Story"
+            case .wide: return "Social Media"
+            case .print: return "High Quality"
+            }
+        }
+        
+        var icon: String {
+            switch self {
+            case .square: return "square"
+            case .story: return "rectangle.portrait"
+            case .wide: return "rectangle"
+            case .print: return "doc"
+            }
+        }
+        
+        var description: String {
+            switch self {
+            case .square: return "Perfect for Instagram posts"
+            case .story: return "Ideal for stories and reels"
+            case .wide: return "Great for Twitter and Facebook"
+            case .print: return "High resolution for printing"
+            }
+        }
+    }
+    
+    private init() {}
+    
+    @available(iOS 16.0, *)
+    func captureView<Content: View>(_ view: Content, format: ShareFormat = .square) async -> UIImage? {
+        let renderer = ImageRenderer(content: view)
+        
+        // Configure based on format
+        renderer.proposedSize = .init(format.size)
+        renderer.scale = UIScreen.main.scale * 2 // High quality
+        
+        return renderer.uiImage
+    }
+    
+    func shareImage(_ image: UIImage, from sourceView: UIView) {
+        let activityViewController = UIActivityViewController(
+            activityItems: [image],
+            applicationActivities: nil
+        )
+        
+        // Exclude some activities that don't make sense for images
+        activityViewController.excludedActivityTypes = [
+            .addToReadingList,
+            .assignToContact,
+            .openInIBooks,
+            .postToVimeo
+        ]
+        
+        // Present from the root view controller
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let window = windowScene.windows.first,
+           let rootViewController = window.rootViewController {
+            
+            // Handle iPad presentation
+            if let popover = activityViewController.popoverPresentationController {
+                popover.sourceView = sourceView
+                popover.sourceRect = sourceView.bounds
+            }
+            
+            rootViewController.present(activityViewController, animated: true)
+        }
+    }
+}
+
+// MARK: - Shareable Buyer View
+@available(iOS 16.0, *)
+struct ShareableBuyerView: View {
+    let concert: Concert
+    let suiteName: String
+    let venueLocation: String
+    @ObservedObject var shareManager = ShareManager.shared
+    @State private var selectedFormat: ShareManager.ShareFormat = .square
+    @State private var showingShareSheet = false
+    @State private var capturedImage: UIImage?
+    
+    var availableSeats: [Seat] {
+        concert.seats.filter { $0.status == .available }
+    }
+    
+    var soldSeats: [Seat] {
+        concert.seats.filter { $0.status == .sold }
+    }
+    
+    var urgencyMessage: String {
+        let availableCount = availableSeats.count
+        switch availableCount {
+        case 0: return "SOLD OUT"
+        case 1: return "LAST SEAT AVAILABLE!"
+        case 2: return "ONLY 2 SEATS LEFT!"
+        case 3...4: return "ONLY \(availableCount) SEATS REMAINING"
+        default: return "\(availableCount) PREMIUM SEATS AVAILABLE"
+        }
+    }
+    
+    var urgencyColor: Color {
+        let availableCount = availableSeats.count
+        switch availableCount {
+        case 0: return .red
+        case 1...2: return .orange
+        case 3...4: return .yellow
+        default: return .green
+        }
+    }
+    
+    var body: some View {
+        ZStack {
+            // Premium gradient background
+            LinearGradient(
+                colors: [
+                    Color.black,
+                    Color.black.opacity(0.9),
+                    Color.orange.opacity(0.1),
+                    Color.black
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
+            
+            VStack(spacing: 24) {
+                // Header with venue branding
+                VStack(spacing: 8) {
+                    Text(suiteName.uppercased())
+                        .font(.system(size: 32, weight: .black, design: .rounded))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.orange, .yellow, .orange],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .shadow(color: .orange, radius: 2, x: 0, y: 0)
+                        .multilineTextAlignment(.center)
+                    
+                    Text(venueLocation)
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.white.opacity(0.8))
+                        .textCase(.uppercase)
+                        .tracking(2)
+                        .multilineTextAlignment(.center)
+                }
+                
+                // Concert details
+                VStack(spacing: 12) {
+                    Text(concert.artist)
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                    
+                    Text(concert.date.formatted(date: .abbreviated, time: .shortened))
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.9))
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule()
+                                .fill(.ultraThinMaterial)
+                                .overlay(
+                                    Capsule()
+                                        .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                                )
+                        )
+                }
+                
+                // Urgency banner
+                Text(urgencyMessage)
+                    .font(.system(size: 16, weight: .heavy))
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule()
+                            .fill(urgencyColor)
+                            .shadow(color: urgencyColor, radius: 4, x: 0, y: 0)
+                    )
+                    .scaleEffect(availableSeats.count <= 2 ? 1.05 : 1.0)
+                    .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: availableSeats.count <= 2)
+                
+                // Enhanced seat visualization
+                BuyerSuiteVisualization(concert: concert)
+                    .frame(height: 320)
+                
+                Spacer()
+                
+                // Branding footer
+                HStack {
+                    Image(systemName: "flame.fill")
+                        .foregroundColor(.orange)
+                    Text("Powered by SuiteKeep")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.white.opacity(0.6))
+                }
+            }
+            .padding(24)
+            
+            // Floating share button
+            VStack {
+                Spacer()
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        Task {
+                            await captureAndShare()
+                        }
+                    }) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.title2)
+                            .foregroundColor(.white)
+                            .frame(width: 56, height: 56)
+                            .background(
+                                Circle()
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [.orange, .red],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                                    .shadow(color: .orange.opacity(0.5), radius: 8, x: 0, y: 4)
+                            )
+                    }
+                    .scaleEffect(1.0)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showingShareSheet)
+                }
+                .padding(.trailing, 24)
+                .padding(.bottom, 24)
+            }
+        }
+        .sheet(isPresented: $showingShareSheet) {
+            if let image = capturedImage {
+                ShareFormatSelector(
+                    image: image,
+                    selectedFormat: $selectedFormat,
+                    onShare: { format in
+                        print("DEBUG: onShare called with format: \(format)")
+                        
+                        // First dismiss the format selector sheet
+                        showingShareSheet = false
+                        
+                        // Wait longer to ensure complete dismissal, then present share sheet
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            print("DEBUG: Presenting share sheet after delay")
+                            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                               let window = windowScene.windows.first {
+                                
+                                // Find the topmost presented view controller
+                                var topController = window.rootViewController
+                                while let presentedController = topController?.presentedViewController {
+                                    topController = presentedController
+                                }
+                                
+                                if let topController = topController {
+                                    let activityViewController = UIActivityViewController(
+                                        activityItems: [image],
+                                        applicationActivities: nil
+                                    )
+                                    
+                                    // Configure for iPad
+                                    if let popover = activityViewController.popoverPresentationController {
+                                        popover.sourceView = topController.view
+                                        popover.sourceRect = CGRect(x: topController.view.bounds.midX, y: topController.view.bounds.midY, width: 0, height: 0)
+                                        popover.permittedArrowDirections = []
+                                    }
+                                    
+                                    topController.present(activityViewController, animated: true) {
+                                        print("DEBUG: Share sheet presented successfully")
+                                    }
+                                } else {
+                                    print("DEBUG: Could not find top controller")
+                                }
+                            }
+                        }
+                    }
+                )
+                .onAppear {
+                    print("DEBUG: Sheet is presenting with image")
+                }
+            } else {
+                Text("No image captured")
+                    .onAppear {
+                        print("DEBUG: Sheet presenting but no image")
+                    }
+            }
+        }
+    }
+    
+    @MainActor
+    private func captureAndShare() async {
+        print("DEBUG: captureAndShare called")
+        // Capture the current view content (without the share button overlay)
+        let contentView = VStack(spacing: 16) {
+            // Header with venue branding
+            VStack(spacing: 8) {
+                Text(suiteName.uppercased())
+                    .font(.system(size: 32, weight: .black, design: .rounded))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.orange, .yellow, .orange],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .shadow(color: .orange, radius: 2, x: 0, y: 0)
+                    .multilineTextAlignment(.center)
+                
+                Text(venueLocation)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.white.opacity(0.8))
+                    .textCase(.uppercase)
+                    .tracking(2)
+                    .multilineTextAlignment(.center)
+            }
+            
+            // Concert details
+            VStack(spacing: 12) {
+                Text(concert.artist)
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                
+                Text(concert.date.formatted(date: .abbreviated, time: .shortened))
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.9))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule()
+                            .fill(.ultraThinMaterial)
+                            .overlay(
+                                Capsule()
+                                    .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                            )
+                    )
+            }
+            
+            // Urgency banner
+            Text(urgencyMessage)
+                .font(.system(size: 16, weight: .heavy))
+                .foregroundColor(.black)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(
+                    Capsule()
+                        .fill(urgencyColor)
+                        .shadow(color: urgencyColor, radius: 4, x: 0, y: 0)
+                )
+                .scaleEffect(availableSeats.count <= 2 ? 1.05 : 1.0)
+            
+            // Enhanced seat visualization
+            BuyerSuiteVisualization(concert: concert)
+                .frame(height: 280)
+            
+            // Branding footer
+            HStack {
+                Image(systemName: "flame.fill")
+                    .foregroundColor(.orange)
+                Text("Powered by SuiteKeep")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.white.opacity(0.6))
+            }
+            .padding(.top, 20)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .frame(maxWidth: .infinity)
+        .background(
+            LinearGradient(
+                colors: [
+                    Color.black,
+                    Color.black.opacity(0.9),
+                    Color.orange.opacity(0.1),
+                    Color.black
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        
+        if let image = await shareManager.captureView(contentView, format: selectedFormat) {
+            print("DEBUG: Image captured successfully")
+            capturedImage = image
+            
+            // Present share sheet directly
+            DispatchQueue.main.async {
+                self.showingShareSheet = true
+                print("DEBUG: Setting showingShareSheet to true")
+            }
+        } else {
+            print("DEBUG: Failed to capture image")
+        }
+    }
+}
+
+// MARK: - Buyer Suite Visualization
+struct BuyerSuiteVisualization: View {
+    let concert: Concert
+    
+    var body: some View {
+        ZStack {
+            // Firepit (central focus)
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            .orange.opacity(0.8),
+                            .red.opacity(0.6),
+                            .black.opacity(0.3)
+                        ],
+                        center: .center,
+                        startRadius: 10,
+                        endRadius: 50
+                    )
+                )
+                .frame(width: 80, height: 80)
+                .overlay(
+                    Circle()
+                        .stroke(Color.orange.opacity(0.5), lineWidth: 2)
+                )
+                .shadow(color: .orange.opacity(0.3), radius: 8, x: 0, y: 0)
+            
+            // Seats arranged around firepit
+            ForEach(Array(concert.seats.enumerated()), id: \.offset) { index, seat in
+                BuyerSeatView(seat: seat, seatNumber: index + 1)
+                    .offset(seatOffset(for: index))
+            }
+        }
+        .frame(width: 280, height: 280)
+    }
+    
+    private func seatOffset(for index: Int) -> CGSize {
+        let positions: [CGSize] = [
+            CGSize(width: 100, height: -40),   // Seat 1 (top right)
+            CGSize(width: 100, height: 40),    // Seat 2 (bottom right)
+            CGSize(width: 100, height: 100),   // Seat 3 (bottom right - aligned with seat 2)
+            CGSize(width: 33, height: 100),    // Seat 4 (bottom center-right)
+            CGSize(width: -33, height: 100),   // Seat 5 (bottom center-left)
+            CGSize(width: -100, height: 100),  // Seat 6 (bottom left - aligned with seat 7)
+            CGSize(width: -100, height: 40),   // Seat 7 (bottom left side)
+            CGSize(width: -100, height: -40)   // Seat 8 (top left side)
+        ]
+        return positions[index]
+    }
+}
+
+// MARK: - Buyer Seat View
+struct BuyerSeatView: View {
+    let seat: Seat
+    let seatNumber: Int
+    
+    var seatColor: Color {
+        switch seat.status {
+        case .available: return .green
+        case .sold: return .red
+        case .reserved: return .red // Show as unavailable to buyers
+        }
+    }
+    
+    var body: some View {
+        VStack(spacing: 6) {
+            ZStack {
+                // Seat back
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                seatColor.opacity(0.3),
+                                seatColor.opacity(0.6)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .frame(width: 44, height: 32)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(seatColor, lineWidth: 2)
+                    )
+                
+                // Seat cushion
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                seatColor.opacity(0.4),
+                                seatColor.opacity(0.7)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .frame(width: 38, height: 24)
+                    .offset(y: 6)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(seatColor, lineWidth: 1.5)
+                            .offset(y: 6)
+                    )
+                
+                // Status indicator
+                ZStack {
+                    Circle()
+                        .fill(.black.opacity(0.7))
+                        .frame(width: 20, height: 20)
+                    
+                    Image(systemName: seat.status == .available ? "checkmark" : "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.white)
+                }
+                .offset(y: -2)
+            }
+            .shadow(color: seatColor.opacity(0.4), radius: 4, x: 0, y: 2)
+            
+            Text("\(seatNumber)")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(.white)
+                .shadow(color: .black.opacity(0.5), radius: 1, x: 0, y: 1)
+        }
+    }
+}
+
+// MARK: - Share Format Selector
+struct ShareFormatSelector: View {
+    let image: UIImage
+    @Binding var selectedFormat: ShareManager.ShareFormat
+    let onShare: (ShareManager.ShareFormat) -> Void
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 24) {
+                Text("Choose Share Format")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                
+                VStack(spacing: 16) {
+                    ForEach([
+                        ShareManager.ShareFormat.square,
+                        .story,
+                        .wide,
+                        .print
+                    ], id: \.hashValue) { format in
+                        FormatButton(
+                            format: format,
+                            isSelected: selectedFormat == format,
+                            onTap: { selectedFormat = format }
+                        )
+                    }
+                }
+                
+                Button("Share") {
+                    onShare(selectedFormat)
+                }
+                .font(.headline)
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.orange)
+                .cornerRadius(12)
+            }
+            .padding()
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+}
+
+// MARK: - Format Button
+struct FormatButton: View {
+    let format: ShareManager.ShareFormat
+    let isSelected: Bool
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 12) {
+                Text(format.displayName)
+                    .font(.subheadline)
+                    .foregroundColor(isSelected ? .orange : .primary)
+                
+                Spacer()
+                
+                if isSelected {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.orange)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(isSelected ? Color.orange.opacity(0.1) : Color(.systemGray6))
+            )
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
+// MARK: - Basic Buyer Suite View (Fallback for iOS < 16)
+struct BasicBuyerSuiteView: View {
+    let concert: Concert
+    
+    var availableSeats: [Seat] {
+        concert.seats.filter { $0.status == .available }
+    }
+    
+    var soldSeats: [Seat] {
+        concert.seats.filter { $0.status == .sold }
+    }
+    
+    var urgencyMessage: String {
+        let availableCount = availableSeats.count
+        switch availableCount {
+        case 0: return "SOLD OUT"
+        case 1: return "LAST SEAT AVAILABLE!"
+        case 2: return "ONLY 2 SEATS LEFT!"
+        case 3...4: return "ONLY \(availableCount) SEATS REMAINING"
+        default: return "\(availableCount) PREMIUM SEATS AVAILABLE"
+        }
+    }
+    
+    var urgencyColor: Color {
+        let availableCount = availableSeats.count
+        switch availableCount {
+        case 0: return .red
+        case 1...2: return .orange
+        case 3...4: return .yellow
+        default: return .green
+        }
+    }
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            // Urgency banner
+            Text(urgencyMessage)
+                .font(.system(size: 14, weight: .heavy))
+                .foregroundColor(.black)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(urgencyColor)
+                )
+            
+            // Simplified seat visualization
+            ZStack {
+                // Firepit (central focus)
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                .orange.opacity(0.6),
+                                .red.opacity(0.4),
+                                .black.opacity(0.2)
+                            ],
+                            center: .center,
+                            startRadius: 10,
+                            endRadius: 40
+                        )
+                    )
+                    .frame(width: 60, height: 60)
+                    .overlay(
+                        Circle()
+                            .stroke(Color.orange.opacity(0.5), lineWidth: 1)
+                    )
+                
+                // Seats arranged around firepit
+                ForEach(Array(concert.seats.enumerated()), id: \.offset) { index, seat in
+                    SimpleBuyerSeatView(seat: seat, seatNumber: index + 1)
+                        .offset(simpleSeatOffset(for: index))
+                }
+            }
+            .frame(width: 220, height: 220)
+        }
+        .padding()
+    }
+    
+    private func simpleSeatOffset(for index: Int) -> CGSize {
+        let positions: [CGSize] = [
+            CGSize(width: 75, height: -25),   // Seat 1 (top right)
+            CGSize(width: 75, height: 25),    // Seat 2 (bottom right)
+            CGSize(width: 75, height: 75),    // Seat 3 (bottom right - aligned with seat 2)
+            CGSize(width: 25, height: 75),    // Seat 4 (bottom center-right)
+            CGSize(width: -25, height: 75),   // Seat 5 (bottom center-left)
+            CGSize(width: -75, height: 75),   // Seat 6 (bottom left - aligned with seat 7)
+            CGSize(width: -75, height: 25),   // Seat 7 (bottom left side)
+            CGSize(width: -75, height: -25)   // Seat 8 (top left side)
+        ]
+        return positions[index]
+    }
+}
+
+// MARK: - Simple Buyer Seat View (Fallback)
+struct SimpleBuyerSeatView: View {
+    let seat: Seat
+    let seatNumber: Int
+    
+    var seatColor: Color {
+        switch seat.status {
+        case .available: return .green
+        case .sold: return .red
+        case .reserved: return .red // Show as unavailable to buyers
+        }
+    }
+    
+    var body: some View {
+        VStack(spacing: 4) {
+            ZStack {
+                // Simplified seat back
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(seatColor.opacity(0.4))
+                    .frame(width: 32, height: 24)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(seatColor, lineWidth: 1.5)
+                    )
+                
+                // Simplified seat cushion
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(seatColor.opacity(0.5))
+                    .frame(width: 28, height: 18)
+                    .offset(y: 4)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(seatColor, lineWidth: 1)
+                            .offset(y: 4)
+                    )
+                
+                // Status indicator
+                Circle()
+                    .fill(.black.opacity(0.7))
+                    .frame(width: 14, height: 14)
+                    .overlay(
+                        Image(systemName: seat.status == .available ? "checkmark" : "xmark")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(.white)
+                    )
+                    .offset(y: -2)
+            }
+            .shadow(color: seatColor.opacity(0.3), radius: 2, x: 0, y: 1)
+            
+            Text("\(seatNumber)")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(.modernTextSecondary)
+        }
+    }
+}
+
 // MARK: - Consistent UI Components
 
 // Standardized sheet presentation types
@@ -7412,10 +8184,17 @@ struct InteractiveFireSuiteView: View {
     @Binding var isBuyerView: Bool
     
     var body: some View {
-        VStack(spacing: 16) {
-            // Title and instructions
-            VStack(spacing: 12) {
-                if isBuyerView {
+        if isBuyerView {
+            // Show enhanced shareable buyer view
+            if #available(iOS 16.0, *) {
+                ShareableBuyerView(
+                    concert: concert,
+                    suiteName: settingsManager.suiteName,
+                    venueLocation: settingsManager.venueLocation
+                )
+            } else {
+                // Fallback for older iOS versions
+                VStack(spacing: 16) {
                     PoweredBySuiteKeepView()
                         .padding(.vertical, 5)
                     
@@ -7428,7 +8207,15 @@ struct InteractiveFireSuiteView: View {
                             .font(.system(size: 16, weight: .medium))
                             .foregroundColor(.modernTextSecondary)
                     }
-                } else {
+                    
+                    // Basic seat visualization for older iOS
+                    BasicBuyerSuiteView(concert: concert)
+                }
+            }
+        } else {
+            VStack(spacing: 16) {
+                // Title and instructions
+                VStack(spacing: 12) {
                     Text("Seating")
                         .font(.system(size: 20, weight: .semibold))
                         .foregroundColor(.modernText)
@@ -7436,7 +8223,6 @@ struct InteractiveFireSuiteView: View {
                     Text(isBatchMode ? "Select multiple seats for batch operations" : "Tap seats to manage tickets")
                         .font(.system(size: 14))
                         .foregroundColor(.modernTextSecondary)
-                }
                 
                 
                 // Batch selection status
@@ -7774,59 +8560,60 @@ struct InteractiveFireSuiteView: View {
                     }
                 }
                 
-                Spacer()
+                    Spacer()
+                }
+                .padding(.top, 8)
             }
-            .padding(.top, 8)
-        }
-        .padding()
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-        .onAppear {
-            startPulseAnimation()
-        }
-        .sheet(isPresented: Binding<Bool>(
-            get: { selectedSeatIndex != nil },
-            set: { isPresented in
-                if !isPresented {
-                    selectedSeatIndex = nil
-                    // Reset the lock when sheet fully dismisses
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        isUpdatingData = false
+            .padding()
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
+            .onAppear {
+                startPulseAnimation()
+            }
+            .sheet(isPresented: Binding<Bool>(
+                get: { selectedSeatIndex != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        selectedSeatIndex = nil
+                        // Reset the lock when sheet fully dismisses
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            isUpdatingData = false
+                        }
                     }
                 }
-            }
-        )) {
-            if let index = selectedSeatIndex {
-                SeatOptionsView(
-                    seatNumber: index + 1,
-                    seat: concert.seats[index],
-                    onUpdate: { updatedSeat in
-                        isUpdatingData = true
-                        concert.seats[index] = updatedSeat
-                        concertManager.updateConcert(concert)
-                    },
-                    onUpdateAll: { templateSeat in
-                        isUpdatingData = true
-                        // Apply the template seat to all seats, but keep each seat's original seat number context
-                        for i in 0..<concert.seats.count {
-                            let newSeat = templateSeat
-                            // Each seat should maintain its unique identity for seat-specific tracking
-                            concert.seats[i] = newSeat
+            )) {
+                if let index = selectedSeatIndex {
+                    SeatOptionsView(
+                        seatNumber: index + 1,
+                        seat: concert.seats[index],
+                        onUpdate: { updatedSeat in
+                            isUpdatingData = true
+                            concert.seats[index] = updatedSeat
+                            concertManager.updateConcert(concert)
+                        },
+                        onUpdateAll: { templateSeat in
+                            isUpdatingData = true
+                            // Apply the template seat to all seats, but keep each seat's original seat number context
+                            for i in 0..<concert.seats.count {
+                                let newSeat = templateSeat
+                                // Each seat should maintain its unique identity for seat-specific tracking
+                                concert.seats[i] = newSeat
+                            }
+                            concertManager.updateConcert(concert)
                         }
+                    )
+                    .environmentObject(settingsManager)
+                }
+            }
+            .sheet(isPresented: $showingParkingOptions) {
+                ParkingTicketOptionsView(
+                    parkingTicket: concert.parkingTicket ?? ParkingTicket(),
+                    onUpdate: { updatedParkingTicket in
+                        concert.parkingTicket = updatedParkingTicket
                         concertManager.updateConcert(concert)
                     }
                 )
                 .environmentObject(settingsManager)
             }
-        }
-        .sheet(isPresented: $showingParkingOptions) {
-            ParkingTicketOptionsView(
-                parkingTicket: concert.parkingTicket ?? ParkingTicket(),
-                onUpdate: { updatedParkingTicket in
-                    concert.parkingTicket = updatedParkingTicket
-                    concertManager.updateConcert(concert)
-                }
-            )
-            .environmentObject(settingsManager)
         }
     }
     
