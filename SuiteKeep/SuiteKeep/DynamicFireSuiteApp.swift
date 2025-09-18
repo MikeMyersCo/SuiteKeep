@@ -11065,8 +11065,11 @@ struct SettingsView: View {
                                 }
                                 
                                 Divider()
-                                
-                                BackupRestoreSection(concertManager: concertManager, settingsManager: settingsManager)
+
+                                // Only show backup/restore for non-shared suites or suite owners
+                                if !sharedSuiteManager.isInSharedSuite || sharedSuiteManager.userRole == .owner {
+                                    BackupRestoreSection(concertManager: concertManager, settingsManager: settingsManager)
+                                }
                             }
                         }
                         
@@ -11074,7 +11077,7 @@ struct SettingsView: View {
                         CleanSettingsCard(title: "About", icon: "info.circle") {
                             VStack(spacing: 12) {
                                 HStack {
-                                    Text("Version 1.0.0")
+                                    Text("Version 2.1")
                                         .font(.system(size: 16, weight: .medium))
                                     Spacer()
                                 }
