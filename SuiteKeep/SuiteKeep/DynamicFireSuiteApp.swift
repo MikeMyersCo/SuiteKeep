@@ -43,35 +43,49 @@ struct SavedCharity: Codable, Identifiable, Equatable {
 
 // MARK: - Settings Manager
 class SettingsManager: ObservableObject {
+    weak var sharedSuiteManager: SharedSuiteManager?
+
     @Published var suiteName: String {
         didSet {
-            UserDefaults.standard.set(suiteName, forKey: "suiteName")
-            NSUbiquitousKeyValueStore.default.set(suiteName, forKey: "suiteName")
-            NSUbiquitousKeyValueStore.default.synchronize()
+            // Only save locally if not in shared suite or if user is owner
+            if !isInSharedSuite || sharedSuiteManager?.userRole == .owner {
+                UserDefaults.standard.set(suiteName, forKey: "suiteName")
+                NSUbiquitousKeyValueStore.default.set(suiteName, forKey: "suiteName")
+                NSUbiquitousKeyValueStore.default.synchronize()
+            }
         }
     }
     
     @Published var venueLocation: String {
         didSet {
-            UserDefaults.standard.set(venueLocation, forKey: "venueLocation")
-            NSUbiquitousKeyValueStore.default.set(venueLocation, forKey: "venueLocation")
-            NSUbiquitousKeyValueStore.default.synchronize()
+            // Only save locally if not in shared suite or if user is owner
+            if !isInSharedSuite || sharedSuiteManager?.userRole == .owner {
+                UserDefaults.standard.set(venueLocation, forKey: "venueLocation")
+                NSUbiquitousKeyValueStore.default.set(venueLocation, forKey: "venueLocation")
+                NSUbiquitousKeyValueStore.default.synchronize()
+            }
         }
     }
-    
+
     @Published var familyTicketPrice: Double {
         didSet {
-            UserDefaults.standard.set(familyTicketPrice, forKey: "familyTicketPrice")
-            NSUbiquitousKeyValueStore.default.set(familyTicketPrice, forKey: "familyTicketPrice")
-            NSUbiquitousKeyValueStore.default.synchronize()
+            // Only save locally if not in shared suite or if user is owner
+            if !isInSharedSuite || sharedSuiteManager?.userRole == .owner {
+                UserDefaults.standard.set(familyTicketPrice, forKey: "familyTicketPrice")
+                NSUbiquitousKeyValueStore.default.set(familyTicketPrice, forKey: "familyTicketPrice")
+                NSUbiquitousKeyValueStore.default.synchronize()
+            }
         }
     }
-    
+
     @Published var defaultSeatCost: Double {
         didSet {
-            UserDefaults.standard.set(defaultSeatCost, forKey: "defaultSeatCost")
-            NSUbiquitousKeyValueStore.default.set(defaultSeatCost, forKey: "defaultSeatCost")
-            NSUbiquitousKeyValueStore.default.synchronize()
+            // Only save locally if not in shared suite or if user is owner
+            if !isInSharedSuite || sharedSuiteManager?.userRole == .owner {
+                UserDefaults.standard.set(defaultSeatCost, forKey: "defaultSeatCost")
+                NSUbiquitousKeyValueStore.default.set(defaultSeatCost, forKey: "defaultSeatCost")
+                NSUbiquitousKeyValueStore.default.synchronize()
+            }
         }
     }
     
@@ -185,6 +199,52 @@ class SettingsManager: ObservableObject {
         
         // Load saved charities
         loadSavedCharities()
+    }
+
+    // MARK: - Shared Suite Support
+    private var isInSharedSuite: Bool {
+        return sharedSuiteManager?.isSharedSuite == true
+    }
+
+    // Update settings from shared suite data
+    func updateFromSharedSuite(_ suiteInfo: SharedSuiteInfo) {
+        // Temporarily disable property observers by using direct assignment
+        // We'll manually trigger objectWillChange at the end
+
+        // Use a flag to prevent didSet from saving while updating
+        let originalSharedSuiteManager = sharedSuiteManager
+        sharedSuiteManager = nil // Temporarily disable to prevent saves
+
+        suiteName = suiteInfo.suiteName
+        venueLocation = suiteInfo.venueLocation
+
+        if let familyPrice = suiteInfo.familyTicketPrice {
+            familyTicketPrice = familyPrice
+        }
+
+        if let seatCost = suiteInfo.defaultSeatCost {
+            defaultSeatCost = seatCost
+        }
+
+        // Restore the shared suite manager
+        sharedSuiteManager = originalSharedSuiteManager
+
+        // Manually trigger objectWillChange since we may have bypassed some didSet calls
+        objectWillChange.send()
+    }
+
+    // For owners: update shared suite with current settings
+    func syncToSharedSuite() {
+        guard let sharedSuiteManager = sharedSuiteManager,
+              sharedSuiteManager.userRole == .owner,
+              var suiteInfo = sharedSuiteManager.currentSuiteInfo else { return }
+
+        suiteInfo.familyTicketPrice = familyTicketPrice
+        suiteInfo.defaultSeatCost = defaultSeatCost
+
+        Task {
+            await sharedSuiteManager.updateSuiteSettings(suiteInfo)
+        }
     }
     
     deinit {
@@ -2006,9 +2066,10 @@ struct DynamicFireSuiteApp: View {
             // Connect SharedSuiteManager and ConcertDataManager to each other
             concertManager.sharedSuiteManager = sharedSuiteManager
             sharedSuiteManager.concertManager = concertManager
-            
-            // Connect SettingsManager to ConcertDataManager
+
+            // Connect SettingsManager to other managers
             concertManager.settingsManager = settingsManager
+            settingsManager.sharedSuiteManager = sharedSuiteManager
             
             // Auto-sync on app startup if in shared suite (or if we think we should be)
             if sharedSuiteManager.isSharedSuite {
@@ -3260,6 +3321,8 @@ struct SharedSuiteInfo: Codable {
     var members: [SuiteMember]
     var lastModified: Date
     var concertIds: [Int]? // Concert IDs for discovery
+    var familyTicketPrice: Double?
+    var defaultSeatCost: Double?
     
     init(suiteId: String, suiteName: String, venueLocation: String, ownerId: String) {
         self.suiteId = suiteId
@@ -3395,7 +3458,16 @@ extension SharedSuiteInfo {
         if let concertIds = concertIds, !concertIds.isEmpty {
             record["concertIds"] = concertIds
         }
-        
+
+        // Store pricing settings
+        if let familyTicketPrice = familyTicketPrice {
+            record["familyTicketPrice"] = familyTicketPrice
+        }
+
+        if let defaultSeatCost = defaultSeatCost {
+            record["defaultSeatCost"] = defaultSeatCost
+        }
+
         return record
     }
     
@@ -3426,7 +3498,16 @@ extension SharedSuiteInfo {
         if let concertIds = record["concertIds"] as? [Int] {
             suiteInfo.concertIds = concertIds
         }
-        
+
+        // Get pricing settings if available
+        if let familyTicketPrice = record["familyTicketPrice"] as? Double {
+            suiteInfo.familyTicketPrice = familyTicketPrice
+        }
+
+        if let defaultSeatCost = record["defaultSeatCost"] as? Double {
+            suiteInfo.defaultSeatCost = defaultSeatCost
+        }
+
         return suiteInfo
     }
 }
@@ -3844,9 +3925,11 @@ class SharedSuiteManager: ObservableObject {
         // Generate or load user ID
         if let existingUserId = userDefaults.string(forKey: userIdKey) {
             self.currentUserId = existingUserId
+            print("🔧 DEBUG: Loaded existing user ID: \(existingUserId)")
         } else {
             self.currentUserId = UUID().uuidString
             userDefaults.set(self.currentUserId, forKey: userIdKey)
+            print("🔧 DEBUG: Generated new user ID: \(self.currentUserId)")
         }
         
         // Load user name (default to device name)
@@ -3869,12 +3952,19 @@ class SharedSuiteManager: ObservableObject {
             isSharedSuite = true
             
             // Determine user role
+            print("🔧 DEBUG: Role determination - Current User ID: \(self.currentUserId)")
+            print("🔧 DEBUG: Role determination - Suite Owner ID: \(suiteInfo.ownerId)")
+            print("🔧 DEBUG: Role determination - Suite Members: \(suiteInfo.members.map { "\($0.userId)(\($0.role.rawValue))" })")
+
             if suiteInfo.ownerId == self.currentUserId {
                 userRole = .owner
+                print("🔧 DEBUG: Role determination - DETECTED AS OWNER")
             } else if let member = suiteInfo.members.first(where: { $0.userId == self.currentUserId }) {
                 userRole = member.role
+                print("🔧 DEBUG: Role determination - DETECTED AS MEMBER with role: \(member.role.rawValue)")
             } else {
                 userRole = .viewer
+                print("🔧 DEBUG: Role determination - DETECTED AS VIEWER (not in members list)")
             }
         }
     }
@@ -3909,6 +3999,12 @@ class SharedSuiteManager: ObservableObject {
         userRole = .owner
         isSharedSuite = true
         saveSuiteInfo()
+
+        // For owners: sync current settings to shared suite
+        if let concertManager = concertManager,
+           let settingsManager = concertManager.settingsManager {
+            settingsManager.syncToSharedSuite()
+        }
     }
     
     func joinSharedSuite(_ suiteInfo: SharedSuiteInfo, as role: UserRole = .viewer) {
@@ -4407,6 +4503,13 @@ class SharedSuiteManager: ObservableObject {
             venueLocation: venueLocation,
             ownerId: self.currentUserId
         )
+
+        // Include current pricing settings from SettingsManager
+        if let concertManager = concertManager,
+           let settingsManager = concertManager.settingsManager {
+            suiteInfo.familyTicketPrice = settingsManager.familyTicketPrice
+            suiteInfo.defaultSeatCost = settingsManager.defaultSeatCost
+        }
         
         // Add owner as first member
         let ownerMember = SuiteMember(
@@ -4491,6 +4594,12 @@ class SharedSuiteManager: ObservableObject {
                         cloudKitStatus = "Rejoined suite successfully"
                         isSyncing = false
                         saveSuiteInfo()
+
+                        // Sync settings from shared suite
+                        if let concertManager = concertManager,
+                           let settingsManager = concertManager.settingsManager {
+                            settingsManager.updateFromSharedSuite(suiteInfo)
+                        }
                     }
                     
                     // Set up real-time updates and sync concert data
@@ -4531,6 +4640,12 @@ class SharedSuiteManager: ObservableObject {
                         cloudKitStatus = "Joined suite successfully"
                         isSyncing = false
                         saveSuiteInfo()
+
+                        // Sync settings from shared suite
+                        if let concertManager = concertManager,
+                           let settingsManager = concertManager.settingsManager {
+                            settingsManager.updateFromSharedSuite(suiteInfo)
+                        }
                     }
                     
                     // Set up real-time updates, migrate existing data, and sync concert data
@@ -5138,7 +5253,42 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
             print("❌ DEBUG: Failed to migrate concerts to current suite: \(error)")
         }
     }
-    
+
+    // MARK: - Suite Settings Management
+    func updateSuiteSettings(_ suiteInfo: SharedSuiteInfo) async {
+        guard isCloudKitAvailable,
+              userRole == .owner else { return }
+
+        do {
+            let recordID = CKRecord.ID(recordName: suiteInfo.suiteId)
+            let record = try await publicCloudKitDatabase.record(for: recordID)
+
+            // Update pricing settings
+            if let familyPrice = suiteInfo.familyTicketPrice {
+                record["familyTicketPrice"] = familyPrice
+            }
+
+            if let seatCost = suiteInfo.defaultSeatCost {
+                record["defaultSeatCost"] = seatCost
+            }
+
+            record["lastModified"] = Date()
+
+            // Save updated record
+            _ = try await publicCloudKitDatabase.save(record)
+            print("✅ DEBUG: Updated suite settings in CloudKit")
+
+            // Update local suite info
+            await MainActor.run {
+                currentSuiteInfo = suiteInfo
+                saveSuiteInfo()
+            }
+
+        } catch {
+            print("❌ DEBUG: Failed to update suite settings: \(error)")
+        }
+    }
+
     // MARK: - Suite Member Management
     private func addMemberToSuiteRecord(member: SuiteMember, suiteInfo: SharedSuiteInfo) async throws {
         let recordID = CKRecord.ID(recordName: suiteInfo.suiteId)
