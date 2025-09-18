@@ -6070,22 +6070,24 @@ class ConcertDataManager: ObservableObject {
     
     func updateWithSyncedConcerts(_ syncedConcerts: [Concert]) {
         print("🔄 Updating local concerts with \(syncedConcerts.count) synced concerts")
-        
-        DispatchQueue.main.async { [weak self] in
+
+        Task { @MainActor [weak self] in
             guard let self = self else { return }
             
             let localConcertCount = self.concerts.count
             let isOwner = (self.sharedSuiteManager?.userRole == .owner) ?? false
             let isInSharedSuite = (self.sharedSuiteManager?.isInSharedSuite) ?? false
             
-            print("🔄 DEBUG: Local concerts: \(localConcertCount), Synced concerts: \(syncedConcerts.count), User role: \(isOwner ? "owner" : "member"), In shared suite: \(isInSharedSuite)")
+            print("🔄 DEBUG: Local concerts: \(localConcertCount), Synced concerts: \(syncedConcerts.count), User role: \(self.sharedSuiteManager?.userRole.rawValue ?? "unknown"), In shared suite: \(isInSharedSuite)")
             
             // Special case: If we're receiving an empty concert list and we're no longer in a shared suite,
             // this means the suite was deleted and we need to clear local data
             if syncedConcerts.isEmpty && !isInSharedSuite && localConcertCount > 0 {
                 print("🧹 DEBUG: Suite deleted - clearing local concert data for guest")
-                self.objectWillChange.send()
-                self.concerts = []
+                await MainActor.run {
+                    self.objectWillChange.send()
+                    self.concerts = []
+                }
                 self.saveLocalOnly()
                 return
             }
@@ -6093,14 +6095,18 @@ class ConcertDataManager: ObservableObject {
             // If local is empty (like on fresh non-owning phones), accept all synced data
             if localConcertCount == 0 {
                 print("🔄 DEBUG: No local concerts, accepting all \(syncedConcerts.count) synced concerts")
-                self.objectWillChange.send()
-                self.concerts = syncedConcerts
+                await MainActor.run {
+                    self.objectWillChange.send()
+                    self.concerts = syncedConcerts
+                }
                 self.saveLocalOnly()
             } else if !isOwner && syncedConcerts.count > localConcertCount {
                 // For non-owners, if CloudKit has more recent data, accept it
                 print("🔄 DEBUG: Non-owner with outdated data, accepting \(syncedConcerts.count) CloudKit concerts")
-                self.objectWillChange.send()
-                self.concerts = syncedConcerts
+                await MainActor.run {
+                    self.objectWillChange.send()
+                    self.concerts = syncedConcerts
+                }
                 self.saveLocalOnly()
             } else if isOwner {
                 // For owners, preserve local changes but add any new concerts from CloudKit
@@ -6120,8 +6126,10 @@ class ConcertDataManager: ObservableObject {
                 }
                 
                 if hasChanges {
-                    self.objectWillChange.send()
-                    self.concerts = mergedConcerts
+                    await MainActor.run {
+                        self.objectWillChange.send()
+                        self.concerts = mergedConcerts
+                    }
                     self.saveLocalOnly()
                     print("🔄 DEBUG: Owner added \(syncedConcerts.count - localConcertCount) new concerts")
                     
@@ -6146,8 +6154,10 @@ class ConcertDataManager: ObservableObject {
                 print("🔄 DEBUG: Before update - All concerts: \(self.concerts.map { $0.artist }.joined(separator: ", "))")
                 
                 // Force UI refresh BEFORE updating data
-                self.objectWillChange.send()
-                self.concerts = syncedConcerts
+                await MainActor.run {
+                    self.objectWillChange.send()
+                    self.concerts = syncedConcerts
+                }
                 
                 print("🔄 DEBUG: After update - First concert: \(self.concerts.first?.artist ?? "none")")  
                 print("🔄 DEBUG: After update - All concerts: \(self.concerts.map { $0.artist }.joined(separator: ", "))")
@@ -6188,15 +6198,23 @@ class ConcertDataManager: ObservableObject {
     }
     
     func saveConcerts() {
+        // Don't save changes if user is a viewer in a shared suite
+        if let sharedSuiteManager = sharedSuiteManager,
+           sharedSuiteManager.isSharedSuite,
+           sharedSuiteManager.userRole == .viewer {
+            print("🚫 DEBUG: Viewer cannot save changes - operation blocked")
+            return
+        }
+
         do {
             let encoded = try JSONEncoder().encode(concerts)
-            
+
             // Save to local storage
             saveToLocalStorage()
-            
+
             // Save to iCloud
             saveToiCloud(data: encoded)
-            
+
             // Sync to CloudKit if in shared suite
             syncToCloudKitAfterSave()
             
@@ -6587,9 +6605,10 @@ class ConcertDataManager: ObservableObject {
             return
         }
         
-        // If we're in a shared suite, sync each concert to CloudKit
+        // If we're in a shared suite and user has edit permissions, sync each concert to CloudKit
         if let sharedSuiteManager = sharedSuiteManager,
-           sharedSuiteManager.isSharedSuite {
+           sharedSuiteManager.isSharedSuite,
+           sharedSuiteManager.userRole != .viewer {
             Task {
                 await MainActor.run {
                     syncStatus = "Syncing concerts to CloudKit..."
@@ -7381,9 +7400,24 @@ struct ConcertDetailView: View {
     @State private var viewMode: ViewMode = .seatView
     @State private var isBuyerView = false
     
+    // Enhanced permission system for viewer role
+    private var canEdit: Bool {
+        return !sharedSuiteManager.isSharedSuite ||
+               sharedSuiteManager.userRole == .owner ||
+               sharedSuiteManager.userRole == .editor
+    }
+
+    private var isViewerMode: Bool {
+        return sharedSuiteManager.isSharedSuite && sharedSuiteManager.userRole == .viewer
+    }
+
+    private var canAccessBuyerView: Bool {
+        return true // All users can access buyer view for sharing availability
+    }
+
     // Computed property for read-only state
     private var isReadOnlyView: Bool {
-        return isBuyerView || (sharedSuiteManager.isSharedSuite && sharedSuiteManager.userRole != .owner)
+        return isBuyerView || !canEdit
     }
     
     enum ViewMode {
@@ -7420,8 +7454,16 @@ struct ConcertDetailView: View {
                         
                         Spacer()
                         
-                        // Read-only indicator for non-owner users
-                        if isReadOnlyView && sharedSuiteManager.isSharedSuite && sharedSuiteManager.userRole != .owner {
+                        // Enhanced read-only indicator for viewer mode
+                        if isViewerMode {
+                            HStack(spacing: 6) {
+                                Image(systemName: "eye.fill")
+                                    .font(.system(size: 12, weight: .medium))
+                                Text("Viewer Mode")
+                                    .font(.system(size: 12, weight: .medium))
+                            }
+                            .foregroundColor(.blue)
+                        } else if isReadOnlyView && !isBuyerView {
                             HStack(spacing: 6) {
                                 Image(systemName: "eye.fill")
                                     .font(.system(size: 12, weight: .medium))
@@ -7823,6 +7865,7 @@ struct ConcertDetailView: View {
 
 // MARK: - Seat List View
 struct SeatListView: View {
+    @EnvironmentObject var sharedSuiteManager: SharedSuiteManager
     @Binding var concert: Concert
     @ObservedObject var concertManager: ConcertDataManager
     @ObservedObject var settingsManager: SettingsManager
@@ -7832,6 +7875,17 @@ struct SeatListView: View {
     @Binding var isBuyerView: Bool
     @State private var selectedSeatIndex: Int?
     @State private var isUpdatingData = false
+
+    // Permission computed properties
+    private var canEdit: Bool {
+        return !sharedSuiteManager.isSharedSuite ||
+               sharedSuiteManager.userRole == .owner ||
+               sharedSuiteManager.userRole == .editor
+    }
+
+    private var isViewerMode: Bool {
+        return sharedSuiteManager.isSharedSuite && sharedSuiteManager.userRole == .viewer
+    }
     
     var body: some View {
         VStack(spacing: 16) {
@@ -7930,7 +7984,7 @@ struct SeatListView: View {
             .font(.system(size: 12, weight: .medium))
             .foregroundColor(.red)
             
-            if !isBuyerView {
+            if !isBuyerView && canEdit {
                 Button("Edit Selected") {
                     showingBatchOptions = true
                 }
@@ -7976,8 +8030,8 @@ struct SeatListView: View {
             
             Spacer()
             
-            // Edit button (when not in batch mode and not in read-only view)
-            if !isBatchMode && !isBuyerView {
+            // Edit button (when not in batch mode and user can edit)
+            if !isBatchMode && !isBuyerView && canEdit {
                 editButton(for: index)
             }
         }
@@ -8105,7 +8159,10 @@ struct SeatListView: View {
         Button(action: {
             // Prevent seat selection while data is updating
             guard !isUpdatingData else { return }
-            
+
+            // Prevent editing for users without edit permissions
+            guard canEdit else { return }
+
             // Simply set the selected seat index - SwiftUI will handle sheet transitions smoothly
             selectedSeatIndex = index
         }) {
@@ -8182,7 +8239,22 @@ struct InteractiveFireSuiteView: View {
     @Binding var selectedSeats: Set<Int>
     @Binding var showingBatchOptions: Bool
     @Binding var isBuyerView: Bool
-    
+
+    // Permission computed properties
+    private var canEdit: Bool {
+        return !sharedSuiteManager.isSharedSuite ||
+               sharedSuiteManager.userRole == .owner ||
+               sharedSuiteManager.userRole == .editor
+    }
+
+    private var isViewerMode: Bool {
+        return sharedSuiteManager.isSharedSuite && sharedSuiteManager.userRole == .viewer
+    }
+
+    private var canAccessBuyerView: Bool {
+        return true // All users can access buyer view for sharing availability
+    }
+
     var body: some View {
         if isBuyerView {
             // Show enhanced shareable buyer view
@@ -8514,15 +8586,21 @@ struct InteractiveFireSuiteView: View {
                 Spacer()
                 
                 // Show appropriate controls based on user permissions
-                if sharedSuiteManager.isSharedSuite && sharedSuiteManager.userRole != .owner {
-                    // Read-only indicator for non-owner users in shared suites
-                    HStack(spacing: 6) {
-                        Image(systemName: "eye.fill")
-                            .font(.system(size: 14, weight: .medium))
-                        Text("Read Only")
-                            .font(.system(size: 13, weight: .medium))
+                if isViewerMode {
+                    // Enhanced viewer mode indicator with buyer view access note
+                    VStack(spacing: 4) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "eye.fill")
+                                .font(.system(size: 14, weight: .medium))
+                            Text("Viewer Mode")
+                                .font(.system(size: 13, weight: .medium))
+                        }
+                        .foregroundColor(.blue)
+
+                        Text("Can view all data & access buyer view")
+                            .font(.system(size: 11, weight: .regular))
+                            .foregroundColor(.secondary)
                     }
-                    .foregroundColor(.orange)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(
@@ -8533,8 +8611,10 @@ struct InteractiveFireSuiteView: View {
                                     .stroke(Color.orange.opacity(0.3), lineWidth: 1)
                             )
                     )
-                } else {
-                    // Buyer View Toggle for owners and individual users
+                }
+
+                // Buyer View Toggle - Available to all user roles including viewers
+                if canAccessBuyerView {
                     Button(action: {
                         withAnimation(.easeInOut(duration: 0.3)) {
                             isBuyerView.toggle()
@@ -8620,7 +8700,10 @@ struct InteractiveFireSuiteView: View {
     private func handleSeatTap(_ index: Int) {
         // Prevent seat selection while data is updating
         guard !isUpdatingData else { return }
-        
+
+        // Prevent editing for users without edit permissions
+        guard canEdit else { return }
+
         if isBatchMode {
             withAnimation(.easeInOut(duration: 0.2)) {
                 if selectedSeats.contains(index) {
@@ -8647,7 +8730,10 @@ struct InteractiveFireSuiteView: View {
     private func handleSeatLongPress(_ index: Int) {
         // Prevent seat selection while data is updating
         guard !isUpdatingData else { return }
-        
+
+        // Prevent editing for users without edit permissions
+        guard canEdit else { return }
+
         // Enter batch mode and select the long-pressed seat
         withAnimation(.easeInOut(duration: 0.3)) {
             isBatchMode = true
