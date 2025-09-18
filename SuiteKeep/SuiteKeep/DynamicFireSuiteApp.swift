@@ -10,6 +10,13 @@ import AVFoundation
 import CloudKit
 import UIKit
 
+// MARK: - Keyboard Dismissal Extension
+extension UIApplication {
+    func dismissKeyboard() {
+        sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+}
+
 // MARK: - Extensions
 extension CGFloat {
     var safeValue: CGFloat {
@@ -1576,6 +1583,17 @@ struct CleanPriceField: View {
                     TextField("0", text: $editableValue)
                         .keyboardType(.numberPad)
                         .focused($isFocused)
+                        .toolbar {
+                            ToolbarItemGroup(placement: .keyboard) {
+                                Spacer()
+                                Button("Done") {
+                                    if let newPrice = Double(editableValue), newPrice >= 0 {
+                                        onChange(newPrice)
+                                    }
+                                    isFocused = false
+                                }
+                            }
+                        }
                         .onChange(of: editableValue) { newValue in
                             let filtered = newValue.filter { "0123456789".contains($0) }
                             if filtered != newValue {
@@ -2268,8 +2286,8 @@ struct SuiteSummaryView: View {
         if sharedSuiteManager.pendingOperationsCount > 0 {
             return "\(sharedSuiteManager.pendingOperationsCount) pending changes"
         } else {
-            // Total members = owner + members array
-            let totalMembers = 1 + (sharedSuiteManager.currentSuiteInfo?.members.count ?? 0)
+            // Total members = members array (owner is included in members)
+            let totalMembers = sharedSuiteManager.currentSuiteInfo?.members.count ?? 0
             return "Shared with \(totalMembers) members"
         }
     }
@@ -4599,6 +4617,8 @@ class SharedSuiteManager: ObservableObject {
                         if let concertManager = concertManager,
                            let settingsManager = concertManager.settingsManager {
                             settingsManager.updateFromSharedSuite(suiteInfo)
+                            // Immediately refresh concert data for UI
+                            concertManager.loadConcerts()
                         }
                     }
                     
@@ -4608,7 +4628,8 @@ class SharedSuiteManager: ObservableObject {
                         await syncConcertData()
                     }
                 } else {
-                    // Add current user as new member
+                    // Add current user as new member (remove any stale entries first to prevent duplicates)
+                    suiteInfo.members.removeAll { $0.userId == self.currentUserId }
                     let member = SuiteMember(
                         userId: self.currentUserId,
                         displayName: currentUserName,
@@ -4645,6 +4666,8 @@ class SharedSuiteManager: ObservableObject {
                         if let concertManager = concertManager,
                            let settingsManager = concertManager.settingsManager {
                             settingsManager.updateFromSharedSuite(suiteInfo)
+                            // Immediately refresh concert data for UI
+                            concertManager.loadConcerts()
                         }
                     }
                     
@@ -9565,6 +9588,14 @@ struct SeatOptionsView: View {
                                     TextField("Price", text: $priceInput)
                                         .keyboardType(.decimalPad)
                                         .textFieldStyle(.roundedBorder)
+                                        .toolbar {
+                                            ToolbarItemGroup(placement: .keyboard) {
+                                                Spacer()
+                                                Button("Done") {
+                                                    UIApplication.shared.dismissKeyboard()
+                                                }
+                                            }
+                                        }
                                 }
                                 
                                 Picker("Source", selection: $selectedSource) {
@@ -9599,6 +9630,14 @@ struct SeatOptionsView: View {
                                             TextField("Face Value per Ticket", text: $donationFaceValueInput)
                                                 .keyboardType(.decimalPad)
                                                 .textFieldStyle(.roundedBorder)
+                                                .toolbar {
+                                                    ToolbarItemGroup(placement: .keyboard) {
+                                                        Spacer()
+                                                        Button("Done") {
+                                                            UIApplication.shared.dismissKeyboard()
+                                                        }
+                                                    }
+                                                }
                                         }
                                         
                                         VStack(alignment: .leading, spacing: 8) {
@@ -9663,6 +9702,14 @@ struct SeatOptionsView: View {
                         TextField("25", text: $costInput)
                             .keyboardType(.decimalPad)
                             .textFieldStyle(.roundedBorder)
+                            .toolbar {
+                                ToolbarItemGroup(placement: .keyboard) {
+                                    Spacer()
+                                    Button("Done") {
+                                        UIApplication.shared.dismissKeyboard()
+                                    }
+                                }
+                            }
                     }
                     
                     // Action Buttons
@@ -10765,7 +10812,7 @@ struct SettingsView: View {
                                                 }
                                             }
                                             .buttonStyle(CollaborationSecondaryButtonStyle())
-                                            .disabled(concertManager.concerts.isEmpty)
+                                            .disabled(concertManager.concerts.isEmpty || (sharedSuiteManager.isSharedSuite && sharedSuiteManager.userRole == .viewer))
                                         )
                                     }
                                 ) { newPrice in
