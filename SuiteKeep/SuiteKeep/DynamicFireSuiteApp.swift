@@ -27,6 +27,7 @@ extension CGFloat {
 extension Notification.Name {
     static let concertDataSynced = Notification.Name("concertDataSynced")
     static let migrateLocalConcerts = Notification.Name("migrateLocalConcerts")
+    static let memberListUpdated = Notification.Name("memberListUpdated")
 }
 
 
@@ -119,6 +120,16 @@ class SettingsManager: ObservableObject {
     @Published var cloudSyncStatus: CloudSyncStatus = .disabled
     @Published var lastSyncDate: Date?
     @Published var syncErrorMessage: String?
+
+    // CloudSync Auto-enable Alert
+    @Published var showCloudSyncEnabledAlert = false
+    @Published var cloudSyncAlertTitle = ""
+    @Published var cloudSyncAlertMessage = ""
+
+    // Shared Suite Read-Only Alert
+    @Published var showSharedSuiteReadOnlyAlert = false
+    @Published var sharedSuiteAlertTitle = ""
+    @Published var sharedSuiteAlertMessage = ""
     
     // MARK: - CloudSync Status
     enum CloudSyncStatus: String, CaseIterable {
@@ -345,7 +356,19 @@ class SettingsManager: ObservableObject {
         
         print("✅ CloudSync disabled - app will work locally only")
     }
-    
+
+    func showCloudSyncEnabledForSharingAlert() {
+        cloudSyncAlertTitle = "CloudSync Enabled"
+        cloudSyncAlertMessage = "CloudSync has been automatically enabled to support your shared suite. This ensures your concert data stays synchronized with all suite members and is safely backed up to iCloud."
+        showCloudSyncEnabledAlert = true
+    }
+
+    func showReadOnlySharedSuiteAlert() {
+        sharedSuiteAlertTitle = "Welcome to Shared Suite"
+        sharedSuiteAlertMessage = "You're now viewing a shared suite in read-only mode. You can see all concert data and seat statuses, but editing capabilities will be available in a future release. Stay tuned for collaboration features!"
+        showSharedSuiteReadOnlyAlert = true
+    }
+
     func updateSyncStatus(_ status: CloudSyncStatus, error: String? = nil) {
         cloudSyncStatus = status
         syncErrorMessage = error
@@ -2103,6 +2126,16 @@ struct DynamicFireSuiteApp: View {
         } message: {
             Text("The shared suite '\(sharedSuiteManager.deletedSuiteName)' has been deleted by the owner. You have been returned to your individual suite.")
         }
+        .alert(settingsManager.cloudSyncAlertTitle, isPresented: $settingsManager.showCloudSyncEnabledAlert) {
+            Button("OK") { }
+        } message: {
+            Text(settingsManager.cloudSyncAlertMessage)
+        }
+        .alert(settingsManager.sharedSuiteAlertTitle, isPresented: $settingsManager.showSharedSuiteReadOnlyAlert) {
+            Button("Got it!") { }
+        } message: {
+            Text(settingsManager.sharedSuiteAlertMessage)
+        }
             }
         }
     }
@@ -2196,7 +2229,7 @@ struct DynamicDashboard: View {
                         .padding(.top, 20)
                         
                         // Suite Overview Summary
-                        SuiteSummaryView(concerts: concerts, settingsManager: settingsManager)
+                        SuiteSummaryView(concerts: concerts, settingsManager: settingsManager, concertManager: concertManager)
                         
                         // Recent Activity
                         RecentActivityFeed(concerts: concerts) { concert in
@@ -2239,6 +2272,7 @@ struct DynamicDashboard: View {
 struct SuiteSummaryView: View {
     let concerts: [Concert]
     @ObservedObject var settingsManager: SettingsManager
+    @ObservedObject var concertManager: ConcertDataManager
     @State private var animateStats = false
     @EnvironmentObject var sharedSuiteManager: SharedSuiteManager
     
@@ -2270,76 +2304,62 @@ struct SuiteSummaryView: View {
         return Int((Double(totalOccupancy) / Double(pastConcerts.count * 8)) * 100)
     }
     
-    var syncStatusText: String {
-        if sharedSuiteManager.isSyncing {
-            return "Syncing..."
-        } else if sharedSuiteManager.isOffline {
-            return "Offline"
-        } else if sharedSuiteManager.pendingOperationsCount > 0 {
-            return "Pending Sync"
-        } else {
-            return "Synced"
-        }
-    }
-    
-    var syncDetailText: String {
-        if sharedSuiteManager.pendingOperationsCount > 0 {
-            return "\(sharedSuiteManager.pendingOperationsCount) pending changes"
-        } else {
-            // Total members = members array (owner is included in members)
-            let totalMembers = sharedSuiteManager.currentSuiteInfo?.members.count ?? 0
-            return "Shared with \(totalMembers) members"
-        }
-    }
     
     var body: some View {
         VStack(spacing: 20) {
             // Sync Status Indicator for Shared Suites (only show if multi-tenant is enabled)
             if sharedSuiteManager.isInSharedSuite && settingsManager.enableMultiTenantSuites {
-                HStack {
-                    HStack(spacing: 6) {
+                Button(action: {
+                    Task {
+                        await sharedSuiteManager.syncWithCloudKit()
+                        await sharedSuiteManager.syncConcertData()
+                    }
+                }) {
+                    HStack(spacing: 12) {
+                        // Sync Icon
                         if sharedSuiteManager.isSyncing {
                             Image(systemName: "arrow.triangle.2.circlepath")
-                                .font(.system(size: 12, weight: .medium))
+                                .font(.system(size: 18, weight: .medium))
                                 .foregroundColor(.modernAccent)
                                 .rotationEffect(.degrees(animateStats ? 360 : 0))
                                 .animation(.linear(duration: 2).repeatForever(autoreverses: false), value: animateStats)
                         } else if sharedSuiteManager.isOffline || sharedSuiteManager.pendingOperationsCount > 0 {
-                            Image(systemName: "wifi.exclamationmark")
-                                .font(.system(size: 12, weight: .medium))
+                            Image(systemName: "arrow.triangle.2.circlepath.circle")
+                                .font(.system(size: 18, weight: .medium))
                                 .foregroundColor(.orange)
                         } else {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: 12, weight: .medium))
+                            Image(systemName: "arrow.triangle.2.circlepath.circle.fill")
+                                .font(.system(size: 18, weight: .medium))
                                 .foregroundColor(.green)
                         }
-                        
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(syncStatusText)
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(.modernText)
-                            
-                            Text(syncDetailText)
-                                .font(.system(size: 10))
-                                .foregroundColor(.modernTextSecondary)
+
+                        // Last Sync Date/Time
+                        VStack(spacing: 2) {
+                            if let lastSync = concertManager.lastSyncDate {
+                                Text("Last synced")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundColor(.modernTextSecondary)
+
+                                Text(lastSync.formatted(date: .omitted, time: .shortened))
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(.modernText)
+                            } else {
+                                Text("Tap to sync")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundColor(.modernTextSecondary)
+
+                                Text("Sync pending")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundColor(.modernText)
+                            }
                         }
                     }
-                    
-                    Spacer()
-                    
-                    Text(sharedSuiteManager.cloudKitStatus)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundColor(.modernTextSecondary)
                 }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.modernSecondary.opacity(0.6))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(sharedSuiteManager.isSyncing ? Color.modernAccent.opacity(0.5) : Color.green.opacity(0.3), lineWidth: 1)
-                        )
-                )
+                .buttonStyle(PlainButtonStyle())
+                .disabled(sharedSuiteManager.isSyncing)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
             }
             
             // Key Metrics Cards with Beautiful Gradients
@@ -4012,15 +4032,20 @@ class SharedSuiteManager: ObservableObject {
             venueLocation: venueLocation,
             ownerId: self.currentUserId
         )
-        
+
         currentSuiteInfo = suiteInfo
         userRole = .owner
         isSharedSuite = true
         saveSuiteInfo()
 
-        // For owners: sync current settings to shared suite
+        // For owners: enable CloudSync automatically and sync current settings to shared suite
         if let concertManager = concertManager,
            let settingsManager = concertManager.settingsManager {
+            // Automatically enable CloudSync for shared suite owners
+            if !settingsManager.isCloudSyncEnabled {
+                settingsManager.enableCloudSync()
+                settingsManager.showCloudSyncEnabledForSharingAlert()
+            }
             settingsManager.syncToSharedSuite()
         }
     }
@@ -4554,6 +4579,14 @@ class SharedSuiteManager: ObservableObject {
                 cloudKitStatus = "Suite created successfully"
                 isSyncing = false
                 saveSuiteInfo()
+
+                // Automatically enable CloudSync for shared suite owners
+                if let concertManager = concertManager,
+                   let settingsManager = concertManager.settingsManager,
+                   !settingsManager.isCloudSyncEnabled {
+                    settingsManager.enableCloudSync()
+                    settingsManager.showCloudSyncEnabledForSharingAlert()
+                }
             }
             
             // Set up real-time updates for the new suite
@@ -4666,6 +4699,8 @@ class SharedSuiteManager: ObservableObject {
                         if let concertManager = concertManager,
                            let settingsManager = concertManager.settingsManager {
                             settingsManager.updateFromSharedSuite(suiteInfo)
+                            // Show read-only alert for new users joining the suite
+                            settingsManager.showReadOnlySharedSuiteAlert()
                             // Immediately refresh concert data for UI
                             concertManager.loadConcerts()
                         }
@@ -4971,27 +5006,44 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
     
     func syncWithCloudKit() async {
         guard isCloudKitAvailable else { return }
-        
+
         // If we're supposed to be in a shared suite but have no suite info, we need to clean up
         if isSharedSuite && currentSuiteInfo == nil {
             print("🔄 DEBUG: In shared suite mode but no suite info - cleaning up orphaned state")
             await cleanupDeletedSuite()
             return
         }
-        
+
         guard let suiteInfo = currentSuiteInfo else { return }
-        
-        cloudKitStatus = "Syncing with CloudKit..."
+
+        await MainActor.run {
+            cloudKitStatus = "Syncing with CloudKit..."
+            isSyncing = true
+        }
         
         do {
             let recordID = CKRecord.ID(recordName: suiteInfo.suiteId)
             let record = try await self.publicCloudKitDatabase.record(for: recordID)
             
             if let updatedSuiteInfo = SharedSuiteInfo.fromCloudKitRecord(record) {
+                print("🔄 DEBUG: syncWithCloudKit - Updated suite info with \(updatedSuiteInfo.members.count) members")
+                print("🔄 DEBUG: syncWithCloudKit - Members: \(updatedSuiteInfo.members.map { "\($0.displayName)(\($0.role.rawValue))" })")
+
                 await MainActor.run {
+                    let oldMemberCount = currentSuiteInfo?.members.count ?? 0
                     currentSuiteInfo = updatedSuiteInfo
+                    let newMemberCount = updatedSuiteInfo.members.count
+
+                    if oldMemberCount != newMemberCount {
+                        print("🔄 DEBUG: Member count changed from \(oldMemberCount) to \(newMemberCount)")
+                    }
+
                     cloudKitStatus = "Sync complete"
+                    isSyncing = false
                     saveSuiteInfo()
+
+                    // Force UI update by triggering objectWillChange
+                    objectWillChange.send()
                 }
             }
         } catch let ckError as CKError where ckError.code == .unknownItem {
@@ -5001,10 +5053,11 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
         } catch {
             await MainActor.run {
                 cloudKitStatus = "Sync failed: \(error.localizedDescription)"
+                isSyncing = false
             }
         }
     }
-    
+
     func syncConcertData() async {
         guard isCloudKitAvailable else { return }
         
@@ -5016,9 +5069,13 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
         }
         
         guard let suiteInfo = currentSuiteInfo else { return }
-        
+
+        await MainActor.run {
+            isSyncing = true
+        }
+
         print("🔧 DEBUG: Syncing concert data for suite: \(suiteInfo.suiteId)")
-        
+
         // Add small delay to account for CloudKit consistency
         try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds
         print("🔧 DEBUG: Waited 2 seconds for CloudKit consistency")
@@ -5109,17 +5166,24 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
             // Update concert data via notification on main thread
             await MainActor.run {
                 NotificationCenter.default.post(
-                    name: .concertDataSynced, 
-                    object: nil, 
+                    name: .concertDataSynced,
+                    object: nil,
                     userInfo: ["concerts": syncedConcerts]
                 )
+                isSyncing = false
             }
         } catch let ckError as CKError where ckError.code == .unknownItem {
             // Suite was deleted by owner - clean up local data
             print("🔄 DEBUG: Shared suite was deleted by owner during concert sync - cleaning up local data")
+            await MainActor.run {
+                isSyncing = false
+            }
             await cleanupDeletedSuite()
         } catch {
             print("❌ DEBUG: Failed to sync concert data: \(error)")
+            await MainActor.run {
+                isSyncing = false
+            }
         }
     }
     
@@ -10746,6 +10810,8 @@ struct SettingsView: View {
     @State private var showLeaveConfirmation = false
     @State private var showDataSection = false
     @State private var showAboutSection = false
+    @State private var showApplyToAllAlert = false
+    @State private var showFinalApplyToAllAlert = false
     
     var body: some View {
         NavigationView {
@@ -10798,13 +10864,7 @@ struct SettingsView: View {
                                     actionButton: {
                                         AnyView(
                                             Button(action: {
-                                                for i in 0..<concertManager.concerts.count {
-                                                    for j in 0..<concertManager.concerts[i].seats.count {
-                                                        concertManager.concerts[i].seats[j].cost = settingsManager.defaultSeatCost
-                                                    }
-                                                }
-                                                concertManager.saveConcerts()
-                                                HapticManager.shared.notification(type: .success)
+                                                showApplyToAllAlert = true
                                             }) {
                                                 HStack {
                                                     Image(systemName: "arrow.down.to.line.compact")
@@ -10887,13 +10947,17 @@ struct SettingsView: View {
                                                 }) {
                                                     HStack {
                                                         Image(systemName: sharedSuiteManager.isSyncing ? "arrow.triangle.2.circlepath" : "arrow.clockwise.circle.fill")
-                                                        Text("Sync")
+                                                            .rotationEffect(.degrees(sharedSuiteManager.isSyncing ? 360 : 0))
+                                                            .animation(sharedSuiteManager.isSyncing ?
+                                                                Animation.linear(duration: 1.0).repeatForever(autoreverses: false) :
+                                                                .default, value: sharedSuiteManager.isSyncing)
+                                                        Text(sharedSuiteManager.isSyncing ? "Syncing..." : "Sync")
                                                     }
                                                 }
                                                 .buttonStyle(CollaborationPrimaryButtonStyle())
                                                 .disabled(sharedSuiteManager.isSyncing)
                                             }
-                                            
+
                                             Button(action: {
                                                 showLeaveConfirmation = true
                                             }) {
@@ -10999,6 +11063,11 @@ struct SettingsView: View {
                                         if newValue {
                                             settingsManager.enableCloudSync()
                                         } else {
+                                            // Prevent disabling CloudSync if user is owner of shared suite
+                                            if sharedSuiteManager.isInSharedSuite && sharedSuiteManager.userRole == .owner {
+                                                // Don't allow disabling - CloudSync is required for shared suite owners
+                                                return
+                                            }
                                             settingsManager.disableCloudSync()
                                         }
                                     }
@@ -11006,20 +11075,28 @@ struct SettingsView: View {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text("Enable CloudSync")
                                             .font(.system(size: 16, weight: .medium))
-                                        Text(sharedSuiteManager.isInSharedSuite && sharedSuiteManager.userRole != .owner ? 
-                                             "Data synced via shared suite" : 
+                                        Text(sharedSuiteManager.isInSharedSuite && sharedSuiteManager.userRole != .owner ?
+                                             "Data synced via shared suite" :
+                                             sharedSuiteManager.isInSharedSuite && sharedSuiteManager.userRole == .owner ?
+                                             "Required for shared suite owners" :
                                              "Sync concert data across devices")
                                             .font(.system(size: 14))
                                             .foregroundColor(.modernTextSecondary)
                                     }
                                 }
                                 .toggleStyle(SwitchToggleStyle(tint: .modernAccent))
-                                .disabled(settingsManager.cloudSyncStatus == .syncing || 
-                                         (sharedSuiteManager.isInSharedSuite && sharedSuiteManager.userRole != .owner))
+                                .disabled(settingsManager.cloudSyncStatus == .syncing ||
+                                         (sharedSuiteManager.isInSharedSuite && sharedSuiteManager.userRole != .owner) ||
+                                         (sharedSuiteManager.isInSharedSuite && sharedSuiteManager.userRole == .owner))
                                 
                                 // Info Text
                                 if sharedSuiteManager.isInSharedSuite && sharedSuiteManager.userRole != .owner {
                                     Text("Your concert data is automatically synced through the shared suite. Personal CloudSync is not needed while you're a guest.")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.modernTextSecondary)
+                                        .padding(.top, 8)
+                                } else if sharedSuiteManager.isInSharedSuite && sharedSuiteManager.userRole == .owner {
+                                    Text("CloudSync is required and automatically enabled for shared suite owners. It cannot be disabled while you own a shared suite. Delete the shared suite to disable CloudSync.")
                                         .font(.system(size: 14))
                                         .foregroundColor(.modernTextSecondary)
                                         .padding(.top, 8)
@@ -11145,9 +11222,31 @@ struct SettingsView: View {
                     }
                 }
             } message: {
-                Text(sharedSuiteManager.userRole == .owner ? 
-                    "This will permanently delete the shared suite for all members." : 
+                Text(sharedSuiteManager.userRole == .owner ?
+                    "This will permanently delete the shared suite for all members." :
                     "You will be removed from this shared suite.")
+            }
+            .alert("Apply Default Cost to All Seats", isPresented: $showApplyToAllAlert) {
+                Button("Cancel", role: .cancel) { }
+                Button("Continue", role: .destructive) {
+                    showFinalApplyToAllAlert = true
+                }
+            } message: {
+                Text("This will overwrite the cost of all seats across all concerts with the default cost of $\(String(format: "%.0f", settingsManager.defaultSeatCost)). This action cannot be undone.")
+            }
+            .alert("Final Confirmation", isPresented: $showFinalApplyToAllAlert) {
+                Button("Cancel", role: .cancel) { }
+                Button("Apply to All Seats", role: .destructive) {
+                    for i in 0..<concertManager.concerts.count {
+                        for j in 0..<concertManager.concerts[i].seats.count {
+                            concertManager.concerts[i].seats[j].cost = settingsManager.defaultSeatCost
+                        }
+                    }
+                    concertManager.saveConcerts()
+                    HapticManager.shared.notification(type: .success)
+                }
+            } message: {
+                Text("Are you absolutely sure? This will overwrite ALL seat pricing data across ALL concerts and cannot be undone.")
             }
         }
     }
