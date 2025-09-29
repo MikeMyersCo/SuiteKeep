@@ -443,14 +443,238 @@ extension Color {
     static let seatAvailable = Color(red: 0.2, green: 0.85, blue: 0.5) // Vibrant green
     static let seatReserved = Color(red: 1.0, green: 0.7, blue: 0.0) // Warm yellow
     static let seatSold = Color(red: 0.3, green: 0.6, blue: 1.0) // Bright blue
+
+    // MARK: - Liquid Glass Colors
+    static let glassWhite = Color.white.opacity(0.1)
+    static let glassBorder = Color.white.opacity(0.2)
+    static let glassHighlight = Color.white.opacity(0.4)
+    static let glassShimmer = Color.white.opacity(0.6)
+
+    // Glass-optimized accent colors with vibrancy
+    static let liquidBlue = Color(red: 0.3, green: 0.7, blue: 1.0)
+    static let liquidPurple = Color(red: 0.6, green: 0.4, blue: 1.0)
+    static let liquidTeal = Color(red: 0.3, green: 0.9, blue: 0.8)
+    static let liquidPink = Color(red: 1.0, green: 0.4, blue: 0.7)
+    static let liquidGreen = Color(red: 0.4, green: 0.9, blue: 0.5)
+    static let liquidOrange = Color(red: 1.0, green: 0.6, blue: 0.3)
+}
+
+// MARK: - Liquid Glass View Modifiers
+struct LiquidGlassBackground: ViewModifier {
+    var cornerRadius: CGFloat = 20
+    var intensity: Double = 0.15
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                ZStack {
+                    // Base ultra thin material
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .fill(.ultraThinMaterial)
+
+                    // Glass tint overlay
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .fill(Color.glassWhite)
+
+                    // Subtle gradient overlay for depth
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(intensity * 0.6),
+                                    Color.clear,
+                                    Color.black.opacity(intensity * 0.3)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+
+                    // Border glow
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [
+                                    Color.glassBorder,
+                                    Color.glassBorder.opacity(0.5),
+                                    Color.glassBorder
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                }
+            )
+            .shadow(color: Color.black.opacity(0.1), radius: 20, x: 0, y: 10)
+            .shadow(color: Color.black.opacity(0.05), radius: 40, x: 0, y: 20)
+    }
+}
+
+struct LiquidGlassCard: ViewModifier {
+    var accentColor: Color = .liquidBlue
+    var cornerRadius: CGFloat = 24
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                ZStack {
+                    // Base glass material
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .fill(.ultraThinMaterial)
+
+                    // Colored accent gradient overlay
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    accentColor.opacity(0.2),
+                                    accentColor.opacity(0.05),
+                                    Color.clear
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+
+                    // Mesh gradient effect
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    accentColor.opacity(0.15),
+                                    Color.clear
+                                ],
+                                center: .topLeading,
+                                startRadius: 0,
+                                endRadius: 300
+                            )
+                        )
+
+                    // Border with gradient
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [
+                                    accentColor.opacity(0.4),
+                                    Color.glassHighlight,
+                                    accentColor.opacity(0.2)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1.5
+                        )
+                }
+            )
+            .shadow(color: accentColor.opacity(0.15), radius: 15, x: 0, y: 8)
+            .shadow(color: Color.black.opacity(0.1), radius: 30, x: 0, y: 15)
+    }
+}
+
+struct LiquidGlassButton: ViewModifier {
+    var accentColor: Color = .liquidBlue
+    var isPressed: Bool = false
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(.ultraThinMaterial)
+
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    accentColor.opacity(isPressed ? 0.5 : 0.3),
+                                    accentColor.opacity(isPressed ? 0.3 : 0.15)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+
+                    RoundedRectangle(cornerRadius: 16)
+                        .strokeBorder(accentColor.opacity(0.5), lineWidth: 1)
+                }
+            )
+            .scaleEffect(isPressed ? 0.96 : 1.0)
+            .shadow(color: accentColor.opacity(0.3), radius: isPressed ? 5 : 10, x: 0, y: isPressed ? 2 : 5)
+    }
+}
+
+struct ShimmerEffect: ViewModifier {
+    @State private var shimmerOffset: CGFloat = -1
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(
+                GeometryReader { geometry in
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color.clear,
+                                    Color.glassShimmer,
+                                    Color.clear
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .rotationEffect(.degrees(45))
+                        .offset(x: shimmerOffset * geometry.size.width * 2)
+                        .animation(
+                            Animation.linear(duration: 2.5)
+                                .repeatForever(autoreverses: false),
+                            value: shimmerOffset
+                        )
+                }
+                .clipped()
+            )
+            .onAppear {
+                shimmerOffset = 1
+            }
+    }
+}
+
+// View extension for easy application
+extension View {
+    func liquidGlass(cornerRadius: CGFloat = 20, intensity: Double = 0.15) -> some View {
+        self.modifier(LiquidGlassBackground(cornerRadius: cornerRadius, intensity: intensity))
+    }
+
+    func liquidGlassCard(accentColor: Color = .liquidBlue, cornerRadius: CGFloat = 24) -> some View {
+        self.modifier(LiquidGlassCard(accentColor: accentColor, cornerRadius: cornerRadius))
+    }
+
+    func liquidGlassButton(accentColor: Color = .liquidBlue, isPressed: Bool = false) -> some View {
+        self.modifier(LiquidGlassButton(accentColor: accentColor, isPressed: isPressed))
+    }
+
+    func shimmer() -> some View {
+        self.modifier(ShimmerEffect())
+    }
+
+    // Smooth spring animation for all interactions
+    func smoothSpring() -> Animation {
+        .spring(response: 0.4, dampingFraction: 0.75, blendDuration: 0)
+    }
+
+    // Fluid scale effect for interactive elements
+    func fluidScale(isPressed: Bool) -> some View {
+        self.scaleEffect(isPressed ? 0.95 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isPressed)
+    }
 }
 
 // MARK: - Haptic Feedback Manager
 class HapticManager {
     static let shared = HapticManager()
-    
+
     private init() {}
-    
+
     func impact(style: UIImpactFeedbackGenerator.FeedbackStyle) {
         #if canImport(UIKit)
         let generator = UIImpactFeedbackGenerator(style: style)
@@ -458,7 +682,7 @@ class HapticManager {
         generator.impactOccurred()
         #endif
     }
-    
+
     func notification(type: UINotificationFeedbackGenerator.FeedbackType) {
         #if canImport(UIKit)
         let generator = UINotificationFeedbackGenerator()
@@ -466,7 +690,7 @@ class HapticManager {
         generator.notificationOccurred(type)
         #endif
     }
-    
+
     func selection() {
         #if canImport(UIKit)
         let generator = UISelectionFeedbackGenerator()
@@ -2369,31 +2593,35 @@ struct SuiteSummaryView: View {
                     value: "\(totalTicketsSold)",
                     subtitle: "tickets sold",
                     gradient: Color.cardGreen,
-                    icon: "ticket.fill"
+                    icon: "ticket.fill",
+                    accentColor: .liquidGreen
                 )
-                
+
                 MetricCard(
                     title: "Revenue",
                     value: "$\(Int(totalRevenue))",
                     subtitle: "total earnings",
                     gradient: Color.cardBlue,
-                    icon: "dollarsign.circle.fill"
+                    icon: "dollarsign.circle.fill",
+                    accentColor: .liquidBlue
                 )
-                
+
                 MetricCard(
                     title: "Total Cost",
                     value: "$\(Int(totalCost))",
                     subtitle: "ticket costs",
                     gradient: Color.cardOrange,
-                    icon: "minus.circle.fill"
+                    icon: "minus.circle.fill",
+                    accentColor: .liquidOrange
                 )
-                
+
                 MetricCard(
                     title: "Profit",
                     value: "$\(Int(totalProfit))",
                     subtitle: "net earnings",
                     gradient: totalProfit >= 0 ? Color.cardGreen : Color.cardPink,
-                    icon: totalProfit >= 0 ? "arrow.up.circle.fill" : "arrow.down.circle.fill"
+                    icon: totalProfit >= 0 ? "arrow.up.circle.fill" : "arrow.down.circle.fill",
+                    accentColor: totalProfit >= 0 ? .liquidGreen : .liquidPink
                 )
             }
         }
@@ -2414,72 +2642,73 @@ struct MetricCard: View {
     let subtitle: String
     let gradient: LinearGradient
     let icon: String
-    
+    var accentColor: Color = .liquidBlue
+
     @State private var isPressed = false
     @State private var animateValue = false
-    
+    @State private var showShimmer = false
+
     var body: some View {
         VStack(spacing: 8) {
-            // Icon with gradient background - centered
+            // Icon with glass effect - centered
             ZStack {
                 Circle()
-                    .fill(gradient)
-                    .frame(width: 36, height: 36)
-                    .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
-                
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        Circle()
+                            .fill(
+                                RadialGradient(
+                                    colors: [accentColor.opacity(0.4), accentColor.opacity(0.15)],
+                                    center: .center,
+                                    startRadius: 0,
+                                    endRadius: 20
+                                )
+                            )
+                    )
+                    .overlay(
+                        Circle()
+                            .strokeBorder(accentColor.opacity(0.5), lineWidth: 1.5)
+                    )
+                    .frame(width: 40, height: 40)
+                    .shadow(color: accentColor.opacity(0.3), radius: 8, x: 0, y: 4)
+
                 Image(systemName: icon)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.white)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(accentColor)
             }
-            
+
             Spacer(minLength: 2)
-            
+
             VStack(spacing: 2) {
                 Text(value)
-                    .font(.system(size: 22, weight: .black, design: .rounded))
-                    .foregroundColor(.white)
+                    .font(.system(size: 24, weight: .black, design: .rounded))
+                    .foregroundColor(.primary)
                     .scaleEffect(animateValue ? 1.05 : 1.0)
                     .animation(.spring(response: 0.6, dampingFraction: 0.8), value: animateValue)
-                
+
                 Text(title)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.9))
+                    .foregroundColor(.secondary)
             }
-            
+
             Spacer(minLength: 6)
         }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
         .frame(maxWidth: .infinity)
-        .frame(height: 90)
-        .background(
-            ZStack {
-                // Main gradient background
-                RoundedRectangle(cornerRadius: 24)
-                    .fill(gradient)
-                
-                // Subtle overlay pattern
-                RoundedRectangle(cornerRadius: 24)
-                    .fill(
-                        LinearGradient(
-                            colors: [.white.opacity(0.1), .clear, .black.opacity(0.1)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            }
-            .shadow(color: .black.opacity(0.15), radius: 15, x: 0, y: 8)
-        )
+        .frame(height: 100)
+        .liquidGlassCard(accentColor: accentColor, cornerRadius: 24)
         .scaleEffect(isPressed ? 0.96 : 1.0)
         .rotation3DEffect(
-            .degrees(isPressed ? 2 : 0),
-            axis: (x: 1, y: 0, z: 0)
+            .degrees(isPressed ? 3 : 0),
+            axis: (x: 1, y: 1, z: 0)
         )
         .onTapGesture {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
                 isPressed.toggle()
                 animateValue.toggle()
             }
+            HapticManager.shared.impact(style: .medium)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
                     isPressed.toggle()
@@ -2694,14 +2923,49 @@ struct DynamicSeatView: View {
 struct DynamicFirepitView: View {
     let isPulsing: Bool
     @State private var flameOffset: CGFloat = 0
-    
+
     var body: some View {
         ZStack {
+            // Glass container background
+            Circle()
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    Circle()
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    Color.liquidOrange.opacity(0.3),
+                                    Color.fireYellow.opacity(0.2),
+                                    Color.clear
+                                ],
+                                center: .center,
+                                startRadius: 0,
+                                endRadius: 35
+                            )
+                        )
+                )
+                .overlay(
+                    Circle()
+                        .strokeBorder(
+                            LinearGradient(
+                                colors: [
+                                    Color.liquidOrange.opacity(0.6),
+                                    Color.fireYellow.opacity(0.4)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 2
+                        )
+                )
+                .frame(width: 70, height: 70)
+                .shadow(color: Color.liquidOrange.opacity(0.3), radius: 15, x: 0, y: 5)
+
             // Firepit base
             Circle()
                 .fill(
                     RadialGradient(
-                        colors: [.yellow, .orange, .red, .black],
+                        colors: [.yellow, .orange, .red, .black.opacity(0.8)],
                         center: .center,
                         startRadius: 5,
                         endRadius: 25
@@ -2710,7 +2974,7 @@ struct DynamicFirepitView: View {
                 .frame(width: 50, height: 50)
                 .scaleEffect(isPulsing ? 1.2 : 1.0)
                 .shadow(color: .orange, radius: isPulsing ? 15 : 10)
-            
+
             // Animated flames
             VStack(spacing: -5) {
                 ForEach(0..<3, id: \.self) { index in
@@ -2722,7 +2986,7 @@ struct DynamicFirepitView: View {
                 }
             }
             .offset(y: -10)
-            
+
             // Sparks effect
             ForEach(0..<5, id: \.self) { _ in
                 Circle()
@@ -6985,97 +7249,111 @@ class ConcertDataManager: ObservableObject {
 // MARK: - Concert Row View
 struct ConcertRowView: View {
     let concert: Concert
-    
+
     var statusColor: Color {
         if concert.ticketsSold == 8 {
-            return .modernSuccess
+            return .liquidGreen
         } else if concert.ticketsSold > 0 {
-            return .modernWarning
+            return .liquidOrange
         } else if concert.ticketsReserved > 0 {
-            return .cyan
+            return .liquidTeal
         } else {
-            return .modernTextSecondary
+            return .liquidBlue
         }
     }
-    
+
     var body: some View {
         HStack(spacing: 16) {
-            // Concert Icon
-            Circle()
-                .fill(statusColor.opacity(0.1))
-                .frame(width: 52, height: 52)
-                .overlay(
-                    Image(systemName: "music.note")
-                        .font(.system(size: 20, weight: .medium))
-                        .foregroundColor(statusColor)
-                )
-            
+            // Concert Icon with glass effect
+            ZStack {
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        Circle()
+                            .fill(
+                                RadialGradient(
+                                    colors: [statusColor.opacity(0.3), statusColor.opacity(0.1)],
+                                    center: .center,
+                                    startRadius: 0,
+                                    endRadius: 26
+                                )
+                            )
+                    )
+                    .overlay(
+                        Circle()
+                            .strokeBorder(statusColor.opacity(0.4), lineWidth: 1.5)
+                    )
+                    .frame(width: 52, height: 52)
+                    .shadow(color: statusColor.opacity(0.2), radius: 6, x: 0, y: 3)
+
+                Image(systemName: "music.note")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundColor(statusColor)
+            }
+
             // Concert Info
             VStack(alignment: .leading, spacing: 4) {
                 Text(concert.artist)
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundColor(.modernText)
-                
+                    .foregroundColor(.primary)
+
                 Text(concert.date, style: .date)
                     .font(.system(size: 14))
-                    .foregroundColor(.modernTextSecondary)
-                
+                    .foregroundColor(.secondary)
+
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 4) {
                         Circle()
-                            .fill(concert.ticketsSold == 8 ? Color.modernSuccess : (concert.ticketsSold > 0 ? Color.modernWarning : Color.modernTextSecondary))
+                            .fill(concert.ticketsSold == 8 ? Color.liquidGreen : (concert.ticketsSold > 0 ? Color.liquidOrange : Color.secondary))
                             .frame(width: 6, height: 6)
                         Text("\(concert.ticketsSold)/8 tickets sold")
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(concert.ticketsSold == 8 ? .modernSuccess : (concert.ticketsSold > 0 ? .modernWarning : .modernTextSecondary))
+                            .foregroundColor(concert.ticketsSold == 8 ? .liquidGreen : (concert.ticketsSold > 0 ? .liquidOrange : .secondary))
                     }
-                    
+
                     if concert.ticketsReserved > 0 {
                         HStack(spacing: 4) {
                             Circle()
-                                .fill(Color.cyan)
+                                .fill(Color.liquidTeal)
                                 .frame(width: 6, height: 6)
                             Text("\(concert.ticketsReserved) reserved")
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.cyan)
+                                .foregroundColor(.liquidTeal)
                         }
                     }
-                    
+
                     // Parking ticket status
                     if concert.parkingTicketSold {
                         HStack(spacing: 4) {
                             Image(systemName: "car.fill")
                                 .font(.system(size: 8))
-                                .foregroundColor(.green)
+                                .foregroundColor(.liquidGreen)
                             Text("Parking sold")
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.green)
+                                .foregroundColor(.liquidGreen)
                         }
                     } else if concert.parkingTicketReserved {
                         HStack(spacing: 4) {
                             Image(systemName: "car.fill")
                                 .font(.system(size: 8))
-                                .foregroundColor(.orange)
+                                .foregroundColor(.liquidOrange)
                             Text("Parking reserved")
                                 .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(.orange)
+                                .foregroundColor(.liquidOrange)
                         }
                     }
                 }
             }
-            
+
             Spacer()
-            
+
             // Chevron
             Image(systemName: "chevron.right")
                 .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.modernTextSecondary)
+                .foregroundColor(.secondary)
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.modernSecondary)
-        )
+        .liquidGlass(cornerRadius: 20, intensity: 0.12)
     }
 }
 
@@ -9135,25 +9413,48 @@ struct CompactSeatView: View {
     
     var body: some View {
         VStack(spacing: -2) {  // Negative spacing to bring text very close to seat
-            // Seat button
+            // Seat button with liquid glass effect
             ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(seatColor)
-                    .frame(width: 44, height: 44)
-                    .scaleEffect(isPressed ? 0.95 : 1.0)
-                    .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
-                
+                // Glass background
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(.ultraThinMaterial)
+                    .frame(width: 48, height: 48)
+
+                // Colored gradient overlay
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                seatColor.opacity(0.6),
+                                seatColor.opacity(0.4)
+                            ],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: 24
+                        )
+                    )
+                    .frame(width: 48, height: 48)
+
+                // Border
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(seatColor.opacity(0.7), lineWidth: 2)
+                    .frame(width: 48, height: 48)
+
                 if isBatchMode && isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(.system(size: 14, weight: .bold))
                         .foregroundColor(.white)
+                        .shadow(color: .black.opacity(0.3), radius: 2)
                 } else {
                     Text("\(seatNumber)")
-                        .font(.system(size: 16, weight: .bold, design: .rounded))
-                        .foregroundColor(textColor)
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                        .shadow(color: .black.opacity(0.3), radius: 2)
                 }
             }
-            
+            .scaleEffect(isPressed ? 0.92 : 1.0)
+            .shadow(color: seatColor.opacity(0.4), radius: isPressed ? 4 : 8, x: 0, y: isPressed ? 2 : 4)
+
             // Status/Price text - always present with fixed height for alignment
             Text(statusText.isEmpty ? " " : statusText)
                 .font(.system(size: 9, weight: .semibold))
@@ -9167,31 +9468,32 @@ struct CompactSeatView: View {
         .offset(x: shakeOffset)
         .onTapGesture {
             guard !isBuyerView else { return } // Disable interactions in buyer view
-            
-            withAnimation(.easeInOut(duration: 0.15)) {
+
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
                 isPressed = true
             }
+            HapticManager.shared.impact(style: .medium)
             onTap()
-            
+
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                withAnimation(.easeInOut(duration: 0.15)) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
                     isPressed = false
                 }
             }
         }
         .onLongPressGesture(minimumDuration: 0.6) {
             guard !isBuyerView else { return }
-            
+
             // Shake animation to indicate batch mode entry
             withAnimation(.interpolatingSpring(stiffness: 900, damping: 8).repeatCount(3, autoreverses: true)) {
                 shakeOffset = 5
             }
-            
+
             // Reset shake after animation
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 shakeOffset = 0
             }
-            
+
             HapticManager.shared.impact(style: .heavy)
             onLongPress()
         }
