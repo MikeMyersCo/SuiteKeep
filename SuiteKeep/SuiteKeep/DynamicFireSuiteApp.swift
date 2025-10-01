@@ -797,325 +797,215 @@ struct ShareableBuyerView: View {
     let concert: Concert
     let suiteName: String
     let venueLocation: String
-    @ObservedObject var shareManager = ShareManager.shared
-    @State private var selectedFormat: ShareManager.ShareFormat = .square
-    @State private var showingShareSheet = false
-    @State private var capturedImage: UIImage?
-    
+    @State private var buyerViewMode: BuyerViewMode = .seatView
+
+    enum BuyerViewMode {
+        case seatView
+        case listView
+    }
+
     var availableSeats: [Seat] {
         concert.seats.filter { $0.status == .available }
     }
-    
+
     var soldSeats: [Seat] {
         concert.seats.filter { $0.status == .sold }
     }
     
-    var urgencyMessage: String {
-        let availableCount = availableSeats.count
-        switch availableCount {
-        case 0: return "SOLD OUT"
-        case 1: return "LAST SEAT AVAILABLE!"
-        case 2: return "ONLY 2 SEATS LEFT!"
-        case 3...4: return "ONLY \(availableCount) SEATS REMAINING"
-        default: return "\(availableCount) PREMIUM SEATS AVAILABLE"
-        }
-    }
-    
-    var urgencyColor: Color {
-        let availableCount = availableSeats.count
-        switch availableCount {
-        case 0: return .red
-        case 1...2: return .orange
-        case 3...4: return .yellow
-        default: return .green
-        }
-    }
-    
     var body: some View {
         ZStack {
-            // Premium gradient background
+            // Liquid glass gradient background
             LinearGradient(
                 colors: [
                     Color.black,
-                    Color.black.opacity(0.9),
-                    Color.orange.opacity(0.1),
+                    Color.liquidBlue.opacity(0.03),
+                    Color.liquidPurple.opacity(0.02),
                     Color.black
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
             .ignoresSafeArea()
-            
-            VStack(spacing: 24) {
-                // Header with venue branding
+
+            VStack(spacing: 16) {
+                // Header
                 VStack(spacing: 8) {
-                    Text(suiteName.uppercased())
-                        .font(.system(size: 32, weight: .black, design: .rounded))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [.orange, .yellow, .orange],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .shadow(color: .orange, radius: 2, x: 0, y: 0)
-                        .multilineTextAlignment(.center)
-                    
-                    Text(venueLocation)
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.white.opacity(0.8))
-                        .textCase(.uppercase)
-                        .tracking(2)
-                        .multilineTextAlignment(.center)
-                }
-                
-                // Concert details
-                VStack(spacing: 12) {
                     Text(concert.artist)
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
-                        .multilineTextAlignment(.center)
-                    
-                    Text(concert.date.formatted(date: .abbreviated, time: .shortened))
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.9))
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 8)
-                        .background(
-                            Capsule()
-                                .fill(.ultraThinMaterial)
-                                .overlay(
-                                    Capsule()
-                                        .stroke(Color.orange.opacity(0.3), lineWidth: 1)
-                                )
-                        )
-                }
-                
-                // Urgency banner
-                Text(urgencyMessage)
-                    .font(.system(size: 16, weight: .heavy))
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(
-                        Capsule()
-                            .fill(urgencyColor)
-                            .shadow(color: urgencyColor, radius: 4, x: 0, y: 0)
-                    )
-                    .scaleEffect(availableSeats.count <= 2 ? 1.05 : 1.0)
-                    .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true), value: availableSeats.count <= 2)
-                
-                // Enhanced seat visualization
-                BuyerSuiteVisualization(concert: concert)
-                    .frame(height: 320)
-                
-                Spacer()
-                
-                // Branding footer
-                HStack {
-                    Image(systemName: "flame.fill")
-                        .foregroundColor(.orange)
-                    Text("Powered by SuiteKeep")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(.white.opacity(0.6))
-                }
-            }
-            .padding(24)
-            
-            // Floating share button
-            VStack {
-                Spacer()
-                HStack {
-                    Spacer()
-                    Button(action: {
-                        Task {
-                            await captureAndShare()
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundColor(.modernText)
+
+                    Text(concert.date, style: .date)
+                        .font(.system(size: 14))
+                        .foregroundColor(.modernTextSecondary)
+
+                    // Parking status
+                    if let parkingTicket = concert.parkingTicket {
+                        HStack(spacing: 8) {
+                            Image(systemName: "parkingsign.circle.fill")
+                                .font(.system(size: 14, weight: .semibold))
+                            Text("Parking: \(parkingTicket.status == .available ? "Available" : "Sold")")
+                                .font(.system(size: 14, weight: .semibold))
                         }
-                    }) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                            .frame(width: 56, height: 56)
-                            .background(
-                                Circle()
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [.orange, .red],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
-                                        )
-                                    )
-                                    .shadow(color: .orange.opacity(0.5), radius: 8, x: 0, y: 4)
-                            )
+                        .foregroundColor(parkingTicket.status == .available ? .green : .red)
                     }
-                    .scaleEffect(1.0)
-                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showingShareSheet)
                 }
-                .padding(.trailing, 24)
-                .padding(.bottom, 24)
-            }
-        }
-        .sheet(isPresented: $showingShareSheet) {
-            if let image = capturedImage {
-                ShareFormatSelector(
-                    image: image,
-                    selectedFormat: $selectedFormat,
-                    onShare: { format in
-                        print("DEBUG: onShare called with format: \(format)")
-                        
-                        // First dismiss the format selector sheet
-                        showingShareSheet = false
-                        
-                        // Wait longer to ensure complete dismissal, then present share sheet
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                            print("DEBUG: Presenting share sheet after delay")
-                            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                               let window = windowScene.windows.first {
-                                
-                                // Find the topmost presented view controller
-                                var topController = window.rootViewController
-                                while let presentedController = topController?.presentedViewController {
-                                    topController = presentedController
+                .padding(.top, 20)
+
+                // Seat View - U-Shaped Suite Layout
+                VStack(spacing: 12) {
+                    // Stage indicator
+                    HStack {
+                        Spacer()
+                        HStack(spacing: 6) {
+                            Image(systemName: "music.mic")
+                                .font(.system(size: 14, weight: .medium))
+                                .foregroundColor(.blue)
+                            Text("STAGE")
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.blue)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+                        Spacer()
+                    }
+
+                    // Main suite card with U-shaped layout
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(.clear)
+                            .frame(height: 220)
+                            .liquidGlassCard(accentColor: .liquidTeal, cornerRadius: 20)
+
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(.clear)
+                            .frame(height: 220)
+                            .overlay(
+                            ZStack {
+                                // Bottom row
+                                VStack {
+                                    Spacer()
+                                    HStack(spacing: 14) {
+                                        ShareableCompactSeatView(seatNumber: 6, seat: concert.seats[5])
+                                        ShareableCompactSeatView(seatNumber: 5, seat: concert.seats[4])
+                                        ShareableCompactSeatView(seatNumber: 4, seat: concert.seats[3])
+                                        ShareableCompactSeatView(seatNumber: 3, seat: concert.seats[2])
+                                    }
+                                    .padding(.bottom, 8)
                                 }
-                                
-                                if let topController = topController {
-                                    let activityViewController = UIActivityViewController(
-                                        activityItems: [image],
-                                        applicationActivities: nil
-                                    )
-                                    
-                                    // Configure for iPad
-                                    if let popover = activityViewController.popoverPresentationController {
-                                        popover.sourceView = topController.view
-                                        popover.sourceRect = CGRect(x: topController.view.bounds.midX, y: topController.view.bounds.midY, width: 0, height: 0)
-                                        popover.permittedArrowDirections = []
+
+                                // Left side
+                                HStack {
+                                    VStack(spacing: -2) {
+                                        ShareableCompactSeatView(seatNumber: 8, seat: concert.seats[7])
+                                        ShareableCompactSeatView(seatNumber: 7, seat: concert.seats[6])
+                                        Spacer()
+                                            .frame(height: 72)
                                     }
-                                    
-                                    topController.present(activityViewController, animated: true) {
-                                        print("DEBUG: Share sheet presented successfully")
+                                    .padding(.leading, 8)
+
+                                    Spacer()
+                                }
+
+                                // Right side
+                                HStack {
+                                    Spacer()
+
+                                    VStack(spacing: -2) {
+                                        ShareableCompactSeatView(seatNumber: 1, seat: concert.seats[0])
+                                        ShareableCompactSeatView(seatNumber: 2, seat: concert.seats[1])
+                                        Spacer()
+                                            .frame(height: 72)
                                     }
-                                } else {
-                                    print("DEBUG: Could not find top controller")
+                                    .padding(.trailing, 8)
+                                }
+
+                                // Center firepit
+                                VStack {
+                                    CompactFirepitView(isPulsing: true)
+                                        .offset(y: 25)
+                                    Spacer()
                                 }
                             }
-                        }
+                            .padding(.top, 20)
+                        )
                     }
-                )
-                .onAppear {
-                    print("DEBUG: Sheet is presenting with image")
                 }
-            } else {
-                Text("No image captured")
-                    .onAppear {
-                        print("DEBUG: Sheet presenting but no image")
-                    }
+
+                Spacer()
             }
+            .padding(20)
         }
     }
-    
-    @MainActor
-    private func captureAndShare() async {
-        print("DEBUG: captureAndShare called")
-        // Capture the current view content (without the share button overlay)
-        let contentView = VStack(spacing: 16) {
-            // Header with venue branding
-            VStack(spacing: 8) {
-                Text(suiteName.uppercased())
-                    .font(.system(size: 32, weight: .black, design: .rounded))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.orange, .yellow, .orange],
-                            startPoint: .leading,
-                            endPoint: .trailing
+}
+
+// MARK: - Shareable Compact Seat View (for captures - no interactions, no prices)
+struct ShareableCompactSeatView: View {
+    let seatNumber: Int
+    let seat: Seat
+
+    var seatColor: Color {
+        // Buyer view: only green for available, red for sold/reserved
+        switch seat.status {
+        case .available: return .green
+        case .reserved, .sold: return .red
+        }
+    }
+
+    var statusText: String {
+        // Buyer view: simple "AVAILABLE" or "SOLD"
+        switch seat.status {
+        case .available: return "AVAILABLE"
+        case .reserved, .sold: return "SOLD"
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: -2) {
+            // Seat button with liquid glass effect (matching CompactSeatView)
+            ZStack {
+                // Glass background
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(.ultraThinMaterial)
+                    .frame(width: 48, height: 48)
+
+                // Colored gradient overlay
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                seatColor.opacity(0.6),
+                                seatColor.opacity(0.4)
+                            ],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: 24
                         )
                     )
-                    .shadow(color: .orange, radius: 2, x: 0, y: 0)
-                    .multilineTextAlignment(.center)
-                
-                Text(venueLocation)
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.white.opacity(0.8))
-                    .textCase(.uppercase)
-                    .tracking(2)
-                    .multilineTextAlignment(.center)
-            }
-            
-            // Concert details
-            VStack(spacing: 12) {
-                Text(concert.artist)
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .frame(width: 48, height: 48)
+
+                // Border
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(seatColor.opacity(0.7), lineWidth: 2)
+                    .frame(width: 48, height: 48)
+
+                // Seat number
+                Text("\(seatNumber)")
+                    .font(.system(size: 18, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
-                    .multilineTextAlignment(.center)
-                
-                Text(concert.date.formatted(date: .abbreviated, time: .shortened))
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white.opacity(0.9))
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 8)
-                    .background(
-                        Capsule()
-                            .fill(.ultraThinMaterial)
-                            .overlay(
-                                Capsule()
-                                    .stroke(Color.orange.opacity(0.3), lineWidth: 1)
-                            )
-                    )
+                    .shadow(color: .black.opacity(0.3), radius: 2)
             }
-            
-            // Urgency banner
-            Text(urgencyMessage)
-                .font(.system(size: 16, weight: .heavy))
-                .foregroundColor(.black)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(
-                    Capsule()
-                        .fill(urgencyColor)
-                        .shadow(color: urgencyColor, radius: 4, x: 0, y: 0)
-                )
-                .scaleEffect(availableSeats.count <= 2 ? 1.05 : 1.0)
-            
-            // Enhanced seat visualization
-            BuyerSuiteVisualization(concert: concert)
-                .frame(height: 280)
-            
-            // Branding footer
-            HStack {
-                Image(systemName: "flame.fill")
-                    .foregroundColor(.orange)
-                Text("Powered by SuiteKeep")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(.white.opacity(0.6))
-            }
-            .padding(.top, 20)
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
-        .frame(maxWidth: .infinity)
-        .background(
-            LinearGradient(
-                colors: [
-                    Color.black,
-                    Color.black.opacity(0.9),
-                    Color.orange.opacity(0.1),
-                    Color.black
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
-        
-        if let image = await shareManager.captureView(contentView, format: selectedFormat) {
-            print("DEBUG: Image captured successfully")
-            capturedImage = image
-            
-            // Present share sheet directly
-            DispatchQueue.main.async {
-                self.showingShareSheet = true
-                print("DEBUG: Setting showingShareSheet to true")
-            }
-        } else {
-            print("DEBUG: Failed to capture image")
+            .shadow(color: seatColor.opacity(0.4), radius: 8, x: 0, y: 4)
+
+            // Status text
+            Text(statusText.isEmpty ? " " : statusText)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.8)
+                .frame(height: 24)
+                .opacity(statusText.isEmpty ? 0 : 1)
         }
     }
 }
@@ -7946,14 +7836,19 @@ struct ConcertDetailView: View {
     
     var body: some View {
         ZStack {
-            // Dynamic background that adapts to light/dark mode
-            Color(.systemBackground)
-            .ignoresSafeArea()
-            
-            ScrollView {
-                VStack(spacing: 16) {
-                    // Navigation Header
-                    HStack {
+            // Full screen background
+            Color.black
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                // Top safe area spacer
+                Color.clear
+                    .frame(height: 0)
+
+                ScrollView {
+                    VStack(spacing: 16) {
+                        // Navigation Header
+                        HStack {
                         Button(action: {
                             dismiss()
                         }) {
@@ -8010,8 +7905,8 @@ struct ConcertDetailView: View {
                         }
                     }
                     .padding(.horizontal)
-                    .padding(.top, 20)
-                    
+                    .padding(.top, 8)
+
                     // Concert Header Card with batch operations overlay
                     ZStack {
                         VStack(spacing: 12) {
@@ -8121,10 +8016,7 @@ struct ConcertDetailView: View {
                         }
                         .padding(12)
                         .frame(maxWidth: .infinity)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color.modernSecondary)
-                        )
+                        .liquidGlassCard(accentColor: .liquidPurple, cornerRadius: 20)
                         .opacity(!isEditingDetails && isBatchMode && !selectedSeats.isEmpty ? 0.3 : 1.0)
                         
                         // Batch operations overlay (only when not editing and batch mode is active)
@@ -8229,47 +8121,46 @@ struct ConcertDetailView: View {
                         }
                     }
                     
-                    // View Toggle (Two Options)
-                    HStack(spacing: 0) {
-                        Button(action: {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                viewMode = .seatView
+                    // View Toggle (Two Options) - Hidden in buyer view
+                    if !isBuyerView {
+                        HStack(spacing: 0) {
+                            Button(action: {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    viewMode = .seatView
+                                }
+                            }) {
+                                Text("Seat View")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(viewMode == .seatView ? .white : .modernTextSecondary)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                                    .background(
+                                        viewMode == .seatView ? Color.modernAccent : Color.clear
+                                    )
                             }
-                        }) {
-                            Text("Seat View")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(viewMode == .seatView ? .white : .modernTextSecondary)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .background(
-                                    viewMode == .seatView ? Color.modernAccent : Color.clear
-                                )
-                        }
-                        
-                        Button(action: {
-                            withAnimation(.easeInOut(duration: 0.3)) {
-                                viewMode = .listView
+
+                            Button(action: {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    viewMode = .listView
+                                }
+                            }) {
+                                Text("List View")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(viewMode == .listView ? .white : .modernTextSecondary)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
+                                    .background(
+                                        viewMode == .listView ? Color.modernAccent : Color.clear
+                                    )
                             }
-                        }) {
-                            Text("List View")
-                                .font(.system(size: 14, weight: .medium))
-                                .foregroundColor(viewMode == .listView ? .white : .modernTextSecondary)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 10)
-                                .background(
-                                    viewMode == .listView ? Color.modernAccent : Color.clear
-                                )
                         }
+                        .liquidGlass(cornerRadius: 12, intensity: 0.15)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.modernAccent.opacity(0.3), lineWidth: 1)
+                        )
+                        .padding(.horizontal)
                     }
-                    .background(
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(Color.modernSecondary)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.modernAccent.opacity(0.3), lineWidth: 1)
-                    )
-                    .padding(.horizontal)
                     
                     // Conditional view based on mode
                     switch viewMode {
@@ -8299,9 +8190,14 @@ struct ConcertDetailView: View {
                 }
                 .padding(.horizontal)
                 .padding(.top, 8)
+                .padding(.bottom)
+                }
             }
         }
         .navigationBarHidden(true)
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+        .toolbarBackground(.hidden, for: .navigationBar)
         .sheet(isPresented: $showingAllConcerts) {
             AllConcertsView(concertManager: concertManager, settingsManager: settingsManager)
         }
@@ -8858,10 +8754,16 @@ struct InteractiveFireSuiteView: View {
                 }
                 
                 // Main suite card with U-shaped layout
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(Color.modernCard)
-                    .frame(height: 220)
-                    .overlay(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(.clear)
+                        .frame(height: 220)
+                        .liquidGlassCard(accentColor: .liquidTeal, cornerRadius: 20)
+
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(.clear)
+                        .frame(height: 220)
+                        .overlay(
                         ZStack {
                             // Bottom row positioned at the bottom
                             VStack {
@@ -8982,7 +8884,7 @@ struct InteractiveFireSuiteView: View {
                         }
                         .padding(.top, 20)
                     )
-                    .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 2)
+                }
             }
             
             // Enhanced status legend and metrics
@@ -8998,7 +8900,7 @@ struct InteractiveFireSuiteView: View {
                             .font(.system(size: 12, weight: .medium))
                             .foregroundColor(.green)
                     }
-                    
+
                     // Reserved legend
                     HStack(spacing: 8) {
                         RoundedRectangle(cornerRadius: 6)
@@ -9008,7 +8910,7 @@ struct InteractiveFireSuiteView: View {
                             .font(.system(size: 12, weight: .medium))
                             .foregroundColor(.orange)
                     }
-                    
+
                     // Sold legend
                     HStack(spacing: 8) {
                         RoundedRectangle(cornerRadius: 6)
@@ -9021,11 +8923,7 @@ struct InteractiveFireSuiteView: View {
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 12)
-                .background(
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color(UIColor.systemBackground).opacity(0.8))
-                        .shadow(color: .black.opacity(0.05), radius: 4, x: 0, y: 2)
-                )
+                .liquidGlass(cornerRadius: 12, intensity: 0.12)
                 
                 // Enhanced revenue display (hidden in buyer view)
                 if !isBuyerView {
