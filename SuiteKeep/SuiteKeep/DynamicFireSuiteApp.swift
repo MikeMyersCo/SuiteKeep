@@ -2283,34 +2283,30 @@ struct DynamicDashboard: View {
                 ScrollView {
                     VStack(spacing: 16) {
                         // Modern Header Card
-                        VStack(spacing: 12) {
-                            Text("Dashboard")
-                                .font(.system(size: 32, weight: .bold, design: .rounded))
-                                .foregroundColor(.white)
-                            
-                            HStack(spacing: 8) {
-                                Image(systemName: "building.2")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.8))
-                                
+                        VStack(spacing: 8) {
+                            // Suite name - prominent
+                            HStack(spacing: 10) {
+                                Image(systemName: "building.2.fill")
+                                    .font(.system(size: 20, weight: .semibold))
+                                    .foregroundColor(.white)
+
                                 Text(settingsManager.suiteName)
-                                    .font(.system(size: 16, weight: .semibold))
+                                    .font(.system(size: 28, weight: .bold, design: .rounded))
                                     .foregroundColor(.white)
-                                
-                                Circle()
-                                    .fill(.white.opacity(0.5))
-                                    .frame(width: 4, height: 4)
-                                
-                                Image(systemName: "location")
+                            }
+
+                            // Venue location - secondary
+                            HStack(spacing: 8) {
+                                Image(systemName: "mappin.and.ellipse")
                                     .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.8))
-                                
+                                    .foregroundColor(.white.opacity(0.75))
+
                                 Text(settingsManager.venueLocation)
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(.white)
-                                
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.white.opacity(0.9))
                             }
                         }
+                        .frame(maxWidth: .infinity)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .padding(.horizontal, 20)
@@ -2340,8 +2336,7 @@ struct DynamicDashboard: View {
                             }
                             .shadow(color: .black.opacity(0.15), radius: 15, x: 0, y: 8)
                         )
-                        .padding(.top, 20)
-                        
+
                         // Suite Overview Summary
                         SuiteSummaryView(concerts: concerts, settingsManager: settingsManager, concertManager: concertManager)
                         
@@ -2352,6 +2347,7 @@ struct DynamicDashboard: View {
                     }
                     .padding(.horizontal)
                 }
+                .safeAreaPadding(.top, -8)
             }
             .navigationBarHidden(true)
             .sheet(item: $activeSheet) { sheetType in
