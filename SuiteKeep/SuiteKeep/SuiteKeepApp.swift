@@ -12,7 +12,16 @@ struct SuiteKeepApp: App {
     @StateObject private var sharedSuiteManager = SharedSuiteManager()
     @State private var incomingInvitation: String?
     @State private var showingInvitationAlert = false
-    
+
+    init() {
+        // Configure tab bar appearance for consistent background blur
+        let appearance = UITabBarAppearance()
+        appearance.configureWithDefaultBackground()
+
+        UITabBar.appearance().standardAppearance = appearance
+        UITabBar.appearance().scrollEdgeAppearance = appearance
+    }
+
     var body: some Scene {
         WindowGroup {
             DynamicFireSuiteApp()

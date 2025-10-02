@@ -459,9 +459,22 @@ extension Color {
     static let liquidOrange = Color(red: 1.0, green: 0.6, blue: 0.3)
 }
 
+// MARK: - Design System Constants
+extension CGFloat {
+    // Standardized corner radius scale
+    static let radiusSmall: CGFloat = 12      // Buttons, small controls
+    static let radiusMedium: CGFloat = 20     // Cards, containers
+    static let radiusLarge: CGFloat = 24      // Large panels, modal sheets
+
+    // Standardized spacing scale
+    static let spacingTight: CGFloat = 8      // Within components
+    static let spacingNormal: CGFloat = 16    // Related groups
+    static let spacingSections: CGFloat = 24  // Major sections
+}
+
 // MARK: - Liquid Glass View Modifiers
 struct LiquidGlassBackground: ViewModifier {
-    var cornerRadius: CGFloat = 20
+    var cornerRadius: CGFloat = .radiusMedium
     var intensity: Double = 0.15
 
     func body(content: Content) -> some View {
@@ -513,7 +526,7 @@ struct LiquidGlassBackground: ViewModifier {
 
 struct LiquidGlassCard: ViewModifier {
     var accentColor: Color = .liquidBlue
-    var cornerRadius: CGFloat = 24
+    var cornerRadius: CGFloat = .radiusLarge
 
     func body(content: Content) -> some View {
         content
@@ -566,6 +579,7 @@ struct LiquidGlassCard: ViewModifier {
                             lineWidth: 1.5
                         )
                 }
+                .drawingGroup()
             )
             .shadow(color: accentColor.opacity(0.15), radius: 15, x: 0, y: 8)
             .shadow(color: Color.black.opacity(0.1), radius: 30, x: 0, y: 15)
@@ -580,10 +594,10 @@ struct LiquidGlassButton: ViewModifier {
         content
             .background(
                 ZStack {
-                    RoundedRectangle(cornerRadius: 16)
+                    RoundedRectangle(cornerRadius: .radiusSmall)
                         .fill(.ultraThinMaterial)
 
-                    RoundedRectangle(cornerRadius: 16)
+                    RoundedRectangle(cornerRadius: .radiusSmall)
                         .fill(
                             LinearGradient(
                                 colors: [
@@ -595,7 +609,7 @@ struct LiquidGlassButton: ViewModifier {
                             )
                         )
 
-                    RoundedRectangle(cornerRadius: 16)
+                    RoundedRectangle(cornerRadius: .radiusSmall)
                         .strokeBorder(accentColor.opacity(0.5), lineWidth: 1)
                 }
             )
@@ -641,11 +655,11 @@ struct ShimmerEffect: ViewModifier {
 
 // View extension for easy application
 extension View {
-    func liquidGlass(cornerRadius: CGFloat = 20, intensity: Double = 0.15) -> some View {
+    func liquidGlass(cornerRadius: CGFloat = .radiusMedium, intensity: Double = 0.15) -> some View {
         self.modifier(LiquidGlassBackground(cornerRadius: cornerRadius, intensity: intensity))
     }
 
-    func liquidGlassCard(accentColor: Color = .liquidBlue, cornerRadius: CGFloat = 24) -> some View {
+    func liquidGlassCard(accentColor: Color = .liquidBlue, cornerRadius: CGFloat = .radiusLarge) -> some View {
         self.modifier(LiquidGlassCard(accentColor: accentColor, cornerRadius: cornerRadius))
     }
 
@@ -667,6 +681,16 @@ extension View {
         self.scaleEffect(isPressed ? 0.95 : 1.0)
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isPressed)
     }
+}
+
+// MARK: - Animation Constants
+extension Animation {
+    // Standard animations for consistency
+    static let standardSpring = Animation.spring(response: 0.4, dampingFraction: 0.75)
+    static let quickSpring = Animation.spring(response: 0.3, dampingFraction: 0.7)
+    static let gentleSpring = Animation.spring(response: 0.6, dampingFraction: 0.8)
+    static let standardEase = Animation.easeInOut(duration: 0.3)
+    static let quickEase = Animation.easeInOut(duration: 0.15)
 }
 
 // MARK: - Haptic Feedback Manager
@@ -953,9 +977,9 @@ struct ShareableCompactSeatView: View {
     }
 
     var statusText: String {
-        // Buyer view: simple "AVAILABLE" or "SOLD"
+        // Buyer view: simple "OPEN" or "SOLD"
         switch seat.status {
-        case .available: return "AVAILABLE"
+        case .available: return "OPEN"
         case .reserved, .sold: return "SOLD"
         }
     }
@@ -1414,90 +1438,102 @@ struct ConsistentCard<Content: View>: View {
 }
 
 // Consistent primary button style
+// MARK: - Standardized Button Styles
 struct PrimaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) var isEnabled
-    
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 16, weight: .semibold))
             .foregroundColor(.white)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 12)
+            .padding(.horizontal, .spacingSections)
+            .padding(.vertical, .radiusSmall)
             .background(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: .radiusSmall)
                     .fill(isEnabled ? Color.modernAccent : Color.gray.opacity(0.5))
                     .shadow(color: .black.opacity(0.15), radius: configuration.isPressed ? 2 : 4, x: 0, y: configuration.isPressed ? 1 : 2)
             )
-            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+            .animation(.quickEase, value: configuration.isPressed)
     }
 }
 
-// Consistent secondary button style
 struct SecondaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) var isEnabled
-    
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 16, weight: .medium))
-            .foregroundColor(Color.modernAccent)
-            .padding(.horizontal, 20)
+            .foregroundColor(isEnabled ? Color.modernAccent : .gray)
+            .padding(.horizontal, .radiusMedium)
             .padding(.vertical, 10)
             .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color.modernAccent, lineWidth: 2)
+                RoundedRectangle(cornerRadius: .radiusSmall)
+                    .stroke(isEnabled ? Color.modernAccent : .gray, lineWidth: 2)
                     .background(
-                        RoundedRectangle(cornerRadius: 10)
+                        RoundedRectangle(cornerRadius: .radiusSmall)
                             .fill(Color.modernSecondary.opacity(configuration.isPressed ? 0.3 : 0.1))
                     )
             )
-            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+            .animation(.quickEase, value: configuration.isPressed)
     }
 }
 
-// Collaboration button styles
-struct CollaborationPrimaryButtonStyle: ButtonStyle {
-    @Environment(\.isEnabled) var isEnabled
-    
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 15, weight: .medium))
-            .foregroundColor(.white)
-            .frame(height: 36)
-            .frame(maxWidth: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(isEnabled ? Color.modernAccent : Color.gray)
-                    .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-            )
-            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
-    }
-}
-
-struct CollaborationSecondaryButtonStyle: ButtonStyle {
+// Compact button styles for settings and collaboration sections
+struct CompactPrimaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) var isEnabled
     let color: Color
-    
+
     init(color: Color = .modernAccent) {
         self.color = color
     }
-    
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 15, weight: .medium))
-            .foregroundColor(isEnabled ? color : .gray)
-            .frame(height: 36)
+            .font(.system(size: 16, weight: .medium))
+            .foregroundColor(.white)
+            .frame(height: 40)
             .frame(maxWidth: .infinity)
             .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(isEnabled ? color.opacity(0.1) : .gray.opacity(0.1))
-                    .stroke(isEnabled ? color.opacity(0.3) : .gray.opacity(0.3), lineWidth: 1)
-                    .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
+                RoundedRectangle(cornerRadius: .radiusSmall)
+                    .fill(isEnabled ? color : Color.gray)
             )
-            .animation(.easeInOut(duration: 0.1), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+            .animation(.quickEase, value: configuration.isPressed)
     }
 }
+
+struct CompactSecondaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) var isEnabled
+    let color: Color
+
+    init(color: Color = .modernAccent) {
+        self.color = color
+    }
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 16, weight: .medium))
+            .foregroundColor(isEnabled ? color : .gray)
+            .frame(height: 40)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: .radiusSmall)
+                    .fill(isEnabled ? color.opacity(0.1) : .gray.opacity(0.1))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: .radiusSmall)
+                            .stroke(isEnabled ? color.opacity(0.3) : .gray.opacity(0.3), lineWidth: 1)
+                    )
+            )
+            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
+            .animation(.quickEase, value: configuration.isPressed)
+    }
+}
+
+// Legacy aliases for compatibility
+typealias CollaborationPrimaryButtonStyle = CompactPrimaryButtonStyle
+typealias CollaborationSecondaryButtonStyle = CompactSecondaryButtonStyle
 
 // Consistent toolbar button
 struct ToolbarButton: View {
@@ -1660,19 +1696,21 @@ struct CleanSettingsField: View {
     let onChange: (String) -> Void
     @State private var editableValue: String = ""
     @FocusState private var isFocused: Bool
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.system(size: 14, weight: .medium))
                 .foregroundColor(.modernText)
-            
+
             TextField(placeholder, text: $editableValue)
                 .textFieldStyle(RoundedBorderTextFieldStyle())
                 .focused($isFocused)
+                .submitLabel(.done)
                 .onSubmit {
                     onChange(editableValue)
                     isFocused = false
+                    UIApplication.shared.dismissKeyboard()
                 }
                 .onChange(of: isFocused) { focused in
                     if !focused && editableValue != value {
@@ -1686,6 +1724,13 @@ struct CleanSettingsField: View {
         .onChange(of: value) { newValue in
             if !isFocused {
                 editableValue = newValue
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            // Dismiss keyboard when tapping outside
+            if isFocused {
+                UIApplication.shared.dismissKeyboard()
             }
         }
     }
@@ -2279,11 +2324,11 @@ struct DynamicDashboard: View {
                 // Dynamic background that adapts to light/dark mode
                 Color(.systemBackground)
                 .ignoresSafeArea()
-                
+
                 ScrollView {
-                    VStack(spacing: 16) {
+                    VStack(spacing: .spacingNormal) {
                         // Modern Header Card
-                        VStack(spacing: 8) {
+                        VStack(spacing: .spacingTight) {
                             // Suite name - prominent
                             HStack(spacing: 10) {
                                 Image(systemName: "building.2.fill")
@@ -2324,7 +2369,7 @@ struct DynamicDashboard: View {
                                             endPoint: .bottomTrailing
                                         )
                                     )
-                                
+
                                 RoundedRectangle(cornerRadius: 20)
                                     .fill(
                                         LinearGradient(
@@ -2334,6 +2379,7 @@ struct DynamicDashboard: View {
                                         )
                                     )
                             }
+                            .drawingGroup()
                             .shadow(color: .black.opacity(0.15), radius: 15, x: 0, y: 8)
                         )
 
@@ -2955,7 +3001,7 @@ struct PerformanceMetricsView: View {
                         .foregroundColor(.white.opacity(0.8))
                 }
                 Spacer()
-                
+
                 ZStack {
                     Circle()
                         .fill(LinearGradient(colors: [.white.opacity(0.2), .white.opacity(0.1)], startPoint: .topLeading, endPoint: .bottomTrailing))
@@ -2965,8 +3011,31 @@ struct PerformanceMetricsView: View {
                         .foregroundColor(.white)
                 }
             }
-            
-            if showChart {
+
+            // Empty state when no concerts
+            if concerts.isEmpty {
+                VStack(spacing: .spacingNormal) {
+                    Image(systemName: "chart.bar.xaxis")
+                        .font(.system(size: 48, weight: .light))
+                        .foregroundColor(.white.opacity(0.3))
+                        .padding(.top, .spacingSections)
+
+                    Text("No Performance Data")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+
+                    Text("Add concerts to see trends and analytics")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
+                .background(
+                    RoundedRectangle(cornerRadius: .radiusMedium)
+                        .fill(.ultraThinMaterial)
+                )
+            } else if showChart {
                 // Beautiful Concert Performance Chart - Fixed overflow
                 VStack(spacing: 16) {
                     GeometryReader { geometry in
@@ -3037,7 +3106,7 @@ struct PerformanceMetricsView: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 24)
                     .fill(Color.cardTeal)
-                
+
                 RoundedRectangle(cornerRadius: 24)
                     .fill(
                         LinearGradient(
@@ -3047,6 +3116,7 @@ struct PerformanceMetricsView: View {
                         )
                     )
             }
+            .drawingGroup()
             .shadow(color: .black.opacity(0.15), radius: 15, x: 0, y: 8)
         )
         .onAppear {
@@ -3173,7 +3243,7 @@ struct RecentActivityFeed: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 24)
                     .fill(Color.cardPink)
-                
+
                 RoundedRectangle(cornerRadius: 24)
                     .fill(
                         LinearGradient(
@@ -3183,6 +3253,7 @@ struct RecentActivityFeed: View {
                         )
                     )
             }
+            .drawingGroup()
             .shadow(color: .black.opacity(0.15), radius: 15, x: 0, y: 8)
         )
         .onAppear {
@@ -3336,28 +3407,46 @@ struct DynamicConcerts: View {
                 .ignoresSafeArea()
                 
                 ScrollView {
-                    VStack(spacing: 24) {
+                    VStack(spacing: .spacingSections) {
                         // Header
-                        VStack(spacing: 8) {
+                        VStack(spacing: .spacingTight) {
                             Text("Concerts")
-                                .font(.system(size: 34, weight: .bold, design: .rounded))
-                                .foregroundColor(.modernText)
-                            
+                                .font(.system(size: 28, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+
                             Text("Manage upcoming performances")
                                 .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(.modernTextSecondary)
+                                .foregroundColor(.white.opacity(0.9))
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 20)
-                        .padding(.horizontal, 24)
+                        .padding(.vertical, 16)
+                        .padding(.horizontal, 20)
                         .background(
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(Color.modernAccent.opacity(0.1))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 20)
-                                        .stroke(Color.modernAccent.opacity(0.3), lineWidth: 1)
-                                )
-                                .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 5)
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [
+                                                Color(red: 0.3, green: 0.2, blue: 0.9),
+                                                Color(red: 0.5, green: 0.3, blue: 0.95),
+                                                Color(red: 0.7, green: 0.4, blue: 1.0)
+                                            ],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [.white.opacity(0.1), .clear, .black.opacity(0.1)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                            }
+                            .drawingGroup()
+                            .shadow(color: .black.opacity(0.15), radius: 15, x: 0, y: 8)
                         )
                         .padding(.top, 20)
                         
@@ -7149,7 +7238,7 @@ struct ConcertRowView: View {
     }
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: .spacingNormal) {
             // Concert Icon with glass effect
             ZStack {
                 Circle()
@@ -7238,8 +7327,9 @@ struct ConcertRowView: View {
                 .font(.system(size: 14, weight: .medium))
                 .foregroundColor(.secondary)
         }
-        .padding(16)
-        .liquidGlass(cornerRadius: 20, intensity: 0.12)
+        .padding(.spacingNormal)
+        .frame(minHeight: 48) // Minimum touch target height
+        .liquidGlass(cornerRadius: .radiusMedium, intensity: 0.12)
     }
 }
 
@@ -8117,44 +8207,101 @@ struct ConcertDetailView: View {
                         }
                     }
                     
-                    // View Toggle (Two Options) - Hidden in buyer view
+                    // View Toggle and Batch Mode Controls - Hidden in buyer view
                     if !isBuyerView {
-                        HStack(spacing: 0) {
-                            Button(action: {
-                                withAnimation(.easeInOut(duration: 0.3)) {
-                                    viewMode = .seatView
+                        VStack(spacing: .spacingNormal) {
+                            // View Mode Toggle
+                            HStack(spacing: 0) {
+                                Button(action: {
+                                    if viewMode != .seatView {
+                                        HapticManager.shared.selection()
+                                        withAnimation(.standardEase) {
+                                            viewMode = .seatView
+                                        }
+                                    }
+                                }) {
+                                    Text("Seat View")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(viewMode == .seatView ? .white : .modernTextSecondary)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 10)
+                                        .background(
+                                            viewMode == .seatView ? Color.modernAccent : Color.clear
+                                        )
                                 }
-                            }) {
-                                Text("Seat View")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(viewMode == .seatView ? .white : .modernTextSecondary)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 10)
-                                    .background(
-                                        viewMode == .seatView ? Color.modernAccent : Color.clear
-                                    )
-                            }
 
-                            Button(action: {
-                                withAnimation(.easeInOut(duration: 0.3)) {
-                                    viewMode = .listView
+                                Button(action: {
+                                    if viewMode != .listView {
+                                        HapticManager.shared.selection()
+                                        withAnimation(.standardEase) {
+                                            viewMode = .listView
+                                        }
+                                    }
+                                }) {
+                                    Text("List View")
+                                        .font(.system(size: 14, weight: .medium))
+                                        .foregroundColor(viewMode == .listView ? .white : .modernTextSecondary)
+                                        .frame(maxWidth: .infinity)
+                                        .padding(.vertical, 10)
+                                        .background(
+                                            viewMode == .listView ? Color.modernAccent : Color.clear
+                                        )
                                 }
-                            }) {
-                                Text("List View")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(viewMode == .listView ? .white : .modernTextSecondary)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 10)
+                            }
+                            .liquidGlass(cornerRadius: .radiusSmall, intensity: 0.15)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: .radiusSmall)
+                                    .stroke(Color.modernAccent.opacity(0.3), lineWidth: 1)
+                            )
+
+                            // Batch Mode Toggle - Now Always Visible
+                            if !isReadOnlyView {
+                                Button(action: {
+                                    withAnimation(.standardSpring) {
+                                        isBatchMode.toggle()
+                                        if !isBatchMode {
+                                            selectedSeats.removeAll()
+                                        }
+                                    }
+                                    HapticManager.shared.impact(style: .medium)
+                                }) {
+                                    HStack(spacing: .spacingTight) {
+                                        if isBatchMode {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .font(.system(size: 16, weight: .semibold))
+                                        }
+
+                                        VStack(alignment: .center, spacing: 2) {
+                                            Text(isBatchMode ? "Batch Mode Active" : "Select Multiple Seats")
+                                                .font(.system(size: 14, weight: .semibold))
+
+                                            Text(isBatchMode ? "\(selectedSeats.count) selected" : "Tap to enable batch editing")
+                                                .font(.system(size: 12, weight: .medium))
+                                                .foregroundColor(.secondary)
+                                        }
+                                        .frame(maxWidth: .infinity)
+
+                                        if isBatchMode {
+                                            Image(systemName: "xmark.circle.fill")
+                                                .font(.system(size: 14, weight: .medium))
+                                                .foregroundColor(.secondary)
+                                        }
+                                    }
+                                    .foregroundColor(isBatchMode ? .white : .modernAccent)
+                                    .padding(.horizontal, .spacingNormal)
+                                    .padding(.vertical, .radiusSmall)
                                     .background(
-                                        viewMode == .listView ? Color.modernAccent : Color.clear
+                                        RoundedRectangle(cornerRadius: .radiusSmall)
+                                            .fill(isBatchMode ? Color.modernAccent : Color.modernAccent.opacity(0.1))
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: .radiusSmall)
+                                                    .stroke(Color.modernAccent.opacity(isBatchMode ? 0 : 0.3), lineWidth: 1)
+                                            )
                                     )
+                                }
+                                .buttonStyle(PlainButtonStyle())
                             }
                         }
-                        .liquidGlass(cornerRadius: 12, intensity: 0.15)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(Color.modernAccent.opacity(0.3), lineWidth: 1)
-                        )
                         .padding(.horizontal)
                     }
                     
@@ -8892,7 +9039,7 @@ struct InteractiveFireSuiteView: View {
                         RoundedRectangle(cornerRadius: 6)
                             .fill(Color.green)  // Match seat color - available should be green
                             .frame(width: 16, height: 16)
-                        Text("Available")
+                        Text(isBuyerView ? "Open" : "Available")
                             .font(.system(size: 12, weight: .medium))
                             .foregroundColor(.green)
                     }
@@ -9266,9 +9413,9 @@ struct CompactSeatView: View {
     
     var statusText: String {
         if isBuyerView {
-            // Buyer view: simple "SOLD" or "AVAILABLE"
+            // Buyer view: simple "SOLD" or "OPEN"
             switch seat.status {
-            case .available: return "AVAILABLE"
+            case .available: return "OPEN"
             case .reserved, .sold: return "SOLD"
             }
         }
@@ -9684,7 +9831,7 @@ struct InteractiveSeatView: View {
         if isBatchMode && isSelected {
             return "SELECTED"
         }
-        
+
         switch seat.status {
         case .available:
             return "AVAILABLE"
@@ -10127,10 +10274,10 @@ struct ShareableSeatLayoutView: View {
                     Circle()
                         .fill(Color.green)
                         .frame(width: 16, height: 16)
-                    Text("Available")
+                    Text("Open")
                         .font(.system(size: 14, weight: .medium))
                 }
-                
+
                 HStack(spacing: 8) {
                     Circle()
                         .fill(Color.red)
@@ -10237,7 +10384,7 @@ struct ShareableSeatView: View {
                 )
                 .shadow(color: seatColor.opacity(0.4), radius: 4, x: 0, y: 2)
             
-            Text(seat.status == .available ? "Available" : "Sold")
+            Text(seat.status == .available ? "Open" : "Sold")
                 .font(.system(size: 10, weight: .medium))
                 .foregroundColor(seatColor)
         }
@@ -10599,13 +10746,13 @@ struct DynamicAnalytics: View {
                 .ignoresSafeArea()
                 
                 ScrollView {
-                    VStack(spacing: 24) {
+                    VStack(spacing: .spacingSections) {
                         // Header
-                        VStack(spacing: 12) {
+                        VStack(spacing: .radiusSmall) {
                             Text("Analytics")
                                 .font(.system(size: 32, weight: .bold, design: .rounded))
                                 .foregroundColor(.white)
-                            
+
                             Text("Performance insights and trends")
                                 .font(.system(size: 16))
                                 .foregroundColor(.white.opacity(0.8))
@@ -10627,11 +10774,21 @@ struct DynamicAnalytics: View {
                                             endPoint: .bottomTrailing
                                         )
                                     )
+
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [.white.opacity(0.1), .clear, .black.opacity(0.1)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
                             }
+                            .drawingGroup()
                             .shadow(color: .black.opacity(0.15), radius: 15, x: 0, y: 8)
                         )
                         .padding(.top, 20)
-                        
+
                         // Performance Metrics
                         PerformanceMetricsView(concerts: concerts)
                         
@@ -11014,16 +11171,53 @@ struct SettingsView: View {
             ZStack {
                 Color(.systemBackground)
                     .ignoresSafeArea()
-                
+                    .onTapGesture {
+                        // Dismiss keyboard when tapping background
+                        UIApplication.shared.dismissKeyboard()
+                    }
+
                 ScrollView {
-                    VStack(spacing: 24) {
+                    VStack(spacing: .spacingSections) {
                         // Header
-                        VStack(alignment: .leading, spacing: 8) {
+                        VStack(spacing: .spacingTight) {
                             Text("Settings")
-                                .font(.system(size: 34, weight: .bold, design: .rounded))
-                                .foregroundColor(.modernText)
+                                .font(.system(size: 28, weight: .bold, design: .rounded))
+                                .foregroundColor(.white)
+
+                            Text("Customize your suite preferences")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.white.opacity(0.9))
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .padding(.horizontal, 20)
+                        .background(
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [
+                                                Color(red: 0.3, green: 0.2, blue: 0.9),
+                                                Color(red: 0.5, green: 0.3, blue: 0.95),
+                                                Color(red: 0.7, green: 0.4, blue: 1.0)
+                                            ],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+
+                                RoundedRectangle(cornerRadius: 20)
+                                    .fill(
+                                        LinearGradient(
+                                            colors: [.white.opacity(0.1), .clear, .black.opacity(0.1)],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        )
+                                    )
+                            }
+                            .drawingGroup()
+                            .shadow(color: .black.opacity(0.15), radius: 15, x: 0, y: 8)
+                        )
                         .padding(.top, 20)
                         
                         // Suite Setup Section
