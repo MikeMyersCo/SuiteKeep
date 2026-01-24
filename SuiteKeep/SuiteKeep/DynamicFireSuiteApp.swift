@@ -383,81 +383,115 @@ class SettingsManager: ObservableObject {
 
 // MARK: - Vibrant Color Theme
 extension Color {
+    // MARK: - 🎭 NOIR LUXE Design System
+    // A sophisticated dark theme with warm champagne/gold accents
+    // Inspired by luxury hospitality and premium concert experiences
+
     // Fire colors for firepit animation (fireOrange is defined in Assets.xcassets)
-    static let fireRed = Color(red: 0.9, green: 0.1, blue: 0.0)
-    static let fireYellow = Color(red: 1.0, green: 0.8, blue: 0.0)
-    
-    // Beautiful gradient backgrounds
-    static let primaryGradientStart = Color(red: 0.1, green: 0.4, blue: 0.9) // Deep blue
-    static let primaryGradientEnd = Color(red: 0.8, green: 0.2, blue: 0.9) // Magenta
-    static let secondaryGradientStart = Color(red: 0.0, green: 0.7, blue: 1.0) // Bright blue
-    static let secondaryGradientEnd = Color(red: 0.0, green: 0.9, blue: 0.6) // Teal
-    
-    // Card gradient colors
-    static let cardPurple = LinearGradient(colors: [Color(red: 0.1, green: 0.4, blue: 0.9), Color(red: 0.2, green: 0.6, blue: 1.0)], startPoint: .topLeading, endPoint: .bottomTrailing)
-    static let cardBlue = LinearGradient(colors: [Color(red: 0.1, green: 0.4, blue: 0.9), Color(red: 0.2, green: 0.6, blue: 1.0)], startPoint: .topLeading, endPoint: .bottomTrailing)
-    static let cardTeal = LinearGradient(colors: [Color(red: 0.0, green: 0.7, blue: 0.7), Color(red: 0.1, green: 0.8, blue: 0.8)], startPoint: .topLeading, endPoint: .bottomTrailing)
-    static let cardOrange = LinearGradient(colors: [Color(red: 1.0, green: 0.4, blue: 0.1), Color(red: 1.0, green: 0.6, blue: 0.2)], startPoint: .topLeading, endPoint: .bottomTrailing)
-    static let cardPink = LinearGradient(colors: [Color(red: 0.4, green: 0.35, blue: 0.45), Color(red: 0.5, green: 0.45, blue: 0.55)], startPoint: .topLeading, endPoint: .bottomTrailing)
-    static let cardGreen = LinearGradient(colors: [Color(red: 0.1, green: 0.7, blue: 0.3), Color(red: 0.2, green: 0.8, blue: 0.4)], startPoint: .topLeading, endPoint: .bottomTrailing)
-    static let cardIndigo = LinearGradient(colors: [Color(red: 0.2, green: 0.3, blue: 0.8), Color(red: 0.3, green: 0.4, blue: 0.9)], startPoint: .topLeading, endPoint: .bottomTrailing)
-    
-    // Modern colors with engagement focus - now adaptive to light/dark mode
+    static let fireRed = Color(red: 0.95, green: 0.25, blue: 0.15)
+    static let fireYellow = Color(red: 1.0, green: 0.75, blue: 0.2)
+
+    // MARK: - Primary Palette: Champagne & Noir
+    // Primary accent: Warm champagne gold - evokes luxury, celebration
+    static let champagne = Color(red: 0.87, green: 0.75, blue: 0.52)
+    static let champagneLight = Color(red: 0.95, green: 0.88, blue: 0.72)
+    static let champagneMuted = Color(red: 0.75, green: 0.65, blue: 0.45)
+
+    // Deep noir backgrounds with warm undertones
+    static let noirDeep = Color(red: 0.06, green: 0.05, blue: 0.07)
+    static let noirCard = Color(red: 0.10, green: 0.09, blue: 0.11)
+    static let noirElevated = Color(red: 0.14, green: 0.13, blue: 0.15)
+    static let noirSurface = Color(red: 0.18, green: 0.16, blue: 0.19)
+
+    // MARK: - Card Gradients: Rich & Dimensional
+    static let cardPurple = LinearGradient(colors: [Color(red: 0.35, green: 0.22, blue: 0.45), Color(red: 0.45, green: 0.30, blue: 0.55)], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let cardBlue = LinearGradient(colors: [Color(red: 0.18, green: 0.30, blue: 0.45), Color(red: 0.25, green: 0.40, blue: 0.55)], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let cardTeal = LinearGradient(colors: [Color(red: 0.15, green: 0.35, blue: 0.38), Color(red: 0.20, green: 0.45, blue: 0.48)], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let cardOrange = LinearGradient(colors: [Color(red: 0.55, green: 0.30, blue: 0.18), Color(red: 0.65, green: 0.40, blue: 0.25)], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let cardPink = LinearGradient(colors: [Color(red: 0.40, green: 0.25, blue: 0.35), Color(red: 0.50, green: 0.32, blue: 0.42)], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let cardGreen = LinearGradient(colors: [Color(red: 0.18, green: 0.35, blue: 0.25), Color(red: 0.25, green: 0.45, blue: 0.32)], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let cardIndigo = LinearGradient(colors: [Color(red: 0.22, green: 0.22, blue: 0.40), Color(red: 0.30, green: 0.30, blue: 0.50)], startPoint: .topLeading, endPoint: .bottomTrailing)
+
+    // MARK: - Semantic Colors (Adaptive)
     static let modernBackground = Color(.systemBackground)
     static let modernSecondary = Color(.secondarySystemBackground)
     static let modernCard = Color(.tertiarySystemBackground)
-    static let modernAccent = Color(red: 0.0, green: 0.7, blue: 1.0) // Bright blue
+    static let modernAccent = champagne // Champagne gold as primary accent
     static let modernText = Color(.label)
     static let modernTextSecondary = Color(.secondaryLabel)
-    static let modernSuccess = Color(red: 0.1, green: 0.8, blue: 0.4) // Brighter green
-    static let modernWarning = Color(red: 1.0, green: 0.6, blue: 0.0) // Warmer orange
-    static let modernDanger = Color(red: 1.0, green: 0.3, blue: 0.4) // Softer red
-    
-    // Dynamic background gradient function that adapts to light/dark mode
+    static let modernSuccess = Color(red: 0.35, green: 0.75, blue: 0.55) // Muted emerald
+    static let modernWarning = Color(red: 0.90, green: 0.65, blue: 0.30) // Warm amber
+    static let modernDanger = Color(red: 0.85, green: 0.35, blue: 0.40) // Dusty rose-red
+
+    // MARK: - Dynamic Background Gradient
     static func dynamicGradient(for colorScheme: ColorScheme) -> LinearGradient {
         if colorScheme == .dark {
+            // Sophisticated noir with subtle warm undertones
             return LinearGradient(
                 colors: [
-                    Color(red: 0.1, green: 0.1, blue: 0.15),
-                    Color(red: 0.15, green: 0.12, blue: 0.2),
-                    Color(red: 0.12, green: 0.1, blue: 0.18),
-                    Color(red: 0.08, green: 0.08, blue: 0.16)
+                    Color(red: 0.08, green: 0.06, blue: 0.10),
+                    Color(red: 0.10, green: 0.08, blue: 0.12),
+                    Color(red: 0.09, green: 0.07, blue: 0.11),
+                    Color(red: 0.06, green: 0.05, blue: 0.08)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
         } else {
+            // Warm cream with subtle champagne tint
             return LinearGradient(
                 colors: [
-                    Color(red: 0.95, green: 0.95, blue: 0.97),
-                    Color(red: 0.98, green: 0.98, blue: 1.0),
-                    Color(red: 0.96, green: 0.97, blue: 0.99),
-                    Color(red: 0.94, green: 0.95, blue: 0.98)
+                    Color(red: 0.98, green: 0.97, blue: 0.94),
+                    Color(red: 0.99, green: 0.98, blue: 0.96),
+                    Color(red: 0.97, green: 0.96, blue: 0.93),
+                    Color(red: 0.96, green: 0.95, blue: 0.92)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
         }
     }
-    
-    // Seat status colors
-    static let seatAvailable = Color(red: 0.2, green: 0.85, blue: 0.5) // Vibrant green
-    static let seatReserved = Color(red: 1.0, green: 0.7, blue: 0.0) // Warm yellow
-    static let seatSold = Color(red: 0.3, green: 0.6, blue: 1.0) // Bright blue
 
-    // MARK: - Liquid Glass Colors
-    static let glassWhite = Color.white.opacity(0.1)
-    static let glassBorder = Color.white.opacity(0.2)
-    static let glassHighlight = Color.white.opacity(0.4)
-    static let glassShimmer = Color.white.opacity(0.6)
+    // MARK: - Seat Status Colors (Refined)
+    static let seatAvailable = Color(red: 0.40, green: 0.75, blue: 0.55) // Muted emerald
+    static let seatReserved = champagne // Champagne gold for reserved
+    static let seatSold = Color(red: 0.45, green: 0.55, blue: 0.75) // Soft slate blue
 
-    // Glass-optimized accent colors with vibrancy
-    static let liquidBlue = Color(red: 0.3, green: 0.7, blue: 1.0)
-    static let liquidPurple = Color(red: 0.6, green: 0.4, blue: 1.0)
-    static let liquidTeal = Color(red: 0.3, green: 0.9, blue: 0.8)
-    static let liquidPink = Color(red: 1.0, green: 0.4, blue: 0.7)
-    static let liquidGreen = Color(red: 0.4, green: 0.9, blue: 0.5)
-    static let liquidOrange = Color(red: 1.0, green: 0.6, blue: 0.3)
+    // MARK: - Glass Effect Colors (Warm-tinted)
+    static let glassWhite = Color.white.opacity(0.08)
+    static let glassBorder = champagne.opacity(0.15)
+    static let glassHighlight = champagne.opacity(0.25)
+    static let glassShimmer = champagne.opacity(0.4)
+
+    // MARK: - Accent Palette (Sophisticated)
+    static let liquidBlue = Color(red: 0.45, green: 0.60, blue: 0.80)
+    static let liquidPurple = Color(red: 0.55, green: 0.45, blue: 0.70)
+    static let liquidTeal = Color(red: 0.40, green: 0.65, blue: 0.65)
+    static let liquidPink = Color(red: 0.75, green: 0.50, blue: 0.60)
+    static let liquidGreen = Color(red: 0.45, green: 0.70, blue: 0.55)
+    static let liquidOrange = champagne // Use champagne as orange accent
+
+    // MARK: - Hero Gradient (Premium Header)
+    static let heroGradient = LinearGradient(
+        colors: [
+            Color(red: 0.20, green: 0.15, blue: 0.25),
+            Color(red: 0.30, green: 0.22, blue: 0.35),
+            Color(red: 0.25, green: 0.18, blue: 0.30)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
+    // MARK: - Shimmer Effect Gradient
+    static let shimmerGradient = LinearGradient(
+        colors: [
+            champagne.opacity(0),
+            champagne.opacity(0.3),
+            champagne.opacity(0)
+        ],
+        startPoint: .leading,
+        endPoint: .trailing
+    )
 }
 
 // MARK: - Design System Constants
@@ -526,24 +560,24 @@ struct LiquidGlassBackground: ViewModifier {
 }
 
 struct LiquidGlassCard: ViewModifier {
-    var accentColor: Color = .liquidBlue
+    var accentColor: Color = .champagne
     var cornerRadius: CGFloat = .radiusLarge
 
     func body(content: Content) -> some View {
         content
             .background(
                 ZStack {
-                    // Base glass material
+                    // Noir base with warmth
                     RoundedRectangle(cornerRadius: cornerRadius)
-                        .fill(.ultraThinMaterial)
+                        .fill(Color(.tertiarySystemBackground))
 
-                    // Colored accent gradient overlay
+                    // Subtle champagne accent gradient
                     RoundedRectangle(cornerRadius: cornerRadius)
                         .fill(
                             LinearGradient(
                                 colors: [
-                                    accentColor.opacity(0.2),
-                                    accentColor.opacity(0.05),
+                                    accentColor.opacity(0.08),
+                                    accentColor.opacity(0.02),
                                     Color.clear
                                 ],
                                 startPoint: .topLeading,
@@ -1657,36 +1691,67 @@ struct CleanSettingsCard<Content: View>: View {
     let title: String
     let icon: String
     let content: Content
-    
+
     init(title: String, icon: String, @ViewBuilder content: () -> Content) {
         self.title = title
         self.icon = icon
         self.content = content()
     }
-    
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundColor(.modernAccent)
-                    .frame(width: 24, height: 24)
-                
-                Text(title)
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundColor(.modernText)
-                
+        VStack(alignment: .leading, spacing: 18) {
+            // Header with refined styling
+            HStack(spacing: 14) {
+                // Icon container with champagne accent
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.champagne.opacity(0.12))
+                        .frame(width: 36, height: 36)
+
+                    Image(systemName: icon)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.champagne)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title.uppercased())
+                        .font(.system(size: 11, weight: .semibold))
+                        .tracking(1.5)
+                        .foregroundColor(.champagne.opacity(0.8))
+                }
+
                 Spacer()
             }
-            
+
+            // Subtle divider
+            Rectangle()
+                .fill(Color.champagne.opacity(0.1))
+                .frame(height: 1)
+
             content
         }
         .padding(20)
         .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.modernSecondary)
-                .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+            ZStack {
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(Color(.secondarySystemBackground))
+
+                // Subtle top glow
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.champagne.opacity(0.03), Color.clear],
+                            startPoint: .top,
+                            endPoint: .center
+                        )
+                    )
+
+                // Refined border
+                RoundedRectangle(cornerRadius: 18)
+                    .strokeBorder(Color.champagne.opacity(0.08), lineWidth: 0.5)
+            }
         )
+        .shadow(color: .black.opacity(0.12), radius: 10, x: 0, y: 5)
     }
 }
 
@@ -2261,7 +2326,7 @@ struct DynamicFireSuiteApp: View {
                 }
                 .tag(3)
         }
-        .accentColor(.modernAccent)
+        .tint(.champagne)
         .onAppear {
             startFlameAnimation()
             // Connect SharedSuiteManager and ConcertDataManager to each other
@@ -2328,60 +2393,81 @@ struct DynamicDashboard: View {
 
                 ScrollView {
                     VStack(spacing: .spacingNormal) {
-                        // Modern Header Card
-                        VStack(spacing: .spacingTight) {
-                            // Suite name - prominent
-                            HStack(spacing: 10) {
-                                Image(systemName: "building.2.fill")
-                                    .font(.system(size: 20, weight: .semibold))
-                                    .foregroundColor(.white)
+                        // MARK: - Noir Luxe Header Card
+                        VStack(spacing: 12) {
+                            // Decorative top accent line
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.champagne)
+                                .frame(width: 40, height: 3)
+                                .opacity(0.8)
 
-                                Text(settingsManager.suiteName)
-                                    .font(.system(size: 28, weight: .bold, design: .rounded))
-                                    .foregroundColor(.white)
-                            }
+                            // Suite name - elegant serif styling
+                            Text(settingsManager.suiteName.uppercased())
+                                .font(.system(size: 13, weight: .medium))
+                                .tracking(4)
+                                .foregroundColor(.champagne)
 
-                            // Venue location - secondary
-                            HStack(spacing: 8) {
-                                Image(systemName: "mappin.and.ellipse")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.75))
+                            // Venue name - bold display
+                            Text(settingsManager.venueLocation)
+                                .font(.system(size: 26, weight: .bold, design: .serif))
+                                .foregroundColor(.white)
 
-                                Text(settingsManager.venueLocation)
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(.white.opacity(0.9))
-                            }
+                            // Subtle tagline
+                            Text("PRIVATE SUITE")
+                                .font(.system(size: 10, weight: .medium))
+                                .tracking(3)
+                                .foregroundColor(.white.opacity(0.5))
                         }
                         .frame(maxWidth: .infinity)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
+                        .padding(.vertical, 24)
                         .padding(.horizontal, 20)
                         .background(
                             ZStack {
+                                // Deep noir base
                                 RoundedRectangle(cornerRadius: 20)
                                     .fill(
                                         LinearGradient(
                                             colors: [
-                                                Color(red: 0.3, green: 0.2, blue: 0.9),
-                                                Color(red: 0.5, green: 0.3, blue: 0.95),
-                                                Color(red: 0.7, green: 0.4, blue: 1.0)
+                                                Color(red: 0.12, green: 0.10, blue: 0.14),
+                                                Color(red: 0.16, green: 0.13, blue: 0.18),
+                                                Color(red: 0.12, green: 0.10, blue: 0.14)
                                             ],
                                             startPoint: .topLeading,
                                             endPoint: .bottomTrailing
                                         )
                                     )
 
+                                // Subtle champagne glow at top
                                 RoundedRectangle(cornerRadius: 20)
                                     .fill(
                                         LinearGradient(
-                                            colors: [.white.opacity(0.1), .clear, .black.opacity(0.1)],
-                                            startPoint: .topLeading,
-                                            endPoint: .bottomTrailing
+                                            colors: [
+                                                Color.champagne.opacity(0.08),
+                                                Color.clear,
+                                                Color.clear
+                                            ],
+                                            startPoint: .top,
+                                            endPoint: .bottom
                                         )
                                     )
+
+                                // Inner border with champagne tint
+                                RoundedRectangle(cornerRadius: 20)
+                                    .strokeBorder(
+                                        LinearGradient(
+                                            colors: [
+                                                Color.champagne.opacity(0.3),
+                                                Color.champagne.opacity(0.1),
+                                                Color.champagne.opacity(0.2)
+                                            ],
+                                            startPoint: .topLeading,
+                                            endPoint: .bottomTrailing
+                                        ),
+                                        lineWidth: 1
+                                    )
                             }
-                            .drawingGroup()
-                            .shadow(color: .black.opacity(0.15), radius: 15, x: 0, y: 8)
+                            .shadow(color: Color.champagne.opacity(0.1), radius: 20, x: 0, y: 10)
+                            .shadow(color: .black.opacity(0.3), radius: 15, x: 0, y: 8)
                         )
 
                         // Suite Overview Summary
@@ -2575,75 +2661,93 @@ struct MetricCard: View {
     let subtitle: String
     let gradient: LinearGradient
     let icon: String
-    var accentColor: Color = .liquidBlue
+    var accentColor: Color = .champagne
 
     @State private var isPressed = false
     @State private var animateValue = false
     @State private var showShimmer = false
 
     var body: some View {
-        VStack(spacing: 8) {
-            // Icon with glass effect - centered
+        VStack(spacing: 6) {
+            // Icon with sophisticated treatment
             ZStack {
+                // Subtle glow ring
                 Circle()
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        Circle()
-                            .fill(
-                                RadialGradient(
-                                    colors: [accentColor.opacity(0.4), accentColor.opacity(0.15)],
-                                    center: .center,
-                                    startRadius: 0,
-                                    endRadius: 20
-                                )
-                            )
-                    )
-                    .overlay(
-                        Circle()
-                            .strokeBorder(accentColor.opacity(0.5), lineWidth: 1.5)
-                    )
-                    .frame(width: 40, height: 40)
-                    .shadow(color: accentColor.opacity(0.3), radius: 8, x: 0, y: 4)
+                    .stroke(accentColor.opacity(0.2), lineWidth: 1)
+                    .frame(width: 38, height: 38)
+
+                Circle()
+                    .fill(accentColor.opacity(0.1))
+                    .frame(width: 34, height: 34)
 
                 Image(systemName: icon)
-                    .font(.system(size: 18, weight: .bold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(accentColor)
             }
 
-            Spacer(minLength: 2)
+            Spacer(minLength: 4)
 
-            VStack(spacing: 2) {
+            VStack(spacing: 3) {
                 Text(value)
-                    .font(.system(size: 24, weight: .black, design: .rounded))
+                    .font(.system(size: 26, weight: .bold, design: .rounded))
                     .foregroundColor(.primary)
-                    .scaleEffect(animateValue ? 1.05 : 1.0)
-                    .animation(.spring(response: 0.6, dampingFraction: 0.8), value: animateValue)
+                    .scaleEffect(animateValue ? 1.03 : 1.0)
+                    .animation(.spring(response: 0.5, dampingFraction: 0.7), value: animateValue)
 
-                Text(title)
-                    .font(.system(size: 12, weight: .semibold))
+                Text(title.uppercased())
+                    .font(.system(size: 9, weight: .semibold))
+                    .tracking(1.5)
                     .foregroundColor(.secondary)
             }
 
-            Spacer(minLength: 6)
+            Spacer(minLength: 4)
         }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 14)
+        .padding(.vertical, 14)
+        .padding(.horizontal, 12)
         .frame(maxWidth: .infinity)
-        .frame(height: 100)
-        .liquidGlassCard(accentColor: accentColor, cornerRadius: 24)
-        .scaleEffect(isPressed ? 0.96 : 1.0)
-        .rotation3DEffect(
-            .degrees(isPressed ? 3 : 0),
-            axis: (x: 1, y: 1, z: 0)
+        .frame(height: 105)
+        .background(
+            ZStack {
+                // Noir card base
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(Color(.tertiarySystemBackground))
+
+                // Subtle top highlight
+                RoundedRectangle(cornerRadius: 18)
+                    .fill(
+                        LinearGradient(
+                            colors: [accentColor.opacity(0.05), Color.clear],
+                            startPoint: .top,
+                            endPoint: .center
+                        )
+                    )
+
+                // Refined border
+                RoundedRectangle(cornerRadius: 18)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                accentColor.opacity(0.2),
+                                accentColor.opacity(0.05),
+                                accentColor.opacity(0.1)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 0.5
+                    )
+            }
         )
+        .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
+        .scaleEffect(isPressed ? 0.97 : 1.0)
         .onTapGesture {
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                 isPressed.toggle()
                 animateValue.toggle()
             }
-            HapticManager.shared.impact(style: .medium)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+            HapticManager.shared.impact(style: .light)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                     isPressed.toggle()
                 }
             }
