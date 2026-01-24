@@ -11757,7 +11757,11 @@ struct SettingsView: View {
     @State private var showArchiveList = false
     @State private var archiveYearToCreate: IdentifiableInt?
     @StateObject private var archiveManager = ArchiveManager.shared
-    
+    @State private var isLoadingConcertList = false
+    @State private var showLoadConcertListAlert = false
+    @State private var loadConcertListAlertTitle = ""
+    @State private var loadConcertListAlertMessage = ""
+
     var body: some View {
         NavigationView {
             ZStack {
@@ -12167,7 +12171,78 @@ struct SettingsView: View {
                                             .foregroundColor(.modernAccent)
                                     }
                                 }
-                                
+
+                                Divider()
+
+                                Button(action: {
+                                    isLoadingConcertList = true
+                                    Task {
+                                        do {
+                                            guard let url = URL(string: "https://suitekeepsupport.netlify.app/assets/2026FordAmp.json") else {
+                                                throw URLError(.badURL)
+                                            }
+                                            let (data, response) = try await URLSession.shared.data(from: url)
+                                            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                                                throw URLError(.badServerResponse)
+                                            }
+                                            let decoder = JSONDecoder()
+                                            decoder.dateDecodingStrategy = .iso8601
+                                            let backupData = try decoder.decode(BackupData.self, from: data)
+                                            let existingIds = Set(concertManager.concerts.map { $0.id })
+                                            let newConcerts = backupData.concerts.filter { !existingIds.contains($0.id) }
+                                            await MainActor.run {
+                                                if newConcerts.isEmpty {
+                                                    loadConcertListAlertTitle = "No New Concerts"
+                                                    loadConcertListAlertMessage = "Your concert list is already up to date. All \(backupData.concerts.count) concerts from the schedule are already in your app."
+                                                } else {
+                                                    concertManager.concerts.append(contentsOf: newConcerts)
+                                                    concertManager.concerts.sort { $0.date < $1.date }
+                                                    concertManager.saveConcerts()
+                                                    loadConcertListAlertTitle = "Concerts Added"
+                                                    loadConcertListAlertMessage = "Successfully added \(newConcerts.count) new concert\(newConcerts.count == 1 ? "" : "s") to your list."
+                                                    HapticManager.shared.notification(type: .success)
+                                                }
+                                                isLoadingConcertList = false
+                                                showLoadConcertListAlert = true
+                                            }
+                                        } catch {
+                                            await MainActor.run {
+                                                loadConcertListAlertTitle = "Download Failed"
+                                                loadConcertListAlertMessage = "Unable to load the concert list. Check your internet connection.\n\nError: \(error.localizedDescription)"
+                                                isLoadingConcertList = false
+                                                showLoadConcertListAlert = true
+                                                HapticManager.shared.notification(type: .error)
+                                            }
+                                        }
+                                    }
+                                }) {
+                                    HStack {
+                                        if isLoadingConcertList {
+                                            ProgressView()
+                                                .progressViewStyle(CircularProgressViewStyle(tint: .modernAccent))
+                                                .scaleEffect(0.8)
+                                        } else {
+                                            Image(systemName: "arrow.down.circle.fill")
+                                                .foregroundColor(.modernAccent)
+                                        }
+                                        Text(isLoadingConcertList ? "Loading..." : "Load Current Concert List")
+                                            .foregroundColor(.modernAccent)
+                                        Spacer()
+                                        if !isLoadingConcertList {
+                                            Image(systemName: "music.note.list")
+                                                .foregroundColor(.modernAccent)
+                                        }
+                                    }
+                                }
+                                .disabled(isLoadingConcertList)
+
+                                Text("Downloads the latest concert schedule from the support website. Only adds new concerts—your existing data is preserved.")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.modernTextSecondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                                Divider()
+
                                 Button(action: {
                                     showAboutSection.toggle()
                                 }) {
@@ -12256,6 +12331,11 @@ struct SettingsView: View {
                     settingsManager: settingsManager,
                     year: yearItem.value
                 )
+            }
+            .alert(loadConcertListAlertTitle, isPresented: $showLoadConcertListAlert) {
+                Button("OK") { }
+            } message: {
+                Text(loadConcertListAlertMessage)
             }
         }
     }
