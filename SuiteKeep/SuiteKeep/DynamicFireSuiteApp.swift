@@ -2394,43 +2394,43 @@ struct DynamicDashboard: View {
                 ScrollView {
                     VStack(spacing: .spacingNormal) {
                         // MARK: - Noir Luxe Header Card
-                        VStack(spacing: 12) {
+                        VStack(spacing: SKSpacing.compact) {
                             // Decorative top accent line
                             RoundedRectangle(cornerRadius: 2)
-                                .fill(Color.champagne)
+                                .fill(SKColors.champagne)
                                 .frame(width: 40, height: 3)
                                 .opacity(0.8)
 
                             // Suite name - elegant serif styling
                             Text(settingsManager.suiteName.uppercased())
-                                .font(.system(size: 13, weight: .medium))
+                                .font(SKTypography.micro)
                                 .tracking(4)
-                                .foregroundColor(.champagne)
+                                .foregroundColor(SKColors.champagne)
 
                             // Venue name - bold display
                             Text(settingsManager.venueLocation)
-                                .font(.system(size: 26, weight: .bold, design: .serif))
+                                .font(SKTypography.headlineLarge)
                                 .foregroundColor(.white)
 
                             // Subtle tagline
                             Text("PRIVATE SUITE")
-                                .font(.system(size: 10, weight: .medium))
+                                .font(SKTypography.micro)
                                 .tracking(3)
                                 .foregroundColor(.white.opacity(0.5))
                         }
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 24)
-                        .padding(.horizontal, 20)
+                        .padding(.vertical, SKSpacing.relaxed)
+                        .padding(.horizontal, SKSpacing.comfortable)
                         .background(
                             ZStack {
                                 // Deep noir base
-                                RoundedRectangle(cornerRadius: 20)
+                                RoundedRectangle(cornerRadius: SKSpacing.radiusSoft)
                                     .fill(
                                         LinearGradient(
                                             colors: [
-                                                Color(red: 0.12, green: 0.10, blue: 0.14),
-                                                Color(red: 0.16, green: 0.13, blue: 0.18),
-                                                Color(red: 0.12, green: 0.10, blue: 0.14)
+                                                SKColors.surfaceCard,
+                                                SKColors.surfaceElevated,
+                                                SKColors.surfaceCard
                                             ],
                                             startPoint: .topLeading,
                                             endPoint: .bottomTrailing
@@ -2438,27 +2438,17 @@ struct DynamicDashboard: View {
                                     )
 
                                 // Subtle champagne glow at top
-                                RoundedRectangle(cornerRadius: 20)
-                                    .fill(
-                                        LinearGradient(
-                                            colors: [
-                                                Color.champagne.opacity(0.08),
-                                                Color.clear,
-                                                Color.clear
-                                            ],
-                                            startPoint: .top,
-                                            endPoint: .bottom
-                                        )
-                                    )
+                                RoundedRectangle(cornerRadius: SKSpacing.radiusSoft)
+                                    .fill(SKColors.heroGradient)
 
                                 // Inner border with champagne tint
-                                RoundedRectangle(cornerRadius: 20)
+                                RoundedRectangle(cornerRadius: SKSpacing.radiusSoft)
                                     .strokeBorder(
                                         LinearGradient(
                                             colors: [
-                                                Color.champagne.opacity(0.3),
-                                                Color.champagne.opacity(0.1),
-                                                Color.champagne.opacity(0.2)
+                                                SKColors.champagne.opacity(0.3),
+                                                SKColors.champagne.opacity(0.1),
+                                                SKColors.champagne.opacity(0.2)
                                             ],
                                             startPoint: .topLeading,
                                             endPoint: .bottomTrailing
@@ -2466,7 +2456,7 @@ struct DynamicDashboard: View {
                                         lineWidth: 1
                                     )
                             }
-                            .shadow(color: Color.champagne.opacity(0.1), radius: 20, x: 0, y: 10)
+                            .shadow(color: SKColors.champagne.opacity(0.1), radius: 20, x: 0, y: 10)
                             .shadow(color: .black.opacity(0.3), radius: 15, x: 0, y: 8)
                         )
 
@@ -2668,7 +2658,7 @@ struct MetricCard: View {
     @State private var showShimmer = false
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: SKSpacing.tight) {
             // Icon with sophisticated treatment
             ZStack {
                 // Subtle glow ring
@@ -2677,7 +2667,7 @@ struct MetricCard: View {
                     .frame(width: 38, height: 38)
 
                 Circle()
-                    .fill(accentColor.opacity(0.1))
+                    .fill(accentColor.opacity(0.15))
                     .frame(width: 34, height: 34)
 
                 Image(systemName: icon)
@@ -2685,76 +2675,85 @@ struct MetricCard: View {
                     .foregroundColor(accentColor)
             }
 
-            Spacer(minLength: 4)
+            Spacer(minLength: SKSpacing.micro)
 
             VStack(spacing: 3) {
                 Text(value)
-                    .font(.system(size: 26, weight: .bold, design: .rounded))
-                    .foregroundColor(.primary)
+                    .font(SKTypography.metricMedium)
+                    .foregroundColor(SKColors.textPrimary)
                     .scaleEffect(animateValue ? 1.03 : 1.0)
-                    .animation(.spring(response: 0.5, dampingFraction: 0.7), value: animateValue)
+                    .animation(SKMotion.stateChange, value: animateValue)
 
                 Text(title.uppercased())
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(SKTypography.micro)
                     .tracking(1.5)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(SKColors.textSecondary)
             }
 
-            Spacer(minLength: 4)
+            Spacer(minLength: SKSpacing.micro)
         }
-        .padding(.vertical, 14)
-        .padding(.horizontal, 12)
+        .padding(.vertical, SKSpacing.compact)
+        .padding(.horizontal, SKSpacing.compact)
         .frame(maxWidth: .infinity)
         .frame(height: 105)
         .background(
             ZStack {
-                // Noir card base
-                RoundedRectangle(cornerRadius: 18)
-                    .fill(Color(.tertiarySystemBackground))
+                // Noir card base with glass effect
+                RoundedRectangle(cornerRadius: SKSpacing.radiusRounded)
+                    .fill(.ultraThinMaterial)
 
-                // Subtle top highlight
-                RoundedRectangle(cornerRadius: 18)
+                // Accent gradient overlay
+                RoundedRectangle(cornerRadius: SKSpacing.radiusRounded)
+                    .fill(SKColors.cardGradient(accent: accentColor))
+
+                // Mesh gradient for premium feel
+                RoundedRectangle(cornerRadius: SKSpacing.radiusRounded)
                     .fill(
-                        LinearGradient(
-                            colors: [accentColor.opacity(0.05), Color.clear],
-                            startPoint: .top,
-                            endPoint: .center
+                        RadialGradient(
+                            colors: [
+                                accentColor.opacity(0.12),
+                                Color.clear
+                            ],
+                            center: .topLeading,
+                            startRadius: 0,
+                            endRadius: 150
                         )
                     )
 
                 // Refined border
-                RoundedRectangle(cornerRadius: 18)
+                RoundedRectangle(cornerRadius: SKSpacing.radiusRounded)
                     .strokeBorder(
                         LinearGradient(
                             colors: [
-                                accentColor.opacity(0.2),
-                                accentColor.opacity(0.05),
-                                accentColor.opacity(0.1)
+                                accentColor.opacity(0.3),
+                                SKColors.glassHighlight,
+                                accentColor.opacity(0.15)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
-                        lineWidth: 0.5
+                        lineWidth: 1
                     )
             }
         )
-        .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4)
-        .scaleEffect(isPressed ? 0.97 : 1.0)
+        .shadow(color: accentColor.opacity(0.12), radius: 12, x: 0, y: 6)
+        .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)
+        .scaleEffect(isPressed ? SKMotion.cardPressScale : 1.0)
         .onTapGesture {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            withAnimation(SKMotion.tap) {
                 isPressed.toggle()
                 animateValue.toggle()
             }
             HapticManager.shared.impact(style: .light)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                withAnimation(SKMotion.tap) {
                     isPressed.toggle()
                 }
             }
         }
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double.random(in: 0.1...0.5)) {
-                withAnimation(.spring(response: 0.8, dampingFraction: 0.6)) {
+                withAnimation(SKMotion.expand) {
                     animateValue = true
                 }
             }
@@ -3641,9 +3640,9 @@ enum SeatStatus: String, Codable, CaseIterable {
     
     var color: Color {
         switch self {
-        case .available: return .green
-        case .reserved: return .orange
-        case .sold: return .red
+        case .available: return SKColors.statusAvailable
+        case .reserved: return SKColors.statusReserved
+        case .sold: return SKColors.statusSold
         }
     }
     
@@ -9621,107 +9620,119 @@ struct InteractiveFireSuiteView: View {
             
             // Enhanced status legend and metrics
             VStack(spacing: 16) {
-                // Status legend with professional design
-                HStack(spacing: 20) {
+                // Status legend with premium design - horizontal pill badges
+                HStack(spacing: SKSpacing.comfortable) {
                     // Available legend
-                    HStack(spacing: 8) {
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(Color.green)  // Match seat color - available should be green
-                            .frame(width: 16, height: 16)
+                    HStack(spacing: SKSpacing.tight) {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(SKColors.statusAvailable)
+                            .frame(width: 14, height: 14)
+                            .shadow(color: SKColors.statusAvailable.opacity(0.5), radius: 4)
                         Text(isBuyerView ? "Open" : "Available")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.green)
+                            .font(SKTypography.labelMedium)
+                            .foregroundColor(SKColors.statusAvailable)
                     }
 
-                    // Reserved legend
-                    HStack(spacing: 8) {
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(Color(red: 1.0, green: 0.65, blue: 0.2))  // Match seat color
-                            .frame(width: 16, height: 16)
-                        Text("Reserved")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.orange)
+                    // Reserved legend (only in management view)
+                    if !isBuyerView {
+                        HStack(spacing: SKSpacing.tight) {
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(SKColors.statusReserved)
+                                .frame(width: 14, height: 14)
+                                .shadow(color: SKColors.statusReserved.opacity(0.5), radius: 4)
+                            Text("Reserved")
+                                .font(SKTypography.labelMedium)
+                                .foregroundColor(SKColors.statusReserved)
+                        }
                     }
 
                     // Sold legend
-                    HStack(spacing: 8) {
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(Color.red)  // Match seat color - sold should be red
-                            .frame(width: 16, height: 16)
+                    HStack(spacing: SKSpacing.tight) {
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(SKColors.statusSold)
+                            .frame(width: 14, height: 14)
+                            .shadow(color: SKColors.statusSold.opacity(0.5), radius: 4)
                         Text("Sold")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.red)
+                            .font(SKTypography.labelMedium)
+                            .foregroundColor(SKColors.statusSold)
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-                .liquidGlass(cornerRadius: 12, intensity: 0.12)
+                .padding(.horizontal, SKSpacing.comfortable)
+                .padding(.vertical, SKSpacing.compact)
+                .background(
+                    ZStack {
+                        RoundedRectangle(cornerRadius: SKSpacing.radiusSmooth)
+                            .fill(.ultraThinMaterial)
+                        RoundedRectangle(cornerRadius: SKSpacing.radiusSmooth)
+                            .strokeBorder(SKColors.glassBorder, lineWidth: 1)
+                    }
+                )
                 
                 // Enhanced revenue display (hidden in buyer view)
                 if !isBuyerView {
-                    VStack(spacing: 8) {
+                    VStack(spacing: SKSpacing.tight) {
                         Text("Revenue: $\(Int(concert.totalRevenue))")
-                            .font(.system(size: 20, weight: .bold, design: .rounded))
-                            .foregroundColor(.green)
-                        
-                        HStack(spacing: 20) {
+                            .font(SKTypography.metricSmall)
+                            .foregroundColor(SKColors.success)
+
+                        HStack(spacing: SKSpacing.comfortable) {
                             VStack(spacing: 2) {
                                 Text("\(concert.ticketsSold)")
-                                    .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(.red)
+                                    .font(SKTypography.titleMedium)
+                                    .foregroundColor(SKColors.statusSold)
                                 Text("sold")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(.red.opacity(0.7))
+                                    .font(SKTypography.labelMedium)
+                                    .foregroundColor(SKColors.statusSold.opacity(0.7))
                             }
-                            
+
                             VStack(spacing: 2) {
                                 Text("\(concert.ticketsReserved)")
-                                    .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(.orange)
+                                    .font(SKTypography.titleMedium)
+                                    .foregroundColor(SKColors.statusReserved)
                                 Text("reserved")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(.orange.opacity(0.7))
+                                    .font(SKTypography.labelMedium)
+                                    .foregroundColor(SKColors.statusReserved.opacity(0.7))
                             }
-                            
+
                             VStack(spacing: 2) {
                                 Text("\(8 - concert.ticketsSold - concert.ticketsReserved)")
-                                    .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(.green)
+                                    .font(SKTypography.titleMedium)
+                                    .foregroundColor(SKColors.statusAvailable)
                                 Text("available")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundColor(.green.opacity(0.7))
+                                    .font(SKTypography.labelMedium)
+                                    .foregroundColor(SKColors.statusAvailable.opacity(0.7))
                             }
                         }
                     }
                 }
             }
-            
+
             // Parking ticket status - clickable
             Button(action: {
                 showingParkingOptions = true
             }) {
-                HStack(spacing: 8) {
+                HStack(spacing: SKSpacing.tight) {
                     Image(systemName: "car.fill")
                         .font(.system(size: 12))
-                        .foregroundColor(.blue)
-                    
+                        .foregroundColor(SKColors.accentBlue)
+
                     if concert.parkingTicketSold {
                         Text("Parking: SOLD")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.red)
+                            .font(SKTypography.labelLarge)
+                            .foregroundColor(SKColors.statusSold)
                     } else if concert.parkingTicketReserved {
                         Text("Parking: RESERVED")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.orange)
+                            .font(SKTypography.labelLarge)
+                            .foregroundColor(SKColors.statusReserved)
                     } else {
                         Text("Parking: AVAILABLE")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.green)
+                            .font(SKTypography.labelLarge)
+                            .foregroundColor(SKColors.statusAvailable)
                     }
-                    
+
                     Image(systemName: "chevron.right")
                         .font(.system(size: 10))
-                        .foregroundColor(.blue.opacity(0.6))
+                        .foregroundColor(SKColors.accentBlue.opacity(0.6))
                 }
             }
             .buttonStyle(PlainButtonStyle())
@@ -9904,61 +9915,125 @@ struct InteractiveFireSuiteView: View {
 // MARK: - Compact Firepit View
 struct CompactFirepitView: View {
     let isPulsing: Bool
-    
+    @State private var pulsePhase: Bool = false
+
     var body: some View {
         ZStack {
-            // Outer glow for rectangular firepit
+            // Outer ambient glow - champagne themed
+            RoundedRectangle(cornerRadius: 12)
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            SKColors.champagne.opacity(0.25),
+                            SKColors.champagne.opacity(0.12),
+                            SKColors.champagne.opacity(0.05),
+                            Color.clear
+                        ],
+                        center: .center,
+                        startRadius: 10,
+                        endRadius: 80
+                    )
+                )
+                .frame(width: 130, height: 80)
+                .blur(radius: 12)
+                .scaleEffect(pulsePhase ? 1.08 : 1.0)
+
+            // Secondary glow layer
             RoundedRectangle(cornerRadius: 10)
                 .fill(
                     RadialGradient(
                         colors: [
-                            Color.orange.opacity(0.3),
-                            Color.orange.opacity(0.15),
+                            SKColors.champagne.opacity(0.35),
+                            SKColors.champagne.opacity(0.15),
                             Color.clear
                         ],
                         center: .center,
-                        startRadius: 15,
-                        endRadius: 60
+                        startRadius: 5,
+                        endRadius: 50
                     )
                 )
-                .frame(width: 120, height: 70)
-                .blur(radius: 10)
-                .scaleEffect(isPulsing ? 1.1 : 1.0)
-            
-            // Main rectangular firepit
-            RoundedRectangle(cornerRadius: 8)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.fireRed,
-                            Color.orange,
-                            Color.fireYellow.opacity(0.9)
-                        ],
-                        startPoint: .bottom,
-                        endPoint: .top
-                    )
-                )
-                .frame(width: 100, height: 50)
-                .overlay(
-                    // Inner fire detail
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color.fireYellow.opacity(0.8),
-                                    Color.orange.opacity(0.6)
-                                ],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
+                .frame(width: 110, height: 60)
+                .blur(radius: 6)
+                .scaleEffect(pulsePhase ? 1.05 : 0.98)
+
+            // Main ambient panel with glass morphism
+            ZStack {
+                // Glass base
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(.ultraThinMaterial)
+                    .frame(width: 100, height: 50)
+
+                // Champagne gradient fill
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                SKColors.champagne.opacity(0.4),
+                                SKColors.champagneMuted.opacity(0.3),
+                                SKColors.champagne.opacity(0.35)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
                         )
-                        .frame(width: 85, height: 38)
-                        .blur(radius: 2)
-                )
-                .shadow(color: .orange.opacity(0.6), radius: 12)
-                .shadow(color: .fireRed.opacity(0.4), radius: 6)
+                    )
+                    .frame(width: 100, height: 50)
+
+                // Inner highlight
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                SKColors.champagneLight.opacity(0.5),
+                                SKColors.champagne.opacity(0.3),
+                                SKColors.champagneMuted.opacity(0.2)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .frame(width: 88, height: 40)
+                    .blur(radius: 2)
+
+                // Minimalist warmth icon
+                Image(systemName: "flame.fill")
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [
+                                SKColors.champagneLight,
+                                SKColors.champagne
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .shadow(color: SKColors.champagne.opacity(0.6), radius: 4)
+
+                // Border with gradient
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                SKColors.champagne.opacity(0.5),
+                                SKColors.champagneMuted.opacity(0.3),
+                                SKColors.champagne.opacity(0.4)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+                    .frame(width: 100, height: 50)
+            }
+            .shadow(color: SKColors.champagne.opacity(0.4), radius: 12)
+            .shadow(color: SKColors.champagneMuted.opacity(0.2), radius: 6)
         }
-        .animation(.easeInOut(duration: 2.0).repeatForever(), value: isPulsing)
+        .onAppear {
+            if isPulsing {
+                pulsePhase = true
+            }
+        }
+        .animation(SKMotion.ambient, value: pulsePhase)
     }
 }
 
@@ -9976,19 +10051,16 @@ struct CompactSeatView: View {
     
     var seatColor: Color {
         if isBuyerView {
-            // Buyer view: only green for available, red for sold/reserved
+            // Buyer view: soft emerald for available, slate blue for unavailable
             switch seat.status {
-            case .available: return .green
-            case .reserved, .sold: return .red
+            case .available: return SKColors.statusAvailable
+            case .reserved, .sold: return SKColors.statusSold
             }
         } else if isBatchMode && isSelected {
-            return .blue
+            return SKColors.accentBlue
         } else {
-            switch seat.status {
-            case .available: return .green  // Green for available
-            case .reserved: return .orange  // Orange for reserved
-            case .sold: return .red  // Red for sold
-            }
+            // Management view: full status colors
+            return SKColors.statusColor(for: seat.status)
         }
     }
     
@@ -10042,33 +10114,62 @@ struct CompactSeatView: View {
     }
     
     var body: some View {
-        VStack(spacing: -2) {  // Negative spacing to bring text very close to seat
-            // Seat button with liquid glass effect
+        VStack(spacing: SKSpacing.Seat.spacing) {
+            // Seat button with glass morphism
             ZStack {
-                // Glass background
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(.ultraThinMaterial)
-                    .frame(width: 48, height: 48)
-
-                // Colored gradient overlay
-                RoundedRectangle(cornerRadius: 12)
+                // Outer glow effect
+                RoundedRectangle(cornerRadius: SKSpacing.Seat.cornerRadius)
                     .fill(
                         RadialGradient(
                             colors: [
-                                seatColor.opacity(0.6),
-                                seatColor.opacity(0.4)
+                                seatColor.opacity(0.4),
+                                seatColor.opacity(0.1),
+                                Color.clear
                             ],
                             center: .center,
                             startRadius: 0,
-                            endRadius: 24
+                            endRadius: 40
                         )
                     )
-                    .frame(width: 48, height: 48)
+                    .frame(width: SKSpacing.Seat.size + 16, height: SKSpacing.Seat.size + 16)
+                    .blur(radius: 8)
+                    .opacity(isPressed ? 0.6 : 1.0)
 
-                // Border
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(seatColor.opacity(0.7), lineWidth: 2)
-                    .frame(width: 48, height: 48)
+                // Glass background
+                RoundedRectangle(cornerRadius: SKSpacing.Seat.cornerRadius)
+                    .fill(.ultraThinMaterial)
+                    .frame(width: SKSpacing.Seat.size, height: SKSpacing.Seat.size)
+
+                // Colored gradient overlay
+                RoundedRectangle(cornerRadius: SKSpacing.Seat.cornerRadius)
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                seatColor.opacity(0.5),
+                                seatColor.opacity(0.3)
+                            ],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: SKSpacing.Seat.size / 2
+                        )
+                    )
+                    .frame(width: SKSpacing.Seat.size, height: SKSpacing.Seat.size)
+
+                // Glowing border stroke
+                RoundedRectangle(cornerRadius: SKSpacing.Seat.cornerRadius)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                seatColor.opacity(0.8),
+                                seatColor.opacity(0.4),
+                                seatColor.opacity(0.6)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: SKSpacing.Seat.borderWidth
+                    )
+                    .frame(width: SKSpacing.Seat.size, height: SKSpacing.Seat.size)
 
                 if isBatchMode && isSelected {
                     Image(systemName: "checkmark.circle.fill")
@@ -10077,36 +10178,41 @@ struct CompactSeatView: View {
                         .shadow(color: .black.opacity(0.3), radius: 2)
                 } else {
                     Text("\(seatNumber)")
-                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .font(SKTypography.seatNumber)
                         .foregroundColor(.white)
                         .shadow(color: .black.opacity(0.3), radius: 2)
                 }
             }
-            .scaleEffect(isPressed ? 0.92 : 1.0)
-            .shadow(color: seatColor.opacity(0.4), radius: isPressed ? 4 : 8, x: 0, y: isPressed ? 2 : 4)
+            .scaleEffect(isPressed ? SKMotion.seatTapScale : 1.0)
+            .shadow(
+                color: seatColor.opacity(0.4),
+                radius: isPressed ? SKMotion.shadowPressedRadius : SKSpacing.Seat.glowRadius,
+                x: 0,
+                y: isPressed ? 2 : 4
+            )
 
             // Status/Price text - always present with fixed height for alignment
             Text(statusText.isEmpty ? " " : statusText)
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundColor(.secondary)
+                .font(SKTypography.seatStatus)
+                .foregroundColor(SKColors.textSecondary)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .minimumScaleFactor(0.8)
-                .frame(height: 24) // Fixed height to maintain alignment
-                .opacity(statusText.isEmpty ? 0 : 1) // Hide when empty but maintain space
+                .frame(height: 24)
+                .opacity(statusText.isEmpty ? 0 : 1)
         }
         .offset(x: shakeOffset)
         .onTapGesture {
-            guard !isBuyerView else { return } // Disable interactions in buyer view
+            guard !isBuyerView else { return }
 
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+            withAnimation(SKMotion.tap) {
                 isPressed = true
             }
             HapticManager.shared.impact(style: .medium)
             onTap()
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                withAnimation(SKMotion.tap) {
                     isPressed = false
                 }
             }
@@ -10114,12 +10220,11 @@ struct CompactSeatView: View {
         .onLongPressGesture(minimumDuration: 0.6) {
             guard !isBuyerView else { return }
 
-            // Shake animation to indicate batch mode entry
+            // Shake animation for batch mode entry
             withAnimation(.interpolatingSpring(stiffness: 900, damping: 8).repeatCount(3, autoreverses: true)) {
                 shakeOffset = 5
             }
 
-            // Reset shake after animation
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 shakeOffset = 0
             }
