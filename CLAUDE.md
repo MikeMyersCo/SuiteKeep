@@ -108,3 +108,20 @@ The support site is deployed via Netlify. Changes pushed to the support folder w
 - **Keep iPhone app and support website data separate** - don't mix code between them
 - The support website has its own `.git` directory for independent version control
 - Concert schedule JSON files should use the same format as SuiteKeep backup files for easy import
+
+---
+
+## Ford Amphitheater Concert Schedule
+
+**Source:** https://www.fordamphitheater.live
+
+When asked to update the concert list, fetch from the source URL and avoid duplicates.
+
+### Current 2026 Schedule (Last Updated: January 23, 2026)
+
+| Date | Artist |
+|------|--------|
+| Fri, June 5, 2026 | Yo-Yo Ma with the Colorado Symphony |
+| Thu, June 18, 2026 | O.A.R. Three Decades Tour (w/ Gavin DeGraw, Phantom Planet) |
+| Fri, August 14, 2026 | Alison Krauss & Union Station feat. Jerry Douglas |
+| Sat, September 5, 2026 | Brantley Gilbert |
