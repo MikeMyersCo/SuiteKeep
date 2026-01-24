@@ -67,3 +67,44 @@ The suite has a unique 8-seat configuration around a central firepit:
 - Unit tests use the modern Swift Testing framework with `@Test` attributes
 - UI tests use XCTest with XCUIApplication for app automation
 - Tests are organized in separate targets for unit and UI testing
+
+---
+
+## Support Website
+
+**Live URL:** https://suitekeepsupport.netlify.app/
+
+**Location:** `SuiteKeep/support/`
+
+The support website is a static HTML site hosted on Netlify that provides documentation, user guides, and downloadable concert schedules for SuiteKeep users.
+
+### Key Files
+
+- **index.html**: Main support page with app documentation, features overview, and contact form
+- **assets/js/main.js**: JavaScript for interactive features
+- **assets/2025FordAmp.json**: Sample concert schedule file (Ford Amphitheater 2025)
+  - This is a SuiteKeep backup file format that users can download and import
+  - Needs to be updated to **2026 Ford Amphitheater schedule** as shows are announced
+  - Currently contains ~27 concerts for the 2025 season
+
+### Concert Schedule Updates
+
+The support website offers downloadable concert schedules in SuiteKeep's backup format. To update:
+
+1. Create/update the JSON file in `SuiteKeep/support/assets/` (e.g., `2026FordAmp.json`)
+2. Update the download link in `index.html`
+3. The file format matches SuiteKeep's backup format with:
+   - `version`: Backup version (e.g., "1.1")
+   - `backupDate`: ISO 8601 timestamp
+   - `concerts`: Array of concert objects with artist, date, seats, parkingTicket
+   - `suiteSettings`: Default suite configuration
+
+### Deployment
+
+The support site is deployed via Netlify. Changes pushed to the support folder will automatically deploy.
+
+### Important Notes
+
+- **Keep iPhone app and support website data separate** - don't mix code between them
+- The support website has its own `.git` directory for independent version control
+- Concert schedule JSON files should use the same format as SuiteKeep backup files for easy import

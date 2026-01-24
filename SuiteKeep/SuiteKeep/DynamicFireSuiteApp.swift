@@ -33,7 +33,7 @@ extension Notification.Name {
 
 // MARK: - Charity Data Model
 struct SavedCharity: Codable, Identifiable, Equatable {
-    let id = UUID()
+    var id = UUID()
     var name: String
     var address: String
     var ein: String
@@ -260,8 +260,9 @@ class SettingsManager: ObservableObject {
         suiteInfo.familyTicketPrice = familyTicketPrice
         suiteInfo.defaultSeatCost = defaultSeatCost
 
+        let suiteInfoToSync = suiteInfo
         Task {
-            await sharedSuiteManager.updateSuiteSettings(suiteInfo)
+            await sharedSuiteManager.updateSuiteSettings(suiteInfoToSync)
         }
     }
     
@@ -1712,8 +1713,8 @@ struct CleanSettingsField: View {
                     isFocused = false
                     UIApplication.shared.dismissKeyboard()
                 }
-                .onChange(of: isFocused) { focused in
-                    if !focused && editableValue != value {
+                .onChange(of: isFocused) { oldValue, newValue in
+                    if !newValue && editableValue != value {
                         onChange(editableValue)
                     }
                 }
@@ -1721,7 +1722,7 @@ struct CleanSettingsField: View {
         .onAppear {
             editableValue = value
         }
-        .onChange(of: value) { newValue in
+        .onChange(of: value) { oldValue, newValue in
             if !isFocused {
                 editableValue = newValue
             }
@@ -1776,7 +1777,7 @@ struct CleanPriceField: View {
                                 }
                             }
                         }
-                        .onChange(of: editableValue) { newValue in
+                        .onChange(of: editableValue) { oldValue, newValue in
                             let filtered = newValue.filter { "0123456789".contains($0) }
                             if filtered != newValue {
                                 editableValue = filtered
@@ -1788,8 +1789,8 @@ struct CleanPriceField: View {
                             }
                             isFocused = false
                         }
-                        .onChange(of: isFocused) { focused in
-                            if !focused {
+                        .onChange(of: isFocused) { oldValue, newValue in
+                            if !newValue {
                                 if let newPrice = Double(editableValue), newPrice >= 0 {
                                     onChange(newPrice)
                                 } else {
@@ -1811,7 +1812,7 @@ struct CleanPriceField: View {
         .onAppear {
             editableValue = String(format: "%.0f", value)
         }
-        .onChange(of: value) { newValue in
+        .onChange(of: value) { oldValue, newValue in
             if !isFocused {
                 editableValue = String(format: "%.0f", newValue)
             }
@@ -2408,7 +2409,7 @@ struct DynamicDashboard: View {
                     EmptyView()
                 }
             }
-            .onChange(of: selectedConcert) { newValue in
+            .onChange(of: selectedConcert) { oldValue, newValue in
                 if let concert = newValue {
                     activeSheet = .concertDetails(concert)
                     selectedConcert = nil
@@ -3752,7 +3753,7 @@ extension SharedSuiteInfo {
         guard let suiteName = record["suiteName"] as? String,
               let venueLocation = record["venueLocation"] as? String,
               let ownerId = record["ownerId"] as? String,
-              let createdDate = record["createdDate"] as? Date,
+              let _ = record["createdDate"] as? Date,
               let lastModified = record["lastModified"] as? Date else {
             return nil
         }
@@ -3883,12 +3884,12 @@ extension InvitationToken {
               let invitedBy = record["invitedBy"] as? String,
               let roleString = record["role"] as? String,
               let role = UserRole(rawValue: roleString),
-              let expirationDate = record["expirationDate"] as? Date,
-              let createdDate = record["createdDate"] as? Date,
+              let _ = record["expirationDate"] as? Date,
+              let _ = record["createdDate"] as? Date,
               let used = record["used"] as? Bool else {
             return nil
         }
-        
+
         var token = InvitationToken(suiteId: suiteId, invitedBy: invitedBy, role: role)
         token.used = used
         token.usedBy = record["usedBy"] as? String
@@ -3916,7 +3917,7 @@ extension SuiteSync {
     
     static func fromCloudKitRecord(_ record: CKRecord) -> SuiteSync? {
         guard let suiteId = record["suiteId"] as? String,
-              let lastSyncDate = record["lastSyncDate"] as? Date,
+              let _ = record["lastSyncDate"] as? Date,
               let syncVersionInt = record["syncVersion"] as? Int64 else {
             return nil
         }
@@ -4136,6 +4137,119 @@ struct SuiteSettings: Codable {
     let venueLocation: String
     let familyTicketPrice: Double
     let defaultSeatCost: Double
+}
+
+// MARK: - Year-End Archive Models
+
+enum ArchiveError: Error, LocalizedError {
+    case noArchivesDirectory
+    case archiveAlreadyExists(year: Int)
+    case noConcertsForYear(year: Int)
+    case failedToSave(Error)
+    case failedToLoad(Error)
+    case failedToDelete(Error)
+    case invalidArchiveData
+
+    var errorDescription: String? {
+        switch self {
+        case .noArchivesDirectory:
+            return "Could not access archives directory"
+        case .archiveAlreadyExists(let year):
+            return "An archive for \(year) already exists"
+        case .noConcertsForYear(let year):
+            return "No concerts found for \(year)"
+        case .failedToSave(let error):
+            return "Failed to save archive: \(error.localizedDescription)"
+        case .failedToLoad(let error):
+            return "Failed to load archive: \(error.localizedDescription)"
+        case .failedToDelete(let error):
+            return "Failed to delete archive: \(error.localizedDescription)"
+        case .invalidArchiveData:
+            return "Archive data is invalid or corrupted"
+        }
+    }
+}
+
+enum ArchiveReportType: String, CaseIterable, Identifiable {
+    case full = "Full Report"
+    case executiveSummary = "Executive Summary"
+    case concertOverview = "Concert Overview"
+    case seatData = "Seat Data"
+    case profitAnalysis = "Profit Analysis"
+    case charity = "Charity Report"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .full: return "doc.text.fill"
+        case .executiveSummary: return "chart.bar.doc.horizontal"
+        case .concertOverview: return "list.bullet.rectangle"
+        case .seatData: return "tablecells"
+        case .profitAnalysis: return "chart.line.uptrend.xyaxis"
+        case .charity: return "heart.fill"
+        }
+    }
+
+    var filename: String {
+        switch self {
+        case .full: return "Full_Report"
+        case .executiveSummary: return "Executive_Summary"
+        case .concertOverview: return "Concert_Overview"
+        case .seatData: return "Seat_Data"
+        case .profitAnalysis: return "Profit_Analysis"
+        case .charity: return "Charity_Report"
+        }
+    }
+}
+
+struct ArchiveReports: Codable {
+    let fullReport: String
+    let executiveSummary: String
+    let concertOverview: String
+    let seatData: String
+    let profitAnalysis: String
+    let charityReport: String
+
+    func getReport(for type: ArchiveReportType) -> String {
+        switch type {
+        case .full: return fullReport
+        case .executiveSummary: return executiveSummary
+        case .concertOverview: return concertOverview
+        case .seatData: return seatData
+        case .profitAnalysis: return profitAnalysis
+        case .charity: return charityReport
+        }
+    }
+}
+
+struct ArchiveMetadata: Codable {
+    let concertCount: Int
+    let totalRevenue: Double
+    let totalProfit: Double
+    let totalSeatsSold: Int
+    let totalSeatsReserved: Int
+    let totalCharityDonations: Int
+}
+
+struct YearArchive: Identifiable, Codable {
+    let id: UUID
+    let year: Int
+    let archiveDate: Date
+    let concerts: [Concert]
+    let suiteSettings: SuiteSettings
+    let reports: ArchiveReports
+    let metadata: ArchiveMetadata
+
+    init(year: Int, concerts: [Concert], suiteSettings: SuiteSettings, reports: ArchiveReports, metadata: ArchiveMetadata) {
+        self.id = UUID()
+        self.year = year
+        self.archiveDate = Date()
+        self.concerts = concerts
+        self.suiteSettings = suiteSettings
+        self.reports = reports
+        self.metadata = metadata
+    }
 }
 
 // MARK: - Shared Suite Manager
@@ -4448,16 +4562,17 @@ class SharedSuiteManager: ObservableObject {
               userId != self.currentUserId else { // Can't remove self
             return
         }
-        
+
         suiteInfo.members.removeAll { $0.userId == userId }
         suiteInfo.lastModified = Date()
         currentSuiteInfo = suiteInfo
         saveSuiteInfo()
-        
+
         // Sync to CloudKit
+        let suiteInfoToSync = suiteInfo
         Task {
             do {
-                let record = suiteInfo.toCloudKitRecord()
+                let record = suiteInfoToSync.toCloudKitRecord()
                 _ = try await self.publicCloudKitDatabase.save(record)
             } catch {
                 // Handle error silently for now
@@ -4876,9 +4991,10 @@ class SharedSuiteManager: ObservableObject {
                 if suiteInfo.members.contains(where: { $0.userId == self.currentUserId }) {
                     // User is already a member, just update local state
                     let userRole = suiteInfo.members.first(where: { $0.userId == self.currentUserId })?.role ?? .viewer
-                    
+                    let suiteInfoToSync = suiteInfo
+
                     await MainActor.run {
-                        currentSuiteInfo = suiteInfo
+                        currentSuiteInfo = suiteInfoToSync
                         isSharedSuite = true
                         self.userRole = userRole
                         cloudKitStatus = "Rejoined suite successfully"
@@ -4888,7 +5004,7 @@ class SharedSuiteManager: ObservableObject {
                         // Sync settings from shared suite
                         if let concertManager = concertManager,
                            let settingsManager = concertManager.settingsManager {
-                            settingsManager.updateFromSharedSuite(suiteInfo)
+                            settingsManager.updateFromSharedSuite(suiteInfoToSync)
                             // Immediately refresh concert data for UI
                             concertManager.loadConcerts()
                         }
@@ -4924,10 +5040,11 @@ class SharedSuiteManager: ObservableObject {
                     } catch {
                         print("⚠️ DEBUG: Could not update suite record with new member (continuing anyway): \(error)")
                     }
-                    
+
                     // Update local state
+                    let suiteInfoToSync = suiteInfo
                     await MainActor.run {
-                        currentSuiteInfo = suiteInfo
+                        currentSuiteInfo = suiteInfoToSync
                         isSharedSuite = true
                         userRole = .viewer
                         cloudKitStatus = "Joined suite successfully"
@@ -4937,7 +5054,7 @@ class SharedSuiteManager: ObservableObject {
                         // Sync settings from shared suite
                         if let concertManager = concertManager,
                            let settingsManager = concertManager.settingsManager {
-                            settingsManager.updateFromSharedSuite(suiteInfo)
+                            settingsManager.updateFromSharedSuite(suiteInfoToSync)
                             // Show read-only alert for new users joining the suite
                             settingsManager.showReadOnlySharedSuiteAlert()
                             // Immediately refresh concert data for UI
@@ -5106,7 +5223,7 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
             }
             print("✅ DEBUG: Found invitation token record")
             
-            guard var token = InvitationToken.fromCloudKitRecord(tokenRecord),
+            guard let token = InvitationToken.fromCloudKitRecord(tokenRecord),
                   token.isValid else {
                 print("❌ DEBUG: Token is invalid or expired")
                 await MainActor.run {
@@ -5177,7 +5294,8 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
             }
             
             // Check if user has accessed this suite recently (within 10 minutes) - prevents using different tokens
-            if let lastAccessed = await MainActor.run(body: { self.accessedSuites[token.suiteId] }),
+            let tokenSuiteId = token.suiteId
+            if let lastAccessed = await MainActor.run(body: { self.accessedSuites[tokenSuiteId] }),
                Date().timeIntervalSince(lastAccessed) < 600 { // 10 minutes
                 print("❌ DEBUG: Suite accessed recently with different token - preventing abuse")
                 await MainActor.run {
@@ -5193,7 +5311,7 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
             await MainActor.run {
                 self.usedTokens.insert(tokenId)
                 self.tokenUsageHistory[tokenId] = Date()
-                self.accessedSuites[token.suiteId] = Date()
+                self.accessedSuites[tokenSuiteId] = Date()
             }
             print("🔒 DEBUG: Token marked as used locally - immediate protection active")
             
@@ -5224,7 +5342,7 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
             
         } catch {
             // Check if this is one of our specific SuiteKeep errors (already handled with user-friendly message)
-            if let nsError = error as? NSError, nsError.domain == "SuiteKeepErrorDomain" {
+            if let nsError = error as NSError?, nsError.domain == "SuiteKeepErrorDomain" {
                 // Status already set above, just re-throw the original error
                 throw nsError
             }
@@ -5401,13 +5519,14 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
             }
             
             print("✅ DEBUG: Found \(syncedConcerts.count) concerts for suite")
-            
+
             // Update concert data via notification on main thread
+            let concertsToSync = syncedConcerts
             await MainActor.run {
                 NotificationCenter.default.post(
                     name: .concertDataSynced,
                     object: nil,
-                    userInfo: ["concerts": syncedConcerts]
+                    userInfo: ["concerts": concertsToSync]
                 )
                 isSyncing = false
             }
@@ -5485,7 +5604,7 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
     
     // MARK: - Concert Migration for suiteId Field  
     func migrateConcertRecordsWithSuiteId() async {
-        guard isCloudKitAvailable, let suiteInfo = currentSuiteInfo else { return }
+        guard isCloudKitAvailable, let _ = currentSuiteInfo else { return }
         
         print("🔄 DEBUG: Starting migration to add suiteId field to existing concerts")
         print("ℹ️ DEBUG: Skipping migration due to CloudKit query limitations - will handle during individual record saves")
@@ -5544,7 +5663,7 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
             for (recordID, result) in fetchResults {
                 switch result {
                 case .success(let record):
-                    let currentSuiteRef = record["suite"] as? CKRecord.Reference
+                    let _ = record["suite"] as? CKRecord.Reference
                     let currentSuiteId = record["suiteId"] as? String
                     
                     // Only migrate if not already in current suite
@@ -5880,7 +5999,7 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
     }
     
     func handleCloudKitNotification(_ notification: CKNotification) {
-        guard let queryNotification = notification as? CKQueryNotification,
+        guard let _ = notification as? CKQueryNotification,
               isInSharedSuite else { return }
         
         // Sync with CloudKit when we receive notifications
@@ -6052,7 +6171,7 @@ extension SharedSuiteManager {
 // MARK: - CloudKit Notification Handling
 extension SharedSuiteManager {
     static func handleRemoteNotification(userInfo: [AnyHashable: Any]) async {
-        if let notification = CKNotification(fromRemoteNotificationDictionary: userInfo) {
+        if CKNotification(fromRemoteNotificationDictionary: userInfo) != nil {
             // This should be called from the shared instance in your app
             // You might want to implement a singleton pattern or pass this through the app delegate
         }
@@ -6551,7 +6670,7 @@ class ConcertDataManager: ObservableObject {
             guard let self = self else { return }
             
             let localConcertCount = self.concerts.count
-            let isOwner = (self.sharedSuiteManager?.userRole == .owner) ?? false
+            let isOwner = self.sharedSuiteManager?.userRole == .owner
             let isInSharedSuite = (self.sharedSuiteManager?.isInSharedSuite) ?? false
             
             print("🔄 DEBUG: Local concerts: \(localConcertCount), Synced concerts: \(syncedConcerts.count), User role: \(self.sharedSuiteManager?.userRole.rawValue ?? "unknown"), In shared suite: \(isInSharedSuite)")
@@ -6590,7 +6709,7 @@ class ConcertDataManager: ObservableObject {
                 var hasChanges = false
                 
                 for syncedConcert in syncedConcerts {
-                    if let localIndex = mergedConcerts.firstIndex(where: { $0.id == syncedConcert.id }) {
+                    if mergedConcerts.contains(where: { $0.id == syncedConcert.id }) {
                         // Concert exists locally - keep local version to preserve recent changes
                         print("🔄 DEBUG: Owner keeping local version of concert \(syncedConcert.id)")
                     } else {
@@ -6710,11 +6829,11 @@ class ConcertDataManager: ObservableObject {
         }
         
         do {
-            let encoded = try JSONEncoder().encode(concerts)
-            
+            let _ = try JSONEncoder().encode(concerts)
+
             // Save to local storage only (no CloudKit sync)
             saveToLocalStorage()
-            
+
             print("✅ DEBUG: Saved concerts locally only (no CloudKit sync)")
         } catch {
             print("❌ DEBUG: Failed to save concerts locally: \(error)")
@@ -7029,7 +7148,7 @@ class ConcertDataManager: ObservableObject {
         guard let sharedSuiteManager = sharedSuiteManager,
               sharedSuiteManager.isSharedSuite,
               sharedSuiteManager.isCloudKitAvailable,
-              let suiteInfo = sharedSuiteManager.currentSuiteInfo else {
+              sharedSuiteManager.currentSuiteInfo != nil else {
             return
         }
         
@@ -7209,15 +7328,381 @@ class ConcertDataManager: ObservableObject {
     
     private func migrateLocalConcertsToCloudSync() {
         print("🔄 Migrating \(concerts.count) local concerts to CloudSync...")
-        
+
         // Force sync existing concerts to CloudKit
         // This ensures all existing data is backed up to iCloud
         if !concerts.isEmpty {
             print("📤 Syncing existing concert data to iCloud...")
             saveConcerts() // This will trigger CloudKit sync
         }
-        
+
         print("✅ CloudSync migration complete: \(concerts.count) concerts now synced with iCloud")
+    }
+
+    // MARK: - Archive Support
+
+    func removeConcertsForYear(_ year: Int) {
+        let calendar = Calendar.current
+        concerts.removeAll { concert in
+            calendar.component(.year, from: concert.date) == year
+        }
+        saveConcerts()
+    }
+
+    func addConcerts(_ newConcerts: [Concert]) {
+        // Add concerts that don't already exist (by ID)
+        let existingIds = Set(concerts.map { $0.id })
+        let concertsToAdd = newConcerts.filter { !existingIds.contains($0.id) }
+        concerts.append(contentsOf: concertsToAdd)
+        concerts.sort { $0.date > $1.date }
+        saveConcerts()
+    }
+}
+
+// MARK: - Archive Manager
+
+class ArchiveManager: ObservableObject {
+    static let shared = ArchiveManager()
+
+    @Published var availableArchives: [YearArchive] = []
+    @Published var isArchiving = false
+    @Published var archiveProgress = ""
+    @Published var lastError: ArchiveError?
+
+    private let fileManager = FileManager.default
+    private let archiveDirectoryName = "Archives"
+
+    private init() {
+        loadAvailableArchives()
+    }
+
+    // MARK: - Directory Management
+
+    private var archivesDirectoryURL: URL? {
+        guard let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        let archivesURL = documentsURL.appendingPathComponent(archiveDirectoryName)
+
+        // Create directory if it doesn't exist
+        if !fileManager.fileExists(atPath: archivesURL.path) {
+            do {
+                try fileManager.createDirectory(at: archivesURL, withIntermediateDirectories: true)
+            } catch {
+                return nil
+            }
+        }
+
+        return archivesURL
+    }
+
+    private func archiveFileURL(for year: Int) -> URL? {
+        archivesDirectoryURL?.appendingPathComponent("SuiteKeep_Archive_\(year).json")
+    }
+
+    // MARK: - Archive Operations
+
+    func loadAvailableArchives() {
+        guard let archivesDir = archivesDirectoryURL else {
+            availableArchives = []
+            return
+        }
+
+        do {
+            let files = try fileManager.contentsOfDirectory(at: archivesDir, includingPropertiesForKeys: nil)
+            let archiveFiles = files.filter { $0.pathExtension == "json" }
+
+            var archives: [YearArchive] = []
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            for fileURL in archiveFiles {
+                if let data = try? Data(contentsOf: fileURL),
+                   let archive = try? decoder.decode(YearArchive.self, from: data) {
+                    archives.append(archive)
+                }
+            }
+
+            availableArchives = archives.sorted { $0.year > $1.year }
+        } catch {
+            availableArchives = []
+        }
+    }
+
+    func getAvailableYearsToArchive(from concerts: [Concert]) -> [(year: Int, count: Int)] {
+        let calendar = Calendar.current
+        let currentYear = calendar.component(.year, from: Date())
+
+        // Group concerts by year
+        var yearCounts: [Int: Int] = [:]
+        for concert in concerts {
+            let year = calendar.component(.year, from: concert.date)
+            yearCounts[year, default: 0] += 1
+        }
+
+        // Filter to only past years that haven't been archived
+        let archivedYears = Set(availableArchives.map { $0.year })
+
+        return yearCounts
+            .filter { $0.key < currentYear && !archivedYears.contains($0.key) }
+            .map { (year: $0.key, count: $0.value) }
+            .sorted { $0.year > $1.year }
+    }
+
+    func createArchive(for year: Int, concerts: [Concert], settingsManager: SettingsManager) async throws -> YearArchive {
+        await MainActor.run {
+            isArchiving = true
+            archiveProgress = "Preparing archive..."
+        }
+
+        // Filter concerts for the specified year
+        let calendar = Calendar.current
+        let yearConcerts = concerts.filter { calendar.component(.year, from: $0.date) == year }
+
+        guard !yearConcerts.isEmpty else {
+            await MainActor.run {
+                isArchiving = false
+                archiveProgress = ""
+            }
+            throw ArchiveError.noConcertsForYear(year: year)
+        }
+
+        // Check if archive already exists
+        if availableArchives.contains(where: { $0.year == year }) {
+            await MainActor.run {
+                isArchiving = false
+                archiveProgress = ""
+            }
+            throw ArchiveError.archiveAlreadyExists(year: year)
+        }
+
+        await MainActor.run {
+            archiveProgress = "Generating reports..."
+        }
+
+        // Generate all reports
+        let reports = generateArchiveReports(concerts: yearConcerts, settingsManager: settingsManager)
+
+        await MainActor.run {
+            archiveProgress = "Calculating statistics..."
+        }
+
+        // Calculate metadata
+        let metadata = calculateMetadata(concerts: yearConcerts)
+
+        await MainActor.run {
+            archiveProgress = "Saving archive..."
+        }
+
+        // Create suite settings snapshot
+        let suiteSettings = SuiteSettings(
+            suiteName: settingsManager.suiteName,
+            venueLocation: settingsManager.venueLocation,
+            familyTicketPrice: settingsManager.familyTicketPrice,
+            defaultSeatCost: settingsManager.defaultSeatCost
+        )
+
+        // Create archive
+        let archive = YearArchive(
+            year: year,
+            concerts: yearConcerts,
+            suiteSettings: suiteSettings,
+            reports: reports,
+            metadata: metadata
+        )
+
+        // Save to file
+        guard let fileURL = archiveFileURL(for: year) else {
+            await MainActor.run {
+                isArchiving = false
+                archiveProgress = ""
+            }
+            throw ArchiveError.noArchivesDirectory
+        }
+
+        do {
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            encoder.outputFormatting = .prettyPrinted
+            let data = try encoder.encode(archive)
+            try data.write(to: fileURL)
+        } catch {
+            await MainActor.run {
+                isArchiving = false
+                archiveProgress = ""
+            }
+            throw ArchiveError.failedToSave(error)
+        }
+
+        await MainActor.run {
+            isArchiving = false
+            archiveProgress = ""
+            loadAvailableArchives()
+        }
+
+        return archive
+    }
+
+    func deleteArchive(_ archive: YearArchive) throws {
+        guard let fileURL = archiveFileURL(for: archive.year) else {
+            throw ArchiveError.noArchivesDirectory
+        }
+
+        do {
+            try fileManager.removeItem(at: fileURL)
+            loadAvailableArchives()
+        } catch {
+            throw ArchiveError.failedToDelete(error)
+        }
+    }
+
+    func restoreArchive(_ archive: YearArchive, to concertManager: ConcertDataManager) {
+        concertManager.addConcerts(archive.concerts)
+    }
+
+    func exportArchiveReport(_ archive: YearArchive, reportType: ArchiveReportType) -> URL? {
+        let reportContent = archive.reports.getReport(for: reportType)
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let filename = "SuiteKeep_\(archive.year)_\(reportType.filename)_\(formatter.string(from: Date())).csv"
+
+        let tempURL = fileManager.temporaryDirectory.appendingPathComponent(filename)
+
+        do {
+            try reportContent.write(to: tempURL, atomically: true, encoding: .utf8)
+            return tempURL
+        } catch {
+            return nil
+        }
+    }
+
+    // MARK: - Report Generation
+
+    private func generateArchiveReports(concerts: [Concert], settingsManager: SettingsManager) -> ArchiveReports {
+        let reportGenerator = ReportGenerator.shared
+
+        // Full report with all sections
+        let fullReport = reportGenerator.generateComprehensiveReport(
+            concerts: concerts,
+            settingsManager: settingsManager,
+            options: ReportOptions(
+                includeProfitAnalysis: true,
+                includeConcertData: true,
+                includePerformanceRankings: true,
+                includeExecutiveSummary: true,
+                includeCharityReport: true,
+                includeFutureConcerts: true
+            )
+        )
+
+        // Executive summary only
+        let executiveSummary = reportGenerator.generateComprehensiveReport(
+            concerts: concerts,
+            settingsManager: settingsManager,
+            options: ReportOptions(
+                includeProfitAnalysis: false,
+                includeConcertData: false,
+                includePerformanceRankings: false,
+                includeExecutiveSummary: true,
+                includeCharityReport: false,
+                includeFutureConcerts: true
+            )
+        )
+
+        // Concert overview
+        let concertOverview = reportGenerator.generateComprehensiveReport(
+            concerts: concerts,
+            settingsManager: settingsManager,
+            options: ReportOptions(
+                includeProfitAnalysis: false,
+                includeConcertData: false,
+                includePerformanceRankings: true,
+                includeExecutiveSummary: false,
+                includeCharityReport: false,
+                includeFutureConcerts: true
+            )
+        )
+
+        // Seat data
+        let seatData = reportGenerator.generateComprehensiveReport(
+            concerts: concerts,
+            settingsManager: settingsManager,
+            options: ReportOptions(
+                includeProfitAnalysis: false,
+                includeConcertData: true,
+                includePerformanceRankings: false,
+                includeExecutiveSummary: false,
+                includeCharityReport: false,
+                includeFutureConcerts: true
+            )
+        )
+
+        // Profit analysis
+        let profitAnalysis = reportGenerator.generateComprehensiveReport(
+            concerts: concerts,
+            settingsManager: settingsManager,
+            options: ReportOptions(
+                includeProfitAnalysis: true,
+                includeConcertData: false,
+                includePerformanceRankings: false,
+                includeExecutiveSummary: false,
+                includeCharityReport: false,
+                includeFutureConcerts: true
+            )
+        )
+
+        // Charity report
+        let charityReport = reportGenerator.generateComprehensiveReport(
+            concerts: concerts,
+            settingsManager: settingsManager,
+            options: ReportOptions(
+                includeProfitAnalysis: false,
+                includeConcertData: false,
+                includePerformanceRankings: false,
+                includeExecutiveSummary: false,
+                includeCharityReport: true,
+                includeFutureConcerts: true
+            )
+        )
+
+        return ArchiveReports(
+            fullReport: fullReport,
+            executiveSummary: executiveSummary,
+            concertOverview: concertOverview,
+            seatData: seatData,
+            profitAnalysis: profitAnalysis,
+            charityReport: charityReport
+        )
+    }
+
+    private func calculateMetadata(concerts: [Concert]) -> ArchiveMetadata {
+        let totalSeatsSold = concerts.reduce(0) { $0 + $1.ticketsSold }
+        let totalSeatsReserved = concerts.reduce(0) { $0 + $1.ticketsReserved }
+
+        let totalRevenue = concerts.reduce(0.0) { total, concert in
+            let seatRevenue = concert.seats.filter { $0.source != .donation }.compactMap { $0.price }.reduce(0.0, +)
+            let parkingRevenue = concert.parkingTicket?.price ?? 0.0
+            return total + seatRevenue + parkingRevenue
+        }
+
+        let totalCosts = concerts.reduce(0.0) { total, concert in
+            let seatCosts = concert.seats.filter { $0.source != .donation }.reduce(0.0) { $0 + ($1.cost ?? 0.0) }
+            let parkingCost = concert.parkingTicket?.cost ?? 0.0
+            return total + seatCosts + parkingCost
+        }
+
+        let totalCharityDonations = concerts.reduce(0) { total, concert in
+            total + concert.seats.filter { $0.source == .donation }.count
+        }
+
+        return ArchiveMetadata(
+            concertCount: concerts.count,
+            totalRevenue: totalRevenue,
+            totalProfit: totalRevenue - totalCosts,
+            totalSeatsSold: totalSeatsSold,
+            totalSeatsReserved: totalSeatsReserved,
+            totalCharityDonations: totalCharityDonations
+        )
     }
 }
 
@@ -10011,9 +10496,9 @@ struct SeatOptionsView: View {
                                     }
                                 }
                                 .pickerStyle(.menu)
-                                .onChange(of: selectedSource) { newSource in
+                                .onChange(of: selectedSource) { oldValue, newValue in
                                     // Auto-populate family ticket price when Family is selected
-                                    if newSource == .family {
+                                    if newValue == .family {
                                         priceInput = String(Int(settingsManager.familyTicketPrice))
                                     }
                                 }
@@ -10093,7 +10578,7 @@ struct SeatOptionsView: View {
                         } else if selectedStatus == .reserved {
                             TextField("Reserved for", text: $noteInput)
                                 .textFieldStyle(.roundedBorder)
-                                .onChange(of: noteInput) { newValue in
+                                .onChange(of: noteInput) { oldValue, newValue in
                                     let words = newValue.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
                                     if words.count > 1 {
                                         noteInput = words.prefix(1).joined(separator: " ")
@@ -10615,7 +11100,7 @@ struct ParkingTicketOptionsView: View {
                                     .padding(16)
                                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
                                     .foregroundColor(.modernText)
-                                    .onChange(of: noteInput) { newValue in
+                                    .onChange(of: noteInput) { oldValue, newValue in
                                         let words = newValue.split(separator: " ")
                                         if words.count > 5 {
                                             noteInput = words.prefix(5).joined(separator: " ")
@@ -11165,6 +11650,9 @@ struct SettingsView: View {
     @State private var showAboutSection = false
     @State private var showApplyToAllAlert = false
     @State private var showFinalApplyToAllAlert = false
+    @State private var showArchiveList = false
+    @State private var archiveYearToCreate: IdentifiableInt?
+    @StateObject private var archiveManager = ArchiveManager.shared
     
     var body: some View {
         NavigationView {
@@ -11539,7 +12027,20 @@ struct SettingsView: View {
                                 }
                             }
                         }
-                        
+
+                        // Year-End Archives Section
+                        if !sharedSuiteManager.isInSharedSuite || sharedSuiteManager.userRole == .owner {
+                            CleanSettingsCard(title: "Year-End Archives", icon: "archivebox") {
+                                ArchiveSection(
+                                    archiveManager: archiveManager,
+                                    concertManager: concertManager,
+                                    settingsManager: settingsManager,
+                                    showArchiveList: $showArchiveList,
+                                    archiveYearToCreate: $archiveYearToCreate
+                                )
+                            }
+                        }
+
                         // About Section
                         CleanSettingsCard(title: "About", icon: "info.circle") {
                             VStack(spacing: 12) {
@@ -11638,8 +12139,826 @@ struct SettingsView: View {
             } message: {
                 Text("Are you absolutely sure? This will overwrite ALL seat pricing data across ALL concerts and cannot be undone.")
             }
+            .sheet(isPresented: $showArchiveList) {
+                ArchiveListView(
+                    archiveManager: archiveManager,
+                    concertManager: concertManager
+                )
+            }
+            .sheet(item: $archiveYearToCreate) { yearItem in
+                CreateArchiveView(
+                    archiveManager: archiveManager,
+                    concertManager: concertManager,
+                    settingsManager: settingsManager,
+                    year: yearItem.value
+                )
+            }
         }
     }
+
+// MARK: - Archive Section View
+
+struct ArchiveSection: View {
+    @ObservedObject var archiveManager: ArchiveManager
+    @ObservedObject var concertManager: ConcertDataManager
+    @ObservedObject var settingsManager: SettingsManager
+    @Binding var showArchiveList: Bool
+    @Binding var archiveYearToCreate: IdentifiableInt?
+
+    var availableYears: [(year: Int, count: Int)] {
+        archiveManager.getAvailableYearsToArchive(from: concertManager.concerts)
+    }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            // Archive summary
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(archiveManager.availableArchives.count) Archive\(archiveManager.availableArchives.count == 1 ? "" : "s")")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.modernText)
+
+                    if let latest = archiveManager.availableArchives.first {
+                        Text("Latest: " + String(latest.year))
+                            .font(.system(size: 14))
+                            .foregroundColor(.modernTextSecondary)
+                    }
+                }
+                Spacer()
+                Button(action: {
+                    showArchiveList = true
+                }) {
+                    Text("View All")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.modernAccent)
+                }
+            }
+
+            if !availableYears.isEmpty {
+                Divider()
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Available to Archive")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.modernTextSecondary)
+
+                    ForEach(availableYears, id: \.year) { yearInfo in
+                        ArchiveYearRow(
+                            year: yearInfo.year,
+                            concertCount: yearInfo.count,
+                            onArchive: {
+                                archiveYearToCreate = IdentifiableInt(value: yearInfo.year)
+                            }
+                        )
+                    }
+                }
+            } else if archiveManager.availableArchives.isEmpty {
+                Text("No past years available to archive")
+                    .font(.system(size: 14))
+                    .foregroundColor(.modernTextSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+}
+
+struct ArchiveYearRow: View {
+    let year: Int
+    let concertCount: Int
+    let onArchive: () -> Void
+
+    var body: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(String(year))
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.modernText)
+                Text("\(concertCount) concert\(concertCount == 1 ? "" : "s")")
+                    .font(.system(size: 13))
+                    .foregroundColor(.modernTextSecondary)
+            }
+
+            Spacer()
+
+            Button(action: onArchive) {
+                HStack(spacing: 4) {
+                    Image(systemName: "archivebox")
+                    Text("Archive")
+                }
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.modernAccent)
+                .cornerRadius(8)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Create Archive View
+
+struct CreateArchiveView: View {
+    @ObservedObject var archiveManager: ArchiveManager
+    @ObservedObject var concertManager: ConcertDataManager
+    @ObservedObject var settingsManager: SettingsManager
+    let year: Int
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var removeFromActiveList = true
+    @State private var showError = false
+    @State private var errorMessage = ""
+    @State private var archiveCreated = false
+
+    var yearConcerts: [Concert] {
+        let calendar = Calendar.current
+        return concertManager.concerts.filter {
+            calendar.component(.year, from: $0.date) == year
+        }
+    }
+
+    var totalRevenue: Double {
+        yearConcerts.reduce(0.0) { total, concert in
+            let seatRevenue = concert.seats.filter { $0.source != .donation }.compactMap { $0.price }.reduce(0.0, +)
+            let parkingRevenue = concert.parkingTicket?.price ?? 0.0
+            return total + seatRevenue + parkingRevenue
+        }
+    }
+
+    var totalSeatsSold: Int {
+        yearConcerts.reduce(0) { $0 + $1.ticketsSold }
+    }
+
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color(.systemBackground)
+                    .ignoresSafeArea()
+
+                VStack(spacing: 24) {
+                    // Header
+                    VStack(spacing: 8) {
+                        Image(systemName: "archivebox.fill")
+                            .font(.system(size: 48))
+                            .foregroundColor(.modernAccent)
+
+                        Text("Archive " + String(year))
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundColor(.modernText)
+
+                        Text("Create a permanent record of your " + String(year) + " season")
+                            .font(.system(size: 14))
+                            .foregroundColor(.modernTextSecondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(.top)
+
+                    // Preview stats
+                    VStack(spacing: 16) {
+                        Text("Archive Preview")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.modernText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        HStack(spacing: 16) {
+                            ArchiveStatCard(
+                                title: "Concerts",
+                                value: "\(yearConcerts.count)",
+                                icon: "music.note.list"
+                            )
+                            ArchiveStatCard(
+                                title: "Seats Sold",
+                                value: "\(totalSeatsSold)",
+                                icon: "ticket"
+                            )
+                            ArchiveStatCard(
+                                title: "Revenue",
+                                value: String(format: "$%.0f", totalRevenue),
+                                icon: "dollarsign.circle"
+                            )
+                        }
+                    }
+                    .padding()
+                    .background(Color.modernCard)
+                    .cornerRadius(12)
+
+                    // Options
+                    VStack(spacing: 12) {
+                        Toggle(isOn: $removeFromActiveList) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Remove from Active List")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.modernText)
+                                Text("Archived concerts will be removed from the main list")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.modernTextSecondary)
+                            }
+                        }
+                        .tint(.modernAccent)
+                    }
+                    .padding()
+                    .background(Color.modernCard)
+                    .cornerRadius(12)
+
+                    // Info text
+                    VStack(alignment: .leading, spacing: 8) {
+                        Label("Reports are generated at archive time", systemImage: "doc.text")
+                        Label("Archives are stored in iCloud Documents", systemImage: "icloud")
+                        Label("You can restore archived concerts later", systemImage: "arrow.uturn.backward")
+                    }
+                    .font(.system(size: 13))
+                    .foregroundColor(.modernTextSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Spacer()
+
+                    // Action buttons
+                    if archiveManager.isArchiving {
+                        VStack(spacing: 8) {
+                            ProgressView()
+                                .scaleEffect(1.2)
+                            Text(archiveManager.archiveProgress)
+                                .font(.system(size: 14))
+                                .foregroundColor(.modernTextSecondary)
+                        }
+                    } else {
+                        Button(action: createArchive) {
+                            HStack {
+                                Image(systemName: "archivebox")
+                                Text("Create Archive")
+                            }
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color.modernAccent)
+                            .cornerRadius(12)
+                        }
+                    }
+                }
+                .padding()
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+            .alert("Archive Created", isPresented: $archiveCreated) {
+                Button("Done") {
+                    dismiss()
+                }
+            } message: {
+                Text("Your " + String(year) + " archive has been created successfully.")
+            }
+            .alert("Error", isPresented: $showError) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(errorMessage)
+            }
+        }
+    }
+
+    private func createArchive() {
+        Task {
+            do {
+                let _ = try await archiveManager.createArchive(
+                    for: year,
+                    concerts: concertManager.concerts,
+                    settingsManager: settingsManager
+                )
+
+                if removeFromActiveList {
+                    await MainActor.run {
+                        concertManager.removeConcertsForYear(year)
+                    }
+                }
+
+                await MainActor.run {
+                    HapticManager.shared.notification(type: .success)
+                    archiveCreated = true
+                }
+            } catch let error as ArchiveError {
+                await MainActor.run {
+                    errorMessage = error.errorDescription ?? "Unknown error"
+                    showError = true
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    showError = true
+                }
+            }
+        }
+    }
+}
+
+struct ArchiveStatCard: View {
+    let title: String
+    let value: String
+    let icon: String
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 20))
+                .foregroundColor(.modernAccent)
+
+            Text(value)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundColor(.modernText)
+
+            Text(title)
+                .font(.system(size: 12))
+                .foregroundColor(.modernTextSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .background(Color(.systemBackground))
+        .cornerRadius(10)
+    }
+}
+
+// MARK: - Archive List View
+
+struct ArchiveListView: View {
+    @ObservedObject var archiveManager: ArchiveManager
+    @ObservedObject var concertManager: ConcertDataManager
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedArchive: YearArchive?
+    @State private var archiveToDelete: YearArchive?
+    @State private var showDeleteConfirmation = false
+
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color(.systemBackground)
+                    .ignoresSafeArea()
+
+                if archiveManager.availableArchives.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "archivebox")
+                            .font(.system(size: 48))
+                            .foregroundColor(.modernTextSecondary.opacity(0.5))
+
+                        Text("No Archives")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(.modernText)
+
+                        Text("Archive past years from Settings to preserve your concert history")
+                            .font(.system(size: 14))
+                            .foregroundColor(.modernTextSecondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                } else {
+                    List {
+                        ForEach(archiveManager.availableArchives) { archive in
+                            Button(action: {
+                                selectedArchive = archive
+                            }) {
+                                ArchiveRowView(archive: archive)
+                            }
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    archiveToDelete = archive
+                                    showDeleteConfirmation = true
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                        }
+                    }
+                    .listStyle(.insetGrouped)
+                }
+            }
+            .navigationTitle("Archives")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+            .sheet(item: $selectedArchive) { archive in
+                ArchiveDetailView(
+                    archive: archive,
+                    archiveManager: archiveManager,
+                    concertManager: concertManager
+                )
+            }
+            .alert("Delete Archive?", isPresented: $showDeleteConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button("Delete", role: .destructive) {
+                    if let archive = archiveToDelete {
+                        try? archiveManager.deleteArchive(archive)
+                    }
+                }
+            } message: {
+                if let archive = archiveToDelete {
+                    Text("This will permanently delete the " + String(archive.year) + " archive. This cannot be undone.")
+                }
+            }
+        }
+    }
+}
+
+struct ArchiveRowView: View {
+    let archive: YearArchive
+
+    private var archiveDateFormatted: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: archive.archiveDate)
+    }
+
+    var body: some View {
+        HStack(spacing: 16) {
+            ZStack {
+                Circle()
+                    .fill(Color.modernAccent.opacity(0.15))
+                    .frame(width: 50, height: 50)
+
+                Text(String(archive.year))
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundColor(.modernAccent)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(String(archive.year) + " Season")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.modernText)
+
+                HStack(spacing: 12) {
+                    Label("\(archive.metadata.concertCount)", systemImage: "music.note")
+                    Label("\(archive.metadata.totalSeatsSold)", systemImage: "ticket")
+                    Label(String(format: "$%.0f", archive.metadata.totalRevenue), systemImage: "dollarsign.circle")
+                }
+                .font(.system(size: 12))
+                .foregroundColor(.modernTextSecondary)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.modernTextSecondary)
+        }
+        .padding(.vertical, 8)
+    }
+}
+
+// MARK: - Archive Detail View
+
+struct ArchiveDetailView: View {
+    let archive: YearArchive
+    @ObservedObject var archiveManager: ArchiveManager
+    @ObservedObject var concertManager: ConcertDataManager
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var showExportSheet = false
+    @State private var exportURL: URL?
+    @State private var showRestoreConfirmation = false
+    @State private var showRestoreSuccess = false
+    @State private var showConcertList = false
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 24) {
+                    // Header
+                    VStack(spacing: 8) {
+                        Text(String(archive.year))
+                            .font(.system(size: 48, weight: .bold))
+                            .foregroundColor(.modernAccent)
+
+                        Text("Season Archive")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(.modernTextSecondary)
+
+                        Text("Archived \(archiveDateFormatted)")
+                            .font(.system(size: 13))
+                            .foregroundColor(.modernTextSecondary.opacity(0.7))
+                    }
+                    .padding(.top)
+
+                    // Stats Grid
+                    LazyVGrid(columns: [
+                        GridItem(.flexible()),
+                        GridItem(.flexible())
+                    ], spacing: 16) {
+                        ArchiveDetailStatCard(
+                            title: "Concerts",
+                            value: "\(archive.metadata.concertCount)",
+                            icon: "music.note.list",
+                            color: .blue
+                        )
+                        ArchiveDetailStatCard(
+                            title: "Seats Sold",
+                            value: "\(archive.metadata.totalSeatsSold)",
+                            icon: "ticket.fill",
+                            color: .green
+                        )
+                        ArchiveDetailStatCard(
+                            title: "Revenue",
+                            value: String(format: "$%.0f", archive.metadata.totalRevenue),
+                            icon: "dollarsign.circle.fill",
+                            color: .orange
+                        )
+                        ArchiveDetailStatCard(
+                            title: "Profit",
+                            value: String(format: "$%.0f", archive.metadata.totalProfit),
+                            icon: "chart.line.uptrend.xyaxis",
+                            color: archive.metadata.totalProfit >= 0 ? .green : .red
+                        )
+                    }
+                    .padding(.horizontal)
+
+                    // Export Reports Section
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Export Reports")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(.modernText)
+
+                        LazyVGrid(columns: [
+                            GridItem(.flexible()),
+                            GridItem(.flexible())
+                        ], spacing: 12) {
+                            ForEach(ArchiveReportType.allCases) { reportType in
+                                ReportExportButton(
+                                    reportType: reportType,
+                                    onExport: {
+                                        if let url = archiveManager.exportArchiveReport(archive, reportType: reportType) {
+                                            exportURL = url
+                                            showExportSheet = true
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    .padding()
+                    .background(Color.modernCard)
+                    .cornerRadius(16)
+                    .padding(.horizontal)
+
+                    // Concerts Section
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("Archived Concerts")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.modernText)
+
+                            Spacer()
+
+                            Button(action: {
+                                showConcertList = true
+                            }) {
+                                Text("View All")
+                                    .font(.system(size: 14, weight: .medium))
+                                    .foregroundColor(.modernAccent)
+                            }
+                        }
+
+                        ForEach(archive.concerts.prefix(3)) { concert in
+                            ArchivedConcertRow(concert: concert)
+                        }
+
+                        if archive.concerts.count > 3 {
+                            Text("+ \(archive.concerts.count - 3) more concerts")
+                                .font(.system(size: 14))
+                                .foregroundColor(.modernTextSecondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, 4)
+                        }
+                    }
+                    .padding()
+                    .background(Color.modernCard)
+                    .cornerRadius(16)
+                    .padding(.horizontal)
+
+                    // Restore Section
+                    VStack(spacing: 12) {
+                        Button(action: {
+                            showRestoreConfirmation = true
+                        }) {
+                            HStack {
+                                Image(systemName: "arrow.uturn.backward")
+                                Text("Restore to Active List")
+                            }
+                            .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(.modernAccent)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
+                            .background(Color.modernAccent.opacity(0.1))
+                            .cornerRadius(12)
+                        }
+
+                        Text("Restoring will add these concerts back to your active list")
+                            .font(.system(size: 12))
+                            .foregroundColor(.modernTextSecondary)
+                    }
+                    .padding(.horizontal)
+
+                    Spacer(minLength: 40)
+                }
+            }
+            .background(Color(.systemBackground))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+            .sheet(isPresented: $showExportSheet) {
+                if let url = exportURL {
+                    ShareSheet(activityItems: [url])
+                }
+            }
+            .sheet(isPresented: $showConcertList) {
+                ArchivedConcertsListView(concerts: archive.concerts, year: archive.year)
+            }
+            .alert("Restore Concerts?", isPresented: $showRestoreConfirmation) {
+                Button("Cancel", role: .cancel) { }
+                Button("Restore") {
+                    archiveManager.restoreArchive(archive, to: concertManager)
+                    HapticManager.shared.notification(type: .success)
+                    showRestoreSuccess = true
+                }
+            } message: {
+                Text("This will add \(archive.concerts.count) concerts from " + String(archive.year) + " back to your active list. Duplicate concerts will be skipped.")
+            }
+            .alert("Concerts Restored", isPresented: $showRestoreSuccess) {
+                Button("OK") {
+                    dismiss()
+                }
+            } message: {
+                Text("The archived concerts have been restored to your active list.")
+            }
+        }
+    }
+
+    private var archiveDateFormatted: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .long
+        return formatter.string(from: archive.archiveDate)
+    }
+}
+
+struct ArchiveDetailStatCard: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 24))
+                .foregroundColor(color)
+
+            Text(value)
+                .font(.system(size: 20, weight: .bold))
+                .foregroundColor(.modernText)
+
+            Text(title)
+                .font(.system(size: 13))
+                .foregroundColor(.modernTextSecondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
+        .background(Color.modernCard)
+        .cornerRadius(12)
+    }
+}
+
+struct ReportExportButton: View {
+    let reportType: ArchiveReportType
+    let onExport: () -> Void
+
+    var body: some View {
+        Button(action: onExport) {
+            VStack(spacing: 8) {
+                Image(systemName: reportType.icon)
+                    .font(.system(size: 20))
+                    .foregroundColor(.modernAccent)
+
+                Text(reportType.rawValue)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.modernText)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(Color(.systemBackground))
+            .cornerRadius(10)
+        }
+    }
+}
+
+struct ArchivedConcertRow: View {
+    let concert: Concert
+
+    private var dateFormatted: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d"
+        return formatter.string(from: concert.date)
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(dateFormatted)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.modernTextSecondary)
+                .frame(width: 50, alignment: .leading)
+
+            Text(concert.artist)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundColor(.modernText)
+                .lineLimit(1)
+
+            Spacer()
+
+            Text("\(concert.ticketsSold)/8")
+                .font(.system(size: 13))
+                .foregroundColor(.modernTextSecondary)
+        }
+        .padding(.vertical, 6)
+    }
+}
+
+struct ArchivedConcertsListView: View {
+    let concerts: [Concert]
+    let year: Int
+    @Environment(\.dismiss) private var dismiss
+
+    var sortedConcerts: [Concert] {
+        concerts.sorted { $0.date < $1.date }
+    }
+
+    var body: some View {
+        NavigationView {
+            List {
+                ForEach(sortedConcerts) { concert in
+                    ArchivedConcertDetailRow(concert: concert)
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle(String(year) + " Concerts")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct ArchivedConcertDetailRow: View {
+    let concert: Concert
+
+    private var dateFormatted: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EEEE, MMMM d"
+        return formatter.string(from: concert.date)
+    }
+
+    private var revenue: Double {
+        let seatRevenue = concert.seats.filter { $0.source != .donation }.compactMap { $0.price }.reduce(0.0, +)
+        let parkingRevenue = concert.parkingTicket?.price ?? 0.0
+        return seatRevenue + parkingRevenue
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(concert.artist)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(.modernText)
+
+            Text(dateFormatted)
+                .font(.system(size: 14))
+                .foregroundColor(.modernTextSecondary)
+
+            HStack(spacing: 16) {
+                Label("\(concert.ticketsSold) sold", systemImage: "ticket")
+                Label(String(format: "$%.0f", revenue), systemImage: "dollarsign.circle")
+            }
+            .font(.system(size: 13))
+            .foregroundColor(.modernTextSecondary)
+        }
+        .padding(.vertical, 4)
+    }
+}
 
 // MARK: - Sharing Views
 
@@ -11864,7 +13183,7 @@ struct JoinSharedSuiteView: View {
                             )
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
-                            .onChange(of: suiteId) { newValue in
+                            .onChange(of: suiteId) { oldValue, newValue in
                                 // Extract suite ID from sharing link if needed
                                 if newValue.hasPrefix("suitekeep://invite/") {
                                     suiteId = String(newValue.dropFirst("suitekeep://invite/".count))
@@ -12622,6 +13941,11 @@ struct HoverableButtonStyle: ButtonStyle {
 struct IdentifiableURL: Identifiable {
     let id = UUID()
     let url: URL
+}
+
+struct IdentifiableInt: Identifiable {
+    let id = UUID()
+    let value: Int
 }
 
 // MARK: - Backup & Restore Section
