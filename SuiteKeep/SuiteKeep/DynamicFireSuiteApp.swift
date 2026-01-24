@@ -12593,13 +12593,11 @@ struct ArchiveRowView: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(.modernText)
 
-                HStack(spacing: 12) {
-                    Label("\(archive.metadata.concertCount)", systemImage: "music.note")
-                    Label("\(archive.metadata.totalSeatsSold)", systemImage: "ticket")
-                    Label(String(format: "$%.0f", archive.metadata.totalRevenue), systemImage: "dollarsign.circle")
-                }
-                .font(.system(size: 12))
-                .foregroundColor(.modernTextSecondary)
+                Text("\(archive.metadata.concertCount) shows • \(archive.metadata.totalSeatsSold) seats • $\(Int(archive.metadata.totalRevenue).formatted())")
+                    .font(.system(size: 12))
+                    .foregroundColor(.modernTextSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
 
             Spacer()
