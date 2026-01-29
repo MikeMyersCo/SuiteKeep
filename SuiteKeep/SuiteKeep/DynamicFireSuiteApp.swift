@@ -12197,7 +12197,7 @@ struct SettingsView: View {
 
                         // Compact Footer (replaces About card)
                         VStack(spacing: 12) {
-                            Text("Version 2.1")
+                            Text("Version 3.0 (1)")
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundColor(.modernTextSecondary)
 
