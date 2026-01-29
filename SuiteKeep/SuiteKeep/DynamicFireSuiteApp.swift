@@ -1527,6 +1527,8 @@ struct CompactPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 16, weight: .medium))
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
             .foregroundColor(.white)
             .frame(height: 40)
             .frame(maxWidth: .infinity)
@@ -1550,6 +1552,8 @@ struct CompactSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 16, weight: .medium))
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
             .foregroundColor(isEnabled ? color : .gray)
             .frame(height: 40)
             .frame(maxWidth: .infinity)

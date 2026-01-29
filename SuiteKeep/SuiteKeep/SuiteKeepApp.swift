@@ -25,6 +25,7 @@ struct SuiteKeepApp: App {
     var body: some Scene {
         WindowGroup {
             DynamicFireSuiteApp()
+                .preferredColorScheme(.dark)
                 .environmentObject(sharedSuiteManager)
                 .onOpenURL { url in
                     handleIncomingURL(url)
