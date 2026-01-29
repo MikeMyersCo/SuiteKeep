@@ -3400,14 +3400,14 @@ struct EnhancedActivityRow: View {
                     .foregroundColor(.white)
                     .lineLimit(2)
                     .minimumScaleFactor(0.9)
-                
+
                 Text(subtitle)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(.white.opacity(0.8))
-                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
-            
-            Spacer()
+
+            Spacer(minLength: 8)
             
             VStack(alignment: .trailing, spacing: 4) {
                 Text(time)
@@ -11855,17 +11855,12 @@ struct SettingsView: View {
     @Binding var selectedTab: Int
     @State private var activeSheet: SheetType?
     @State private var showLeaveConfirmation = false
-    @State private var showDataSection = false
     @State private var showAboutSection = false
     @State private var showApplyToAllAlert = false
     @State private var showFinalApplyToAllAlert = false
     @State private var showArchiveList = false
     @State private var archiveYearToCreate: IdentifiableInt?
     @StateObject private var archiveManager = ArchiveManager.shared
-    @State private var isLoadingConcertList = false
-    @State private var showLoadConcertListAlert = false
-    @State private var loadConcertListAlertTitle = ""
-    @State private var loadConcertListAlertMessage = ""
 
     var body: some View {
         NavigationView {
@@ -11972,191 +11967,17 @@ struct SettingsView: View {
                             }
                         }
                         
-                        // Collaboration Section - Always show so users can enable it
-                        CleanSettingsCard(title: "Collaboration", icon: "person.3") {
+                        // Sync & Sharing Section (merged CloudSync + Collaboration)
+                        CleanSettingsCard(title: "Sync & Sharing", icon: "arrow.triangle.2.circlepath.icloud") {
                             VStack(alignment: .leading, spacing: 16) {
-                                if sharedSuiteManager.isInSharedSuite {
-                                        // Active sharing state
-                                        HStack {
-                                            Image(systemName: "checkmark.circle.fill")
-                                                .foregroundColor(.green)
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text("Sharing '\(sharedSuiteManager.currentSuiteInfo?.suiteName ?? "Suite")'")
-                                                    .font(.system(size: 16, weight: .medium))
-                                                Text("Role: \(sharedSuiteManager.userRole.displayName)")
-                                                    .font(.system(size: 14))
-                                                    .foregroundColor(.modernTextSecondary)
-                                            }
-                                            Spacer()
-                                        }
-                                        
-                                        VStack(spacing: 12) {
-                                            HStack(spacing: 12) {
-                                                if sharedSuiteManager.userRole.canManageUsers {
-                                                    Button(action: {
-                                                        Task {
-                                                            do {
-                                                                let code = try await sharedSuiteManager.generateInvitationLink(role: .viewer)
-                                                                let activityVC = UIActivityViewController(activityItems: [code], applicationActivities: nil)
-                                                                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                                                                   let window = windowScene.windows.first {
-                                                                    window.rootViewController?.present(activityVC, animated: true)
-                                                                }
-                                                            } catch {
-                                                                print("Error generating invitation: \(error)")
-                                                            }
-                                                        }
-                                                    }) {
-                                                        HStack {
-                                                            Image(systemName: "plus.circle.fill")
-                                                            Text("Invite")
-                                                        }
-                                                    }
-                                                    .buttonStyle(CollaborationSecondaryButtonStyle())
-                                                    
-                                                    Button(action: {
-                                                        activeSheet = .memberManagement
-                                                    }) {
-                                                        HStack {
-                                                            Image(systemName: "person.2.fill")
-                                                            Text("Manage")
-                                                        }
-                                                    }
-                                                    .buttonStyle(CollaborationSecondaryButtonStyle())
-                                                }
-                                                
-                                                Button(action: {
-                                                    Task {
-                                                        await sharedSuiteManager.syncWithCloudKit()
-                                                        if sharedSuiteManager.userRole == .owner {
-                                                            let concertIds = concertManager.concerts.map { $0.id }
-                                                            await sharedSuiteManager.populateSuiteRecordWithLocalConcertIds(concertIds)
-                                                            await sharedSuiteManager.migrateConcertsToCurrentSuite(concertIds)
-                                                        }
-                                                        await sharedSuiteManager.syncConcertData()
-                                                    }
-                                                }) {
-                                                    HStack {
-                                                        Image(systemName: sharedSuiteManager.isSyncing ? "arrow.triangle.2.circlepath" : "arrow.clockwise.circle.fill")
-                                                            .rotationEffect(.degrees(sharedSuiteManager.isSyncing ? 360 : 0))
-                                                            .animation(sharedSuiteManager.isSyncing ?
-                                                                Animation.linear(duration: 1.0).repeatForever(autoreverses: false) :
-                                                                .default, value: sharedSuiteManager.isSyncing)
-                                                        Text(sharedSuiteManager.isSyncing ? "Syncing..." : "Sync")
-                                                    }
-                                                }
-                                                .buttonStyle(CollaborationPrimaryButtonStyle())
-                                                .disabled(sharedSuiteManager.isSyncing)
-                                            }
-
-                                            Button(action: {
-                                                showLeaveConfirmation = true
-                                            }) {
-                                                HStack {
-                                                    Image(systemName: sharedSuiteManager.userRole == .owner ? "trash.fill" : "arrow.right.square.fill")
-                                                    Text(sharedSuiteManager.userRole == .owner ? "Delete Suite" : "Leave Suite")
-                                                }
-                                            }
-                                            .buttonStyle(CollaborationSecondaryButtonStyle(color: .red))
-                                        }
-                                        
-                                    } else {
-                                        // Setup sharing
-                                        Toggle(isOn: $settingsManager.enableMultiTenantSuites) {
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text("Enable Suite Sharing")
-                                                    .font(.system(size: 16, weight: .medium))
-                                                Text("Collaborate with co-investors")
-                                                    .font(.system(size: 14))
-                                                    .foregroundColor(.modernTextSecondary)
-                                            }
-                                        }
-                                        .toggleStyle(SwitchToggleStyle(tint: .modernAccent))
-                                        
-                                        if settingsManager.enableMultiTenantSuites {
-                                            HStack(spacing: 12) {
-                                                Button(action: {
-                                                    Task {
-                                                        do {
-                                                            _ = try await sharedSuiteManager.createSharedSuiteInCloud(
-                                                                suiteName: settingsManager.suiteName,
-                                                                venueLocation: settingsManager.venueLocation
-                                                            )
-                                                        } catch {
-                                                            print("Error creating suite: \(error)")
-                                                        }
-                                                    }
-                                                }) {
-                                                    HStack {
-                                                        Image(systemName: "plus.square.fill")
-                                                        Text("Create Suite")
-                                                    }
-                                                }
-                                                .buttonStyle(CollaborationPrimaryButtonStyle())
-                                                .disabled(!sharedSuiteManager.isCloudKitAvailable)
-                                                
-                                                Button(action: {
-                                                    activeSheet = .joinSuite
-                                                }) {
-                                                    HStack {
-                                                        Image(systemName: "arrow.right.circle.fill")
-                                                        Text("Join Suite")
-                                                    }
-                                                }
-                                                .buttonStyle(CollaborationSecondaryButtonStyle())
-                                                .disabled(!sharedSuiteManager.isCloudKitAvailable)
-                                            }
-                                            
-                                            if !sharedSuiteManager.isCloudKitAvailable {
-                                                Text("iCloud required for sharing")
-                                                    .font(.system(size: 12))
-                                                    .foregroundColor(.orange)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // CloudSync Section
-                        CleanSettingsCard(title: "CloudSync", icon: "icloud") {
-                            VStack(alignment: .leading, spacing: 16) {
-                                // Status Display
-                                HStack {
-                                    Image(systemName: settingsManager.cloudSyncStatus.icon)
-                                        .foregroundColor(settingsManager.cloudSyncStatus.color)
-                                        .font(.system(size: 16, weight: .medium))
-                                    
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text("Status: \(settingsManager.cloudSyncStatus.rawValue)")
-                                            .font(.system(size: 16, weight: .medium))
-                                        
-                                        if let lastSync = settingsManager.lastSyncDate {
-                                            Text("Last sync: \(lastSync.formatted(date: .abbreviated, time: .shortened))")
-                                                .font(.system(size: 14))
-                                                .foregroundColor(.modernTextSecondary)
-                                        }
-                                        
-                                        if let error = settingsManager.syncErrorMessage {
-                                            Text("Error: \(error)")
-                                                .font(.system(size: 14))
-                                                .foregroundColor(.red)
-                                        }
-                                    }
-                                    
-                                    Spacer()
-                                }
-                                
-                                // Toggle Control
+                                // CloudSync Toggle with inline status
                                 Toggle(isOn: Binding(
                                     get: { settingsManager.isCloudSyncEnabled },
                                     set: { newValue in
                                         if newValue {
                                             settingsManager.enableCloudSync()
                                         } else {
-                                            // Prevent disabling CloudSync if user is owner of shared suite
                                             if sharedSuiteManager.isInSharedSuite && sharedSuiteManager.userRole == .owner {
-                                                // Don't allow disabling - CloudSync is required for shared suite owners
                                                 return
                                             }
                                             settingsManager.disableCloudSync()
@@ -12179,195 +12000,239 @@ struct SettingsView: View {
                                 .disabled(settingsManager.cloudSyncStatus == .syncing ||
                                          (sharedSuiteManager.isInSharedSuite && sharedSuiteManager.userRole != .owner) ||
                                          (sharedSuiteManager.isInSharedSuite && sharedSuiteManager.userRole == .owner))
-                                
-                                // Info Text
-                                if sharedSuiteManager.isInSharedSuite && sharedSuiteManager.userRole != .owner {
-                                    Text("Your concert data is automatically synced through the shared suite. Personal CloudSync is not needed while you're a guest.")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.modernTextSecondary)
-                                        .padding(.top, 8)
-                                } else if sharedSuiteManager.isInSharedSuite && sharedSuiteManager.userRole == .owner {
-                                    Text("CloudSync is required and automatically enabled for shared suite owners. It cannot be disabled while you own a shared suite. Delete the shared suite to disable CloudSync.")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.modernTextSecondary)
-                                        .padding(.top, 8)
-                                } else if !settingsManager.isCloudSyncEnabled {
-                                    Text("CloudSync safely backs up your concert data to iCloud and keeps it in sync across all your devices. You can disable it at any time.")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.modernTextSecondary)
-                                        .padding(.top, 8)
+
+                                // Inline status indicator
+                                HStack(spacing: 6) {
+                                    Image(systemName: settingsManager.cloudSyncStatus.icon)
+                                        .foregroundColor(settingsManager.cloudSyncStatus.color)
+                                        .font(.system(size: 12, weight: .medium))
+
+                                    Text(settingsManager.cloudSyncStatus.rawValue)
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(settingsManager.cloudSyncStatus.color)
+
+                                    if let lastSync = settingsManager.lastSyncDate {
+                                        Text("·")
+                                            .foregroundColor(.modernTextSecondary)
+                                        Text(lastSync.formatted(date: .abbreviated, time: .shortened))
+                                            .font(.system(size: 13))
+                                            .foregroundColor(.modernTextSecondary)
+                                    }
+
+                                    if let error = settingsManager.syncErrorMessage {
+                                        Text("·")
+                                            .foregroundColor(.red)
+                                        Text(error)
+                                            .font(.system(size: 13))
+                                            .foregroundColor(.red)
+                                            .lineLimit(1)
+                                    }
+                                }
+
+                                Divider()
+
+                                // Collaboration Section
+                                if sharedSuiteManager.isInSharedSuite {
+                                    // Active sharing state
+                                    HStack {
+                                        Image(systemName: "checkmark.circle.fill")
+                                            .foregroundColor(.green)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Sharing '\(sharedSuiteManager.currentSuiteInfo?.suiteName ?? "Suite")'")
+                                                .font(.system(size: 16, weight: .medium))
+                                            Text("Role: \(sharedSuiteManager.userRole.displayName)")
+                                                .font(.system(size: 14))
+                                                .foregroundColor(.modernTextSecondary)
+                                        }
+                                        Spacer()
+                                    }
+
+                                    VStack(spacing: 12) {
+                                        HStack(spacing: 12) {
+                                            if sharedSuiteManager.userRole.canManageUsers {
+                                                Button(action: {
+                                                    Task {
+                                                        do {
+                                                            let code = try await sharedSuiteManager.generateInvitationLink(role: .viewer)
+                                                            let activityVC = UIActivityViewController(activityItems: [code], applicationActivities: nil)
+                                                            if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                                                               let window = windowScene.windows.first {
+                                                                window.rootViewController?.present(activityVC, animated: true)
+                                                            }
+                                                        } catch {
+                                                            print("Error generating invitation: \(error)")
+                                                        }
+                                                    }
+                                                }) {
+                                                    HStack {
+                                                        Image(systemName: "plus.circle.fill")
+                                                        Text("Invite")
+                                                    }
+                                                }
+                                                .buttonStyle(CollaborationSecondaryButtonStyle())
+
+                                                Button(action: {
+                                                    activeSheet = .memberManagement
+                                                }) {
+                                                    HStack {
+                                                        Image(systemName: "person.2.fill")
+                                                        Text("Manage")
+                                                    }
+                                                }
+                                                .buttonStyle(CollaborationSecondaryButtonStyle())
+                                            }
+
+                                            Button(action: {
+                                                Task {
+                                                    await sharedSuiteManager.syncWithCloudKit()
+                                                    if sharedSuiteManager.userRole == .owner {
+                                                        let concertIds = concertManager.concerts.map { $0.id }
+                                                        await sharedSuiteManager.populateSuiteRecordWithLocalConcertIds(concertIds)
+                                                        await sharedSuiteManager.migrateConcertsToCurrentSuite(concertIds)
+                                                    }
+                                                    await sharedSuiteManager.syncConcertData()
+                                                }
+                                            }) {
+                                                HStack {
+                                                    Image(systemName: sharedSuiteManager.isSyncing ? "arrow.triangle.2.circlepath" : "arrow.clockwise.circle.fill")
+                                                        .rotationEffect(.degrees(sharedSuiteManager.isSyncing ? 360 : 0))
+                                                        .animation(sharedSuiteManager.isSyncing ?
+                                                            Animation.linear(duration: 1.0).repeatForever(autoreverses: false) :
+                                                            .default, value: sharedSuiteManager.isSyncing)
+                                                    Text(sharedSuiteManager.isSyncing ? "Syncing..." : "Sync")
+                                                }
+                                            }
+                                            .buttonStyle(CollaborationPrimaryButtonStyle())
+                                            .disabled(sharedSuiteManager.isSyncing)
+                                        }
+
+                                        Button(action: {
+                                            showLeaveConfirmation = true
+                                        }) {
+                                            HStack {
+                                                Image(systemName: sharedSuiteManager.userRole == .owner ? "trash.fill" : "arrow.right.square.fill")
+                                                Text(sharedSuiteManager.userRole == .owner ? "Delete Suite" : "Leave Suite")
+                                            }
+                                        }
+                                        .buttonStyle(CollaborationSecondaryButtonStyle(color: .red))
+                                    }
+
                                 } else {
-                                    Text("Your concert data is now synced with iCloud. Changes will automatically sync across all your devices.")
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.green)
-                                        .padding(.top, 8)
+                                    // Setup sharing
+                                    Toggle(isOn: $settingsManager.enableMultiTenantSuites) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text("Enable Suite Sharing")
+                                                .font(.system(size: 16, weight: .medium))
+                                            Text("Collaborate with co-investors")
+                                                .font(.system(size: 14))
+                                                .foregroundColor(.modernTextSecondary)
+                                        }
+                                    }
+                                    .toggleStyle(SwitchToggleStyle(tint: .modernAccent))
+
+                                    if settingsManager.enableMultiTenantSuites {
+                                        HStack(spacing: 12) {
+                                            Button(action: {
+                                                Task {
+                                                    do {
+                                                        _ = try await sharedSuiteManager.createSharedSuiteInCloud(
+                                                            suiteName: settingsManager.suiteName,
+                                                            venueLocation: settingsManager.venueLocation
+                                                        )
+                                                    } catch {
+                                                        print("Error creating suite: \(error)")
+                                                    }
+                                                }
+                                            }) {
+                                                HStack {
+                                                    Image(systemName: "plus.square.fill")
+                                                    Text("Create Suite")
+                                                }
+                                            }
+                                            .buttonStyle(CollaborationPrimaryButtonStyle())
+                                            .disabled(!sharedSuiteManager.isCloudKitAvailable)
+
+                                            Button(action: {
+                                                activeSheet = .joinSuite
+                                            }) {
+                                                HStack {
+                                                    Image(systemName: "arrow.right.circle.fill")
+                                                    Text("Join Suite")
+                                                }
+                                            }
+                                            .buttonStyle(CollaborationSecondaryButtonStyle())
+                                            .disabled(!sharedSuiteManager.isCloudKitAvailable)
+                                        }
+
+                                        if !sharedSuiteManager.isCloudKitAvailable {
+                                            Text("iCloud required for sharing")
+                                                .font(.system(size: 12))
+                                                .foregroundColor(.orange)
+                                        }
+                                    }
                                 }
                             }
                         }
-                        
-                        // Data Management Section
-                        CleanSettingsCard(title: "Data Management", icon: "externaldrive") {
-                            VStack(spacing: 12) {
-                                Button(action: {
-                                    showDataSection.toggle()
-                                }) {
-                                    HStack {
-                                        Text("Storage & Privacy Info")
-                                            .font(.system(size: 16, weight: .medium))
-                                            .foregroundColor(.modernText)
-                                        Spacer()
-                                        Image(systemName: showDataSection ? "chevron.down" : "chevron.right")
-                                            .foregroundColor(.modernTextSecondary)
-                                    }
-                                }
-                                
-                                if showDataSection {
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text("• Data stored locally with iCloud sync")
-                                        Text("• No external servers or tracking")
-                                        Text("• Full privacy within Apple ecosystem")
-                                    }
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.modernTextSecondary)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                                
-                                Divider()
 
-                                // Only show backup/restore for non-shared suites or suite owners
+                        // Data & Archives Section (merged Data Management + Year-End Archives)
+                        CleanSettingsCard(title: "Data & Archives", icon: "externaldrive.badge.checkmark") {
+                            VStack(spacing: 16) {
+                                // Backup/Restore - only for non-shared suites or suite owners
                                 if !sharedSuiteManager.isInSharedSuite || sharedSuiteManager.userRole == .owner {
                                     BackupRestoreSection(concertManager: concertManager, settingsManager: settingsManager)
+
+                                    Divider()
+
+                                    // Archives
+                                    ArchiveSection(
+                                        archiveManager: archiveManager,
+                                        concertManager: concertManager,
+                                        settingsManager: settingsManager,
+                                        showArchiveList: $showArchiveList,
+                                        archiveYearToCreate: $archiveYearToCreate
+                                    )
                                 }
                             }
                         }
 
-                        // Year-End Archives Section
-                        if !sharedSuiteManager.isInSharedSuite || sharedSuiteManager.userRole == .owner {
-                            CleanSettingsCard(title: "Year-End Archives", icon: "archivebox") {
-                                ArchiveSection(
-                                    archiveManager: archiveManager,
-                                    concertManager: concertManager,
-                                    settingsManager: settingsManager,
-                                    showArchiveList: $showArchiveList,
-                                    archiveYearToCreate: $archiveYearToCreate
-                                )
+                        // Compact Footer (replaces About card)
+                        VStack(spacing: 12) {
+                            Text("Version 2.1")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundColor(.modernTextSecondary)
+
+                            Button(action: {
+                                if let url = URL(string: "https://suitekeepsupport.netlify.app") {
+                                    UIApplication.shared.open(url)
+                                }
+                            }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "questionmark.circle")
+                                        .font(.system(size: 13))
+                                    Text("Support & Manual")
+                                        .font(.system(size: 13, weight: .medium))
+                                }
+                                .foregroundColor(.modernAccent)
                             }
-                        }
 
-                        // About Section
-                        CleanSettingsCard(title: "About", icon: "info.circle") {
-                            VStack(spacing: 12) {
-                                HStack {
-                                    Text("Version 2.1")
-                                        .font(.system(size: 16, weight: .medium))
-                                    Spacer()
-                                }
-                                
-                                Button(action: {
-                                    if let url = URL(string: "https://suitekeepsupport.netlify.app") {
-                                        UIApplication.shared.open(url)
-                                    }
-                                }) {
-                                    HStack {
-                                        Text("Support & Manual")
-                                            .foregroundColor(.modernAccent)
-                                        Spacer()
-                                        Image(systemName: "arrow.up.right")
-                                            .foregroundColor(.modernAccent)
-                                    }
-                                }
-
-                                Divider()
-
-                                Button(action: {
-                                    isLoadingConcertList = true
-                                    Task {
-                                        do {
-                                            guard let url = URL(string: "https://suitekeepsupport.netlify.app/assets/2026FordAmp.json") else {
-                                                throw URLError(.badURL)
-                                            }
-                                            let (data, response) = try await URLSession.shared.data(from: url)
-                                            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-                                                throw URLError(.badServerResponse)
-                                            }
-                                            let decoder = JSONDecoder()
-                                            decoder.dateDecodingStrategy = .iso8601
-                                            let backupData = try decoder.decode(BackupData.self, from: data)
-                                            let existingIds = Set(concertManager.concerts.map { $0.id })
-                                            let newConcerts = backupData.concerts.filter { !existingIds.contains($0.id) }
-                                            await MainActor.run {
-                                                if newConcerts.isEmpty {
-                                                    loadConcertListAlertTitle = "No New Concerts"
-                                                    loadConcertListAlertMessage = "Your concert list is already up to date. All \(backupData.concerts.count) concerts from the schedule are already in your app."
-                                                } else {
-                                                    concertManager.concerts.append(contentsOf: newConcerts)
-                                                    concertManager.concerts.sort { $0.date < $1.date }
-                                                    concertManager.saveConcerts()
-                                                    loadConcertListAlertTitle = "Concerts Added"
-                                                    loadConcertListAlertMessage = "Successfully added \(newConcerts.count) new concert\(newConcerts.count == 1 ? "" : "s") to your list."
-                                                    HapticManager.shared.notification(type: .success)
-                                                }
-                                                isLoadingConcertList = false
-                                                showLoadConcertListAlert = true
-                                            }
-                                        } catch {
-                                            await MainActor.run {
-                                                loadConcertListAlertTitle = "Download Failed"
-                                                loadConcertListAlertMessage = "Unable to load the concert list. Check your internet connection.\n\nError: \(error.localizedDescription)"
-                                                isLoadingConcertList = false
-                                                showLoadConcertListAlert = true
-                                                HapticManager.shared.notification(type: .error)
-                                            }
-                                        }
-                                    }
-                                }) {
-                                    HStack {
-                                        if isLoadingConcertList {
-                                            ProgressView()
-                                                .progressViewStyle(CircularProgressViewStyle(tint: .modernAccent))
-                                                .scaleEffect(0.8)
-                                        } else {
-                                            Image(systemName: "arrow.down.circle.fill")
-                                                .foregroundColor(.modernAccent)
-                                        }
-                                        Text(isLoadingConcertList ? "Loading..." : "Load Current Concert List")
-                                            .foregroundColor(.modernAccent)
-                                        Spacer()
-                                        if !isLoadingConcertList {
-                                            Image(systemName: "music.note.list")
-                                                .foregroundColor(.modernAccent)
-                                        }
-                                    }
-                                }
-                                .disabled(isLoadingConcertList)
-
-                                Text("Downloads the latest concert schedule from the support website. Only adds new concerts—your existing data is preserved.")
+                            Button(action: {
+                                showAboutSection.toggle()
+                            }) {
+                                Text("Disclaimer")
                                     .font(.system(size: 12))
-                                    .foregroundColor(.modernTextSecondary)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .foregroundColor(.modernTextSecondary.opacity(0.7))
+                            }
 
-                                Divider()
-
-                                Button(action: {
-                                    showAboutSection.toggle()
-                                }) {
-                                    HStack {
-                                        Text("Disclaimer")
-                                            .foregroundColor(.modernTextSecondary)
-                                        Spacer()
-                                        Image(systemName: showAboutSection ? "chevron.down" : "chevron.right")
-                                            .foregroundColor(.modernTextSecondary)
-                                    }
-                                }
-                                
-                                if showAboutSection {
-                                    Text("This app is provided \"as is\" without warranties. Use at your own risk.")
-                                        .font(.system(size: 12))
-                                        .foregroundColor(.modernTextSecondary)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }
+                            if showAboutSection {
+                                Text("This app is provided \"as is\" without warranties. Use at your own risk.")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.modernTextSecondary.opacity(0.6))
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 20)
                             }
                         }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 8)
                         
                         Spacer(minLength: 100)
                     }
@@ -12437,13 +12302,9 @@ struct SettingsView: View {
                     year: yearItem.value
                 )
             }
-            .alert(loadConcertListAlertTitle, isPresented: $showLoadConcertListAlert) {
-                Button("OK") { }
-            } message: {
-                Text(loadConcertListAlertMessage)
-            }
         }
     }
+}
 
 // MARK: - Archive Section View
 
@@ -14247,6 +14108,7 @@ struct BackupRestoreSection: View {
     @State private var backupFileURL: IdentifiableURL?
     @State private var alertMessage = ""
     @State private var alertTitle = ""
+    @State private var isLoadingConcertList = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -14294,7 +14156,21 @@ struct BackupRestoreSection: View {
                     }
                     .buttonStyle(CollaborationPrimaryButtonStyle())
                     .disabled(backupInfo.count == 0)
-                    
+
+                    // Update Concert List Button
+                    Button(action: loadConcertList) {
+                        HStack {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .rotationEffect(.degrees(isLoadingConcertList ? 360 : 0))
+                                .animation(isLoadingConcertList ?
+                                    Animation.linear(duration: 1.0).repeatForever(autoreverses: false) :
+                                    .default, value: isLoadingConcertList)
+                            Text(isLoadingConcertList ? "Updating..." : "Update 2026 Concerts")
+                        }
+                    }
+                    .buttonStyle(CollaborationSecondaryButtonStyle(color: .green))
+                    .disabled(isLoadingConcertList)
+
                     HStack(spacing: 12) {
                         // Restore Backup Button
                         Button(action: { showingFilePicker = true }) {
@@ -14428,15 +14304,53 @@ struct BackupRestoreSection: View {
     private func clearAllAppData() {
         // Clear all concert data and settings from storage
         concertManager.clearAllData()
-        
+
         // Reset SettingsManager to default values
         settingsManager.suiteName = "Fire Suite"
         settingsManager.venueLocation = "Ford Amphitheater"
         settingsManager.familyTicketPrice = 75.0
         settingsManager.defaultSeatCost = 150.0
-        
+
         // Show confirmation
         showBackupAlert(title: "Data Cleared", message: "All app data has been permanently deleted. The app will now reset to its initial state.")
+    }
+
+    private func loadConcertList() {
+        isLoadingConcertList = true
+        Task {
+            do {
+                guard let url = URL(string: "https://suitekeepsupport.netlify.app/assets/2026FordAmp.json") else {
+                    throw URLError(.badURL)
+                }
+                let (data, response) = try await URLSession.shared.data(from: url)
+                guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                    throw URLError(.badServerResponse)
+                }
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+                let backupData = try decoder.decode(BackupData.self, from: data)
+                let existingIds = Set(concertManager.concerts.map { $0.id })
+                let newConcerts = backupData.concerts.filter { !existingIds.contains($0.id) }
+                await MainActor.run {
+                    if newConcerts.isEmpty {
+                        showBackupAlert(title: "No New Concerts", message: "Your concert list is already up to date. All \(backupData.concerts.count) concerts from the schedule are already in your app.")
+                    } else {
+                        concertManager.concerts.append(contentsOf: newConcerts)
+                        concertManager.concerts.sort { $0.date < $1.date }
+                        concertManager.saveConcerts()
+                        showBackupAlert(title: "Concerts Added", message: "Successfully added \(newConcerts.count) new concert\(newConcerts.count == 1 ? "" : "s") to your list.")
+                        HapticManager.shared.notification(type: .success)
+                    }
+                    isLoadingConcertList = false
+                }
+            } catch {
+                await MainActor.run {
+                    showBackupAlert(title: "Download Failed", message: "Unable to load the concert list. Check your internet connection.\n\nError: \(error.localizedDescription)")
+                    isLoadingConcertList = false
+                    HapticManager.shared.notification(type: .error)
+                }
+            }
+        }
     }
 }
 
