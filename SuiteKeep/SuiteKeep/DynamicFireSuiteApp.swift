@@ -2405,16 +2405,15 @@ struct DynamicDashboard: View {
                                 .frame(width: 40, height: 3)
                                 .opacity(0.8)
 
-                            // Suite name - elegant serif styling
-                            Text(settingsManager.suiteName.uppercased())
-                                .font(SKTypography.micro)
-                                .tracking(4)
-                                .foregroundColor(SKColors.champagne)
-
-                            // Venue name - bold display
-                            Text(settingsManager.venueLocation)
+                            // Suite name - primary display
+                            Text(settingsManager.suiteName)
                                 .font(SKTypography.headlineLarge)
                                 .foregroundColor(.white)
+
+                            // Venue location - secondary
+                            Text(settingsManager.venueLocation)
+                                .font(SKTypography.titleLarge)
+                                .foregroundColor(.white.opacity(0.7))
 
                             // Subtle tagline
                             Text("PRIVATE SUITE")
@@ -12201,7 +12200,7 @@ struct SettingsView: View {
 
                         // Compact Footer (replaces About card)
                         VStack(spacing: 12) {
-                            Text("Version 3.0 (1)")
+                            Text("Version 3.1 (2)")
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundColor(.modernTextSecondary)
 
