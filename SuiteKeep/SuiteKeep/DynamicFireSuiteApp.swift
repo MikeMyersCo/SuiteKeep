@@ -165,7 +165,7 @@ class SettingsManager: ObservableObject {
     
     init() {
         // Load from local first
-        self.suiteName = UserDefaults.standard.string(forKey: "suiteName") ?? "Fire Suite"
+        self.suiteName = UserDefaults.standard.string(forKey: "suiteName") ?? "My Suite"
         self.venueLocation = UserDefaults.standard.string(forKey: "venueLocation") ?? "Ford Amphitheater"
         let storedFamilyPrice = UserDefaults.standard.double(forKey: "familyTicketPrice")
         self.familyTicketPrice = storedFamilyPrice == 0 ? 50.0 : storedFamilyPrice // Default to $50
@@ -1020,52 +1020,50 @@ struct ShareableCompactSeatView: View {
     }
 
     var body: some View {
-        VStack(spacing: -2) {
-            // Seat button with liquid glass effect (matching CompactSeatView)
-            ZStack {
-                // Glass background
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(.ultraThinMaterial)
-                    .frame(width: 48, height: 48)
+        // Seat button with liquid glass effect - status text inside tile
+        ZStack {
+            // Glass background
+            RoundedRectangle(cornerRadius: 12)
+                .fill(.ultraThinMaterial)
+                .frame(width: 48, height: 48)
 
-                // Colored gradient overlay
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                seatColor.opacity(0.6),
-                                seatColor.opacity(0.4)
-                            ],
-                            center: .center,
-                            startRadius: 0,
-                            endRadius: 24
-                        )
+            // Colored gradient overlay
+            RoundedRectangle(cornerRadius: 12)
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            seatColor.opacity(0.6),
+                            seatColor.opacity(0.4)
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 24
                     )
-                    .frame(width: 48, height: 48)
+                )
+                .frame(width: 48, height: 48)
 
-                // Border
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(seatColor.opacity(0.7), lineWidth: 2)
-                    .frame(width: 48, height: 48)
+            // Border
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(seatColor.opacity(0.7), lineWidth: 2)
+                .frame(width: 48, height: 48)
 
-                // Seat number
+            // Seat number and status
+            VStack(spacing: 1) {
                 Text("\(seatNumber)")
                     .font(.system(size: 18, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
                     .shadow(color: .black.opacity(0.3), radius: 2)
-            }
-            .shadow(color: seatColor.opacity(0.4), radius: 8, x: 0, y: 4)
 
-            // Status text
-            Text(statusText.isEmpty ? " " : statusText)
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
-                .frame(height: 24)
-                .opacity(statusText.isEmpty ? 0 : 1)
+                if !statusText.isEmpty {
+                    Text(statusText)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.85))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                }
+            }
         }
+        .shadow(color: seatColor.opacity(0.4), radius: 8, x: 0, y: 4)
     }
 }
 
@@ -10117,93 +10115,91 @@ struct CompactSeatView: View {
     }
     
     var body: some View {
-        VStack(spacing: SKSpacing.Seat.spacing) {
-            // Seat button with glass morphism
-            ZStack {
-                // Outer glow effect
-                RoundedRectangle(cornerRadius: SKSpacing.Seat.cornerRadius)
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                seatColor.opacity(0.4),
-                                seatColor.opacity(0.1),
-                                Color.clear
-                            ],
-                            center: .center,
-                            startRadius: 0,
-                            endRadius: 40
-                        )
+        // Seat button with glass morphism - status text inside tile
+        ZStack {
+            // Outer glow effect
+            RoundedRectangle(cornerRadius: SKSpacing.Seat.cornerRadius)
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            seatColor.opacity(0.4),
+                            seatColor.opacity(0.1),
+                            Color.clear
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: 40
                     )
-                    .frame(width: SKSpacing.Seat.size + 16, height: SKSpacing.Seat.size + 16)
-                    .blur(radius: 8)
-                    .opacity(isPressed ? 0.6 : 1.0)
+                )
+                .frame(width: SKSpacing.Seat.size + 16, height: SKSpacing.Seat.size + 16)
+                .blur(radius: 8)
+                .opacity(isPressed ? 0.6 : 1.0)
 
-                // Glass background
-                RoundedRectangle(cornerRadius: SKSpacing.Seat.cornerRadius)
-                    .fill(.ultraThinMaterial)
-                    .frame(width: SKSpacing.Seat.size, height: SKSpacing.Seat.size)
+            // Glass background
+            RoundedRectangle(cornerRadius: SKSpacing.Seat.cornerRadius)
+                .fill(.ultraThinMaterial)
+                .frame(width: SKSpacing.Seat.size, height: SKSpacing.Seat.size)
 
-                // Colored gradient overlay
-                RoundedRectangle(cornerRadius: SKSpacing.Seat.cornerRadius)
-                    .fill(
-                        RadialGradient(
-                            colors: [
-                                seatColor.opacity(0.5),
-                                seatColor.opacity(0.3)
-                            ],
-                            center: .center,
-                            startRadius: 0,
-                            endRadius: SKSpacing.Seat.size / 2
-                        )
+            // Colored gradient overlay
+            RoundedRectangle(cornerRadius: SKSpacing.Seat.cornerRadius)
+                .fill(
+                    RadialGradient(
+                        colors: [
+                            seatColor.opacity(0.5),
+                            seatColor.opacity(0.3)
+                        ],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: SKSpacing.Seat.size / 2
                     )
-                    .frame(width: SKSpacing.Seat.size, height: SKSpacing.Seat.size)
+                )
+                .frame(width: SKSpacing.Seat.size, height: SKSpacing.Seat.size)
 
-                // Glowing border stroke
-                RoundedRectangle(cornerRadius: SKSpacing.Seat.cornerRadius)
-                    .strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                seatColor.opacity(0.8),
-                                seatColor.opacity(0.4),
-                                seatColor.opacity(0.6)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: SKSpacing.Seat.borderWidth
-                    )
-                    .frame(width: SKSpacing.Seat.size, height: SKSpacing.Seat.size)
+            // Glowing border stroke
+            RoundedRectangle(cornerRadius: SKSpacing.Seat.cornerRadius)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            seatColor.opacity(0.8),
+                            seatColor.opacity(0.4),
+                            seatColor.opacity(0.6)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: SKSpacing.Seat.borderWidth
+                )
+                .frame(width: SKSpacing.Seat.size, height: SKSpacing.Seat.size)
 
-                if isBatchMode && isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundColor(.white)
-                        .shadow(color: .black.opacity(0.3), radius: 2)
-                } else {
+            if isBatchMode && isSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundColor(.white)
+                    .shadow(color: .black.opacity(0.3), radius: 2)
+            } else {
+                VStack(spacing: 1) {
                     Text("\(seatNumber)")
                         .font(SKTypography.seatNumber)
                         .foregroundColor(.white)
                         .shadow(color: .black.opacity(0.3), radius: 2)
+
+                    if !statusText.isEmpty {
+                        Text(statusText)
+                            .font(SKTypography.seatStatus)
+                            .foregroundColor(.white.opacity(0.85))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
                 }
             }
-            .scaleEffect(isPressed ? SKMotion.seatTapScale : 1.0)
-            .shadow(
-                color: seatColor.opacity(0.4),
-                radius: isPressed ? SKMotion.shadowPressedRadius : SKSpacing.Seat.glowRadius,
-                x: 0,
-                y: isPressed ? 2 : 4
-            )
-
-            // Status/Price text - always present with fixed height for alignment
-            Text(statusText.isEmpty ? " " : statusText)
-                .font(SKTypography.seatStatus)
-                .foregroundColor(SKColors.textSecondary)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
-                .frame(height: 24)
-                .opacity(statusText.isEmpty ? 0 : 1)
         }
+        .scaleEffect(isPressed ? SKMotion.seatTapScale : 1.0)
+        .shadow(
+            color: seatColor.opacity(0.4),
+            radius: isPressed ? SKMotion.shadowPressedRadius : SKSpacing.Seat.glowRadius,
+            x: 0,
+            y: isPressed ? 2 : 4
+        )
         .offset(x: shakeOffset)
         .onTapGesture {
             guard !isBuyerView else { return }
@@ -12200,7 +12196,7 @@ struct SettingsView: View {
 
                         // Compact Footer (replaces About card)
                         VStack(spacing: 12) {
-                            Text("Version 3.1 (2)")
+                            Text("Version 3.2 (1)")
                                 .font(.system(size: 13, weight: .medium))
                                 .foregroundColor(.modernTextSecondary)
 
