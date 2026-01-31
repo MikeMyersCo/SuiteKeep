@@ -7477,12 +7477,41 @@ class ArchiveManager: ObservableObject {
     private let archiveDirectoryName = "Archives"
 
     private init() {
+        migrateLocalArchivesToICloud()
         loadAvailableArchives()
+    }
+
+    private func migrateLocalArchivesToICloud() {
+        guard let iCloudDir = iCloudArchivesDirectoryURL,
+              let localDir = localArchivesDirectoryURL,
+              iCloudDir != localDir else { return }
+
+        guard let localFiles = try? fileManager.contentsOfDirectory(at: localDir, includingPropertiesForKeys: nil) else { return }
+
+        for localFile in localFiles where localFile.pathExtension == "json" {
+            let iCloudFile = iCloudDir.appendingPathComponent(localFile.lastPathComponent)
+            if !fileManager.fileExists(atPath: iCloudFile.path) {
+                try? fileManager.copyItem(at: localFile, to: iCloudFile)
+            }
+        }
     }
 
     // MARK: - Directory Management
 
-    private var archivesDirectoryURL: URL? {
+    private var iCloudArchivesDirectoryURL: URL? {
+        guard let iCloudURL = fileManager.url(forUbiquityContainerIdentifier: nil) else {
+            return nil
+        }
+        let archivesURL = iCloudURL
+            .appendingPathComponent("Documents")
+            .appendingPathComponent(archiveDirectoryName)
+        if !fileManager.fileExists(atPath: archivesURL.path) {
+            try? fileManager.createDirectory(at: archivesURL, withIntermediateDirectories: true)
+        }
+        return archivesURL
+    }
+
+    private var localArchivesDirectoryURL: URL? {
         guard let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
             return nil
         }
@@ -7500,6 +7529,10 @@ class ArchiveManager: ObservableObject {
         return archivesURL
     }
 
+    private var archivesDirectoryURL: URL? {
+        iCloudArchivesDirectoryURL ?? localArchivesDirectoryURL
+    }
+
     private func archiveFileURL(for year: Int) -> URL? {
         archivesDirectoryURL?.appendingPathComponent("SuiteKeep_Archive_\(year).json")
     }
@@ -7507,29 +7540,26 @@ class ArchiveManager: ObservableObject {
     // MARK: - Archive Operations
 
     func loadAvailableArchives() {
-        guard let archivesDir = archivesDirectoryURL else {
-            availableArchives = []
-            return
-        }
+        var archives: [YearArchive] = []
+        var seenYears = Set<Int>()
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
 
-        do {
-            let files = try fileManager.contentsOfDirectory(at: archivesDir, includingPropertiesForKeys: nil)
-            let archiveFiles = files.filter { $0.pathExtension == "json" }
-
-            var archives: [YearArchive] = []
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            for fileURL in archiveFiles {
-                if let data = try? Data(contentsOf: fileURL),
-                   let archive = try? decoder.decode(YearArchive.self, from: data) {
-                    archives.append(archive)
+        // Load from iCloud first (preferred), then local as fallback
+        for dir in [iCloudArchivesDirectoryURL, localArchivesDirectoryURL].compactMap({ $0 }) {
+            if let files = try? fileManager.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) {
+                for fileURL in files where fileURL.pathExtension == "json" {
+                    if let data = try? Data(contentsOf: fileURL),
+                       let archive = try? decoder.decode(YearArchive.self, from: data),
+                       !seenYears.contains(archive.year) {
+                        archives.append(archive)
+                        seenYears.insert(archive.year)
+                    }
                 }
             }
-
-            availableArchives = archives.sorted { $0.year > $1.year }
-        } catch {
-            availableArchives = []
         }
+
+        availableArchives = archives.sorted { $0.year > $1.year }
     }
 
     func getAvailableYearsToArchive(from concerts: [Concert]) -> [(year: Int, count: Int)] {
@@ -7647,16 +7677,21 @@ class ArchiveManager: ObservableObject {
     }
 
     func deleteArchive(_ archive: YearArchive) throws {
-        guard let fileURL = archiveFileURL(for: archive.year) else {
-            throw ArchiveError.noArchivesDirectory
+        var deleted = false
+        let filename = "SuiteKeep_Archive_\(archive.year).json"
+
+        for dir in [iCloudArchivesDirectoryURL, localArchivesDirectoryURL].compactMap({ $0 }) {
+            let fileURL = dir.appendingPathComponent(filename)
+            if fileManager.fileExists(atPath: fileURL.path) {
+                try fileManager.removeItem(at: fileURL)
+                deleted = true
+            }
         }
 
-        do {
-            try fileManager.removeItem(at: fileURL)
-            loadAvailableArchives()
-        } catch {
-            throw ArchiveError.failedToDelete(error)
+        if !deleted {
+            throw ArchiveError.noArchivesDirectory
         }
+        loadAvailableArchives()
     }
 
     func restoreArchive(_ archive: YearArchive, to concertManager: ConcertDataManager) {
@@ -8462,6 +8497,105 @@ struct CalendarDayView: View {
     }
 }
 
+// MARK: - Sellout Confetti View
+struct SelloutConfettiView: View {
+    @Binding var isShowing: Bool
+    @State private var animate = false
+    @State private var textOpacity: Double = 0
+    @State private var overallOpacity: Double = 1
+
+    private struct Particle: Identifiable {
+        let id = UUID()
+        let x: CGFloat
+        let size: CGFloat
+        let color: Color
+        let shape: Int // 0 = circle, 1 = rect, 2 = star
+        let delay: Double
+        let duration: Double
+        let swayAmount: CGFloat
+    }
+
+    private let particles: [Particle] = {
+        let colors: [Color] = [
+            SKColors.champagne,
+            SKColors.champagneLight,
+            SKColors.champagneMuted,
+            .white,
+            Color(red: 1.0, green: 0.84, blue: 0.0) // bright gold
+        ]
+        return (0..<50).map { _ in
+            Particle(
+                x: CGFloat.random(in: 0...1),
+                size: CGFloat.random(in: 4...10),
+                color: colors.randomElement()!,
+                shape: Int.random(in: 0...2),
+                delay: Double.random(in: 0...0.6),
+                duration: Double.random(in: 1.8...2.8),
+                swayAmount: CGFloat.random(in: -40...40)
+            )
+        }
+    }()
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                // Confetti particles
+                ForEach(particles) { p in
+                    Group {
+                        if p.shape == 1 {
+                            RoundedRectangle(cornerRadius: 1)
+                                .fill(p.color)
+                        } else {
+                            Circle()
+                                .fill(p.color)
+                        }
+                    }
+                    .frame(width: p.size, height: p.shape == 1 ? p.size * 1.5 : p.size)
+                    .rotationEffect(.degrees(animate ? Double.random(in: 180...540) : 0))
+                    .position(
+                        x: p.x * geo.size.width + (animate ? p.swayAmount : 0),
+                        y: animate ? geo.size.height + 20 : -20
+                    )
+                    .animation(
+                        .easeIn(duration: p.duration).delay(p.delay),
+                        value: animate
+                    )
+                }
+
+                // "SOLD OUT!" text
+                Text("SOLD OUT!")
+                    .font(.system(size: 34, weight: .black, design: .rounded))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [SKColors.champagneLight, SKColors.champagne, Color(red: 1.0, green: 0.84, blue: 0.0)],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .shadow(color: SKColors.champagne.opacity(0.6), radius: 12, x: 0, y: 0)
+                    .opacity(textOpacity)
+                    .position(x: geo.size.width / 2, y: geo.size.height * 0.22)
+            }
+        }
+        .opacity(overallOpacity)
+        .allowsHitTesting(false)
+        .onAppear {
+            HapticManager.shared.notification(type: .success)
+            animate = true
+            withAnimation(.easeOut(duration: 0.4).delay(0.1)) {
+                textOpacity = 1
+            }
+            withAnimation(.easeIn(duration: 0.6).delay(2.5)) {
+                overallOpacity = 0
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.3) {
+                isShowing = false
+            }
+        }
+    }
+
+}
+
 // MARK: - Concert Detail View
 struct ConcertDetailView: View {
     @Environment(\.colorScheme) var colorScheme
@@ -8508,7 +8642,8 @@ struct ConcertDetailView: View {
     @State private var isBatchMode = false
     @State private var selectedSeats = Set<Int>()
     @State private var showingBatchOptions = false
-    
+    @State private var showSelloutConfetti = false
+
     var body: some View {
         ZStack {
             // Full screen background
@@ -8924,6 +9059,18 @@ struct ConcertDetailView: View {
                 .padding(.top, 8)
                 .padding(.bottom)
                 }
+            }
+
+            // Sellout confetti overlay
+            if showSelloutConfetti {
+                SelloutConfettiView(isShowing: $showSelloutConfetti)
+                    .transition(.opacity)
+                    .zIndex(100)
+            }
+        }
+        .onChange(of: concert.ticketsSold) { oldValue, newValue in
+            if newValue == 8 && oldValue < 8 {
+                withAnimation { showSelloutConfetti = true }
             }
         }
         .navigationBarHidden(true)
