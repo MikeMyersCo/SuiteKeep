@@ -423,4 +423,555 @@ final class SuiteKeepUITests: XCTestCase {
         let disclaimerText = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'as is'"))
         XCTAssertTrue(disclaimerText.firstMatch.waitForExistence(timeout: 3), "Disclaimer text did not expand")
     }
+
+    // MARK: - 7. Concert Detail — Edit/Cancel Flow
+
+    @MainActor
+    func testConcertDetailEditAndCancel() throws {
+        ensureConcertExists()
+        navigateToConcertDetail()
+
+        // Tap the Edit button
+        let editButton = app.buttons["Edit"]
+        XCTAssertTrue(editButton.waitForExistence(timeout: 3), "Edit button missing")
+        editButton.tap()
+
+        // Verify edit mode elements appear
+        let artistField = app.textFields["Artist Name"]
+        XCTAssertTrue(artistField.waitForExistence(timeout: 3), "Artist Name text field missing in edit mode")
+
+        // Verify Cancel button appeared
+        let cancelButton = app.buttons["Cancel"]
+        XCTAssertTrue(cancelButton.exists, "Cancel button missing in edit mode")
+
+        // Verify Save button appeared (Edit becomes Save)
+        let saveButton = app.buttons["Save"]
+        XCTAssertTrue(saveButton.exists, "Save button missing in edit mode")
+
+        // Cancel to revert — should return to non-edit state
+        cancelButton.tap()
+        sleep(1)
+
+        // Verify we're back to display mode — Edit button should be visible again
+        XCTAssertTrue(app.buttons["Edit"].waitForExistence(timeout: 3), "Edit button did not reappear after Cancel")
+    }
+
+    // MARK: - 8. Concert Detail — Seat Tap Opens Sheet
+
+    @MainActor
+    func testConcertDetailSeatTapOpensSheet() throws {
+        ensureConcertExists()
+        navigateToConcertDetail()
+
+        // Tap seat 1 — seat numbers are rendered as static text labels
+        let seat1 = app.staticTexts["1"]
+        XCTAssertTrue(seat1.waitForExistence(timeout: 3), "Seat 1 not found")
+        seat1.tap()
+
+        // Verify the SeatOptionsView sheet appears with "Seat 1" header
+        let seatHeader = app.staticTexts["Seat 1"]
+        XCTAssertTrue(seatHeader.waitForExistence(timeout: 3), "Seat options sheet did not open")
+
+        // Verify status buttons exist in the sheet
+        let availableButton = app.buttons.matching(NSPredicate(format: "label CONTAINS[c] 'available'"))
+        XCTAssertTrue(availableButton.firstMatch.waitForExistence(timeout: 3), "Available status button missing")
+
+        // Dismiss via Cancel button
+        let cancelButton = app.buttons["Cancel"]
+        XCTAssertTrue(cancelButton.waitForExistence(timeout: 3), "Cancel button missing in seat sheet")
+        cancelButton.tap()
+        sleep(1)
+    }
+
+    // MARK: - 9. Concert Detail — Buyer View Toggle
+
+    @MainActor
+    func testConcertDetailBuyerViewToggle() throws {
+        ensureConcertExists()
+        navigateToConcertDetail()
+
+        // Verify Edit button exists before toggling buyer view
+        XCTAssertTrue(app.buttons["Edit"].waitForExistence(timeout: 3), "Edit button should be visible before buyer view")
+
+        // Scroll to find Buyer View button
+        app.swipeUp()
+
+        let buyerViewButton = app.staticTexts["Buyer View"]
+        XCTAssertTrue(buyerViewButton.waitForExistence(timeout: 3), "Buyer View button missing")
+        buyerViewButton.tap()
+        sleep(1)
+
+        // In Buyer View, the entire InteractiveFireSuiteView is replaced by ShareableBuyerView.
+        // Management controls (Edit, Seat View/List View toggle) are no longer rendered.
+        XCTAssertFalse(app.buttons["Edit"].exists, "Edit button should be hidden in Buyer View")
+        XCTAssertFalse(app.buttons["Seat View"].exists, "Seat View toggle should be hidden in Buyer View")
+
+        // Verify ShareableBuyerView content — seats show "OPEN" instead of "Available"
+        let openSeats = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'OPEN' OR label CONTAINS 'Open'"))
+        XCTAssertTrue(openSeats.firstMatch.waitForExistence(timeout: 3), "Buyer view seat status labels missing")
+
+        // Buyer view has no toggle-off button (state resets on navigation).
+        // Navigate back to All Concerts, then re-enter the concert detail.
+        app.buttons["Back"].tap()
+        sleep(1)
+
+        // Re-enter concert detail — isBuyerView resets to false (@State)
+        let ticketIndicator = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'tickets sold'")).firstMatch
+        XCTAssertTrue(ticketIndicator.waitForExistence(timeout: 3), "Concert row not found after back navigation")
+        ticketIndicator.tap()
+
+        let backButton = app.buttons["Back"]
+        XCTAssertTrue(backButton.waitForExistence(timeout: 5), "Concert detail did not reopen")
+
+        // Verify Edit button is back (buyer view state was reset)
+        XCTAssertTrue(app.buttons["Edit"].waitForExistence(timeout: 3), "Edit button did not reappear after re-entering concert detail")
+    }
+
+    // MARK: - 10. Concert Detail — Parking Status Sheet
+
+    @MainActor
+    func testConcertDetailParkingSheet() throws {
+        ensureConcertExists()
+        navigateToConcertDetail()
+
+        // Scroll down to find the Parking button
+        app.swipeUp()
+
+        let parkingButton = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Parking'")).firstMatch
+        XCTAssertTrue(parkingButton.waitForExistence(timeout: 3), "Parking status button missing")
+        parkingButton.tap()
+
+        // Verify Parking Ticket sheet appears
+        let parkingHeader = app.staticTexts["Parking Ticket"]
+        XCTAssertTrue(parkingHeader.waitForExistence(timeout: 3), "Parking Ticket sheet did not open")
+
+        // Dismiss the sheet via the close button (xmark)
+        let closeButton = app.buttons.matching(NSPredicate(format: "label CONTAINS 'Close' OR label CONTAINS 'xmark'")).firstMatch
+        if closeButton.waitForExistence(timeout: 2) {
+            closeButton.tap()
+        } else {
+            // Try tapping outside or swipe down to dismiss
+            app.swipeDown()
+        }
+        sleep(1)
+    }
+
+    // MARK: - 11. Concert Detail — Batch Mode Toggle
+
+    @MainActor
+    func testConcertDetailBatchModeToggle() throws {
+        ensureConcertExists()
+        navigateToConcertDetail()
+
+        // Scroll to batch mode button
+        app.swipeUp()
+
+        let selectMultiple = app.staticTexts["Select Multiple Seats"]
+        XCTAssertTrue(selectMultiple.waitForExistence(timeout: 3), "Select Multiple Seats not found")
+
+        // Tap to enable batch mode
+        selectMultiple.tap()
+        sleep(1)
+
+        // Verify batch mode is active
+        let batchActive = app.staticTexts["Batch Mode Active"]
+        XCTAssertTrue(batchActive.waitForExistence(timeout: 3), "Batch Mode Active label not found after toggle")
+
+        // Verify "selected" counter text appears
+        let selectedText = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'selected'"))
+        XCTAssertTrue(selectedText.firstMatch.exists, "Selection counter missing in batch mode")
+
+        // Toggle batch mode off
+        batchActive.tap()
+        sleep(1)
+
+        // Verify we're back to normal
+        XCTAssertTrue(app.staticTexts["Select Multiple Seats"].waitForExistence(timeout: 3), "Did not exit batch mode")
+    }
+
+    // MARK: - 12. Concert Detail — Delete Concert Dialog (Cancel)
+
+    @MainActor
+    func testConcertDetailDeleteDialogCancel() throws {
+        ensureConcertExists()
+        navigateToConcertDetail()
+
+        // Find the trash/delete button
+        let trashButton = app.buttons.matching(NSPredicate(format: "label CONTAINS 'trash' OR label CONTAINS 'Delete' OR label CONTAINS 'Trash'")).firstMatch
+        XCTAssertTrue(trashButton.waitForExistence(timeout: 3), "Delete/trash button missing")
+        trashButton.tap()
+
+        // Verify confirmation dialog appears (confirmationDialog renders as action sheet)
+        let deleteDialog = app.staticTexts["Delete Concert"]
+        XCTAssertTrue(deleteDialog.waitForExistence(timeout: 3), "Delete Concert confirmation dialog did not appear")
+
+        // Wait for action sheet animation to complete
+        sleep(1)
+
+        // Dismiss the dialog — try multiple approaches
+        // On iOS, confirmationDialog Cancel can be in sheets, alerts, or top-level buttons
+        var dismissed = false
+
+        // Try sheets container first
+        let sheetCancel = app.sheets.buttons["Cancel"]
+        if sheetCancel.exists && sheetCancel.isHittable {
+            sheetCancel.tap()
+            dismissed = true
+        }
+
+        // Try alerts container
+        if !dismissed {
+            let alertCancel = app.alerts.buttons["Cancel"]
+            if alertCancel.exists && alertCancel.isHittable {
+                alertCancel.tap()
+                dismissed = true
+            }
+        }
+
+        // Try finding any hittable Cancel button in the entire app
+        if !dismissed {
+            let allCancel = app.buttons.matching(NSPredicate(format: "label == 'Cancel'"))
+            for i in 0..<allCancel.count {
+                let btn = allCancel.element(boundBy: i)
+                if btn.isHittable {
+                    btn.tap()
+                    dismissed = true
+                    break
+                }
+            }
+        }
+
+        // Last resort — tap the dimmed area above the action sheet to dismiss
+        if !dismissed {
+            let topOfScreen = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15))
+            topOfScreen.tap()
+        }
+
+        sleep(1)
+
+        // Verify we're still in the concert detail
+        XCTAssertTrue(app.buttons["Back"].waitForExistence(timeout: 3), "Not in concert detail after cancelling delete")
+    }
+
+    // MARK: - 13. Concert Detail — Back Navigation
+
+    @MainActor
+    func testConcertDetailBackNavigation() throws {
+        ensureConcertExists()
+        navigateToConcertDetail()
+
+        // Tap Back to return to All Concerts
+        app.buttons["Back"].tap()
+
+        // Verify we're back in All Concerts list
+        let allConcertsHeader = app.staticTexts["All Concerts"]
+        XCTAssertTrue(allConcertsHeader.waitForExistence(timeout: 5), "All Concerts header not found after back navigation")
+
+        // Dismiss All Concerts sheet
+        app.buttons["Done"].tap()
+        sleep(1)
+
+        // Verify we're back on the Concerts tab
+        XCTAssertTrue(app.staticTexts["Concerts"].waitForExistence(timeout: 3), "Concerts tab not visible after dismissing sheet")
+    }
+
+    // MARK: - 14. All Concerts — Calendar Month Navigation
+
+    @MainActor
+    func testCalendarMonthNavigation() throws {
+        ensureConcertExists()
+        app.tabBars.buttons["Concerts"].tap()
+
+        app.buttons["View All"].tap()
+        XCTAssertTrue(app.staticTexts["All Concerts"].waitForExistence(timeout: 5))
+
+        // Switch to Calendar view
+        app.staticTexts["Calendar"].tap()
+        sleep(1)
+
+        // Tap the forward month button (chevron.right)
+        let nextMonth = app.buttons.matching(NSPredicate(format: "label CONTAINS 'chevron.right' OR label CONTAINS 'Next' OR label CONTAINS 'Forward'")).firstMatch
+        if nextMonth.waitForExistence(timeout: 3) {
+            nextMonth.tap()
+            sleep(1)
+
+            // Navigate back
+            let prevMonth = app.buttons.matching(NSPredicate(format: "label CONTAINS 'chevron.left' OR label CONTAINS 'Previous' OR label CONTAINS 'Back'")).firstMatch
+            if prevMonth.exists {
+                prevMonth.tap()
+                sleep(1)
+            }
+        }
+
+        // Switch back to List and dismiss
+        app.staticTexts["List"].tap()
+        sleep(1)
+        app.buttons["Done"].tap()
+    }
+
+    // MARK: - 15. Analytics — Report Toggle Interactions
+
+    @MainActor
+    func testAnalyticsReportToggleInteraction() throws {
+        app.tabBars.buttons["Analytics"].tap()
+
+        // Scroll to Business Reports
+        app.swipeUp()
+        app.swipeUp()
+
+        XCTAssertTrue(app.staticTexts["Report Elements"].waitForExistence(timeout: 3))
+
+        // Find toggle switches — they should be near the report labels
+        let switches = app.switches
+        if switches.count > 0 {
+            // Toggle the first switch off then back on
+            let firstSwitch = switches.firstMatch
+            let initialValue = firstSwitch.value as? String
+
+            firstSwitch.tap()
+            sleep(1)
+
+            let newValue = firstSwitch.value as? String
+            XCTAssertNotEqual(initialValue, newValue, "Toggle did not change state")
+
+            // Toggle back to restore original state
+            firstSwitch.tap()
+            sleep(1)
+        }
+    }
+
+    // MARK: - 16. Settings — CloudSync Toggle
+
+    @MainActor
+    func testSettingsCloudSyncToggle() throws {
+        app.tabBars.buttons["Settings"].tap()
+
+        // Scroll to Sync & Sharing section
+        app.swipeUp()
+
+        let cloudSyncText = app.staticTexts["Enable CloudSync"]
+        XCTAssertTrue(cloudSyncText.waitForExistence(timeout: 3), "Enable CloudSync label missing")
+
+        // Find the CloudSync toggle switch
+        let switches = app.switches
+        if switches.count > 0 {
+            let cloudToggle = switches.firstMatch
+            let initialValue = cloudToggle.value as? String
+
+            // Toggle it
+            cloudToggle.tap()
+            sleep(1)
+
+            // Dismiss any alert that may appear
+            let okButton = app.buttons["OK"]
+            if okButton.waitForExistence(timeout: 2) {
+                okButton.tap()
+                sleep(1)
+            }
+
+            let newValue = cloudToggle.value as? String
+            XCTAssertNotEqual(initialValue, newValue, "CloudSync toggle did not change state")
+
+            // Toggle back to restore
+            cloudToggle.tap()
+            sleep(1)
+
+            // Dismiss any alert
+            if okButton.waitForExistence(timeout: 2) {
+                okButton.tap()
+            }
+        }
+    }
+
+    // MARK: - 17. Settings — Clear All Data Alert (Cancel)
+
+    @MainActor
+    func testSettingsClearAllDataAlertCancel() throws {
+        app.tabBars.buttons["Settings"].tap()
+
+        // Scroll to Clear All Data button
+        app.swipeUp()
+        app.swipeUp()
+        app.swipeUp()
+
+        let clearButton = app.buttons["Clear All Data"]
+        XCTAssertTrue(clearButton.waitForExistence(timeout: 3), "Clear All Data button missing")
+        clearButton.tap()
+
+        // Verify the confirmation alert appears
+        let alertTitle = app.staticTexts["Clear All Data"]
+        XCTAssertTrue(alertTitle.waitForExistence(timeout: 3), "Clear All Data alert did not appear")
+
+        // Cancel — do NOT clear data
+        let cancelButton = app.buttons["Cancel"]
+        XCTAssertTrue(cancelButton.exists, "Cancel button missing in alert")
+        cancelButton.tap()
+        sleep(1)
+    }
+
+    // MARK: - 18. Settings — Apply to All Alert (Cancel)
+
+    @MainActor
+    func testSettingsApplyToAllAlertCancel() throws {
+        app.tabBars.buttons["Settings"].tap()
+
+        // Scroll to find Apply to All button
+        app.swipeUp()
+
+        let applyButton = app.buttons["Apply to All"]
+        XCTAssertTrue(applyButton.waitForExistence(timeout: 3), "Apply to All button missing")
+        applyButton.tap()
+
+        // Verify confirmation alert appears
+        let alertTitle = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Apply'"))
+        XCTAssertTrue(alertTitle.firstMatch.waitForExistence(timeout: 3), "Apply to All alert did not appear")
+
+        // Cancel — do NOT apply
+        let cancelButton = app.buttons["Cancel"]
+        XCTAssertTrue(cancelButton.exists, "Cancel button missing in alert")
+        cancelButton.tap()
+        sleep(1)
+    }
+
+    // MARK: - 19. Concert Detail — Seat Legend Verification
+
+    @MainActor
+    func testConcertDetailSeatLegend() throws {
+        ensureConcertExists()
+        navigateToConcertDetail()
+
+        // Verify seat visualization elements
+        XCTAssertTrue(app.staticTexts["STAGE"].waitForExistence(timeout: 3), "STAGE label missing")
+
+        // Verify legend items
+        XCTAssertTrue(app.staticTexts["Available"].exists, "Available legend missing")
+        XCTAssertTrue(app.staticTexts["Reserved"].exists, "Reserved legend missing")
+        XCTAssertTrue(app.staticTexts["Sold"].exists, "Sold legend missing")
+
+        // Verify all 8 seat numbers exist
+        for seatNum in 1...8 {
+            XCTAssertTrue(app.staticTexts["\(seatNum)"].exists, "Seat \(seatNum) missing from visualization")
+        }
+    }
+
+    // MARK: - 20. Concert Detail — Revenue Display
+
+    @MainActor
+    func testConcertDetailRevenueDisplay() throws {
+        ensureConcertExists()
+        navigateToConcertDetail()
+
+        // Verify revenue display exists
+        let revenueText = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Revenue'"))
+        XCTAssertTrue(revenueText.firstMatch.waitForExistence(timeout: 3), "Revenue display missing")
+
+        // Verify sold/reserved/available counters
+        let soldText = app.staticTexts["sold"]
+        let reservedText = app.staticTexts["reserved"]
+        let availableText = app.staticTexts["available"]
+        XCTAssertTrue(soldText.exists || reservedText.exists || availableText.exists, "Ticket counters missing")
+    }
+
+    // MARK: - 21. Concert Detail — List View Seat Rows
+
+    @MainActor
+    func testConcertDetailListViewSeatRows() throws {
+        ensureConcertExists()
+        navigateToConcertDetail()
+
+        // Scroll to toggle
+        app.swipeUp()
+
+        // Switch to List View
+        let listViewButton = app.buttons["List View"]
+        XCTAssertTrue(listViewButton.waitForExistence(timeout: 3))
+        listViewButton.tap()
+        sleep(1)
+
+        // Verify Seating List header
+        XCTAssertTrue(app.staticTexts["Seating List"].waitForExistence(timeout: 3), "Seating List header missing")
+
+        // Verify instruction text
+        let instructionText = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Tap seats to manage'"))
+        XCTAssertTrue(instructionText.firstMatch.waitForExistence(timeout: 3), "Seat management instruction missing")
+
+        // Verify at least one seat row with "Seat" label
+        let seatRow = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Seat'"))
+        XCTAssertTrue(seatRow.count >= 1, "No seat rows found in list view")
+
+        // Switch back
+        app.buttons["Seat View"].tap()
+        sleep(1)
+    }
+
+    // MARK: - 22. Add Concert — Cancel Flow
+
+    @MainActor
+    func testAddConcertCancelFlow() throws {
+        app.tabBars.buttons["Concerts"].tap()
+
+        let addButton = app.buttons["Add Concert"]
+        XCTAssertTrue(addButton.waitForExistence(timeout: 3))
+        addButton.tap()
+
+        // Verify Add Concert sheet appears
+        let headerText = app.staticTexts["Schedule a new performance"]
+        XCTAssertTrue(headerText.waitForExistence(timeout: 5), "Add Concert sheet did not appear")
+
+        // Verify form elements
+        let artistField = app.textFields["Enter artist name"]
+        XCTAssertTrue(artistField.exists, "Artist name field missing")
+
+        // Verify Cancel button and tap it
+        let cancelButton = app.buttons["Cancel"]
+        XCTAssertTrue(cancelButton.exists, "Cancel button missing in Add Concert sheet")
+        cancelButton.tap()
+        sleep(1)
+
+        // Verify we returned to Concerts tab
+        XCTAssertTrue(app.staticTexts["Concerts"].waitForExistence(timeout: 3), "Did not return to Concerts tab after cancel")
+    }
+
+    // MARK: - 23. Settings — Sync & Sharing Section
+
+    @MainActor
+    func testSettingsSyncAndSharingSection() throws {
+        app.tabBars.buttons["Settings"].tap()
+
+        app.swipeUp()
+
+        // Verify Sync & Sharing elements
+        XCTAssertTrue(app.staticTexts["Enable CloudSync"].waitForExistence(timeout: 3), "Enable CloudSync label missing")
+
+        // Check for sync status indicator
+        let syncStatus = app.staticTexts.matching(NSPredicate(format: "label CONTAINS 'Sync' OR label CONTAINS 'sync' OR label CONTAINS 'Disabled' OR label CONTAINS 'Enabled'"))
+        XCTAssertTrue(syncStatus.firstMatch.waitForExistence(timeout: 3), "Sync status indicator missing")
+    }
+
+    // MARK: - 24. Full Navigation Round Trip
+
+    @MainActor
+    func testFullNavigationRoundTrip() throws {
+        // Start on Dashboard
+        XCTAssertTrue(app.staticTexts["PRIVATE SUITE"].waitForExistence(timeout: 3))
+
+        // Go to Concerts
+        app.tabBars.buttons["Concerts"].tap()
+        XCTAssertTrue(app.staticTexts["Concerts"].waitForExistence(timeout: 3))
+
+        // Go to Analytics
+        app.tabBars.buttons["Analytics"].tap()
+        XCTAssertTrue(app.staticTexts["Analytics"].waitForExistence(timeout: 3))
+
+        // Go to Settings
+        app.tabBars.buttons["Settings"].tap()
+        XCTAssertTrue(app.staticTexts["Settings"].waitForExistence(timeout: 3))
+
+        // Return to Dashboard
+        app.tabBars.buttons["Dashboard"].tap()
+        XCTAssertTrue(app.staticTexts["PRIVATE SUITE"].waitForExistence(timeout: 3), "Dashboard not restored after full round trip")
+
+        // Verify metric cards still display
+        XCTAssertTrue(app.staticTexts["TOTAL TICKETS SOLD"].exists, "Metrics lost after tab round trip")
+    }
 }
