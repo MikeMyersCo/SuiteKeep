@@ -3939,7 +3939,8 @@ extension Concert {
         
         var seats: [Seat] = []
         if let seatsData = record["seatsData"] as? Data,
-           let decodedSeats = try? JSONDecoder().decode([Seat].self, from: seatsData) {
+           let decodedSeats = try? JSONDecoder().decode([Seat].self, from: seatsData),
+           decodedSeats.count == 8 {
             seats = decodedSeats
         } else {
             seats = Array(repeating: Seat(), count: 8)
@@ -6117,7 +6118,13 @@ Or open SuiteKeep → Settings → Suite Sharing → Join Suite and paste the co
 extension SharedSuiteManager {
     func mergeConflictingChanges(localConcert: Concert, remoteConcert: Concert) -> Concert {
         var mergedConcert = remoteConcert // Start with remote version
-        
+
+        // Safety: if seat counts don't match, prefer the version with 8 seats
+        guard localConcert.seats.count == remoteConcert.seats.count else {
+            if localConcert.seats.count == 8 { return localConcert }
+            return remoteConcert
+        }
+
         // Merge seat-by-seat using modification timestamps
         for (index, localSeat) in localConcert.seats.enumerated() {
             let remoteSeat = remoteConcert.seats[index]
@@ -6736,11 +6743,12 @@ class ConcertDataManager: ObservableObject {
     private func syncFromiCloud() {
         if let iCloudData = iCloudStore.data(forKey: concertsKey),
            let iCloudConcerts = try? JSONDecoder().decode([Concert].self, from: iCloudData) {
-            // Merge iCloud data with local data (prefer newer data)
-            mergeConcerts(iCloudConcerts)
+            // Filter out invalid concerts before merging
+            let validConcerts = iCloudConcerts.filter { $0.seats.count == 8 }
+            mergeConcerts(validConcerts)
         }
     }
-    
+
     private func mergeConcerts(_ iCloudConcerts: [Concert]) {
         // Simple merge strategy: combine both lists and remove duplicates
         var mergedConcerts = concerts
@@ -6757,8 +6765,8 @@ class ConcertDataManager: ObservableObject {
         do {
             if let data = userDefaults.data(forKey: concertsKey) {
                 let decodedConcerts = try JSONDecoder().decode([Concert].self, from: data)
-                concerts = decodedConcerts
-                // Successfully loaded \(concerts.count) concerts
+                // Filter out any concerts with invalid seat counts to prevent crashes
+                concerts = decodedConcerts.filter { $0.seats.count == 8 }
             }
         } catch {
             // Failed to load concerts: \(error)
@@ -6768,6 +6776,8 @@ class ConcertDataManager: ObservableObject {
     }
     
     func updateWithSyncedConcerts(_ syncedConcerts: [Concert]) {
+        // Filter out any concerts with invalid seat counts before processing
+        let syncedConcerts = syncedConcerts.filter { $0.seats.count == 8 }
         print("🔄 Updating local concerts with \(syncedConcerts.count) synced concerts")
 
         Task { @MainActor [weak self] in
@@ -6972,8 +6982,8 @@ class ConcertDataManager: ObservableObject {
         let backupKey = "\(concertsKey)_backup"
         if let backupData = userDefaults.data(forKey: backupKey),
            let decodedConcerts = try? JSONDecoder().decode([Concert].self, from: backupData) {
-            concerts = decodedConcerts
-            // Recovered \(concerts.count) concerts from backup
+            // Filter out any concerts with invalid seat counts
+            concerts = decodedConcerts.filter { $0.seats.count == 8 }
         }
     }
     
@@ -7146,6 +7156,12 @@ class ConcertDataManager: ObservableObject {
     }
     
     func clearAllData() {
+        // Create emergency backup before clearing
+        if !concerts.isEmpty, let encoded = try? JSONEncoder().encode(concerts) {
+            userDefaults.set(encoded, forKey: "\(concertsKey)_emergency_backup")
+            userDefaults.set(Date(), forKey: "\(concertsKey)_emergency_backup_date")
+        }
+
         // Clear concerts array
         concerts.removeAll()
         
@@ -8033,7 +8049,7 @@ struct AddConcertView: View {
                         Button(action: {
                             let defaultSeats = Array(repeating: Seat(cost: settingsManager.defaultSeatCost), count: 8)
                             let newConcert = Concert(
-                                id: Int.random(in: 1000...9999),
+                                id: Int.random(in: 100000...9999999999),
                                 artist: artist,
                                 date: selectedDate,
                                 seats: defaultSeats
@@ -10746,7 +10762,7 @@ struct SeatOptionsView: View {
         self.onUpdateAll = onUpdateAll
         self._selectedStatus = State(initialValue: seat.status)
         self._priceInput = State(initialValue: seat.price != nil ? String(seat.price!) : "")
-        self._costInput = State(initialValue: String(seat.cost ?? 0.0))
+        self._costInput = State(initialValue: seat.cost != nil ? String(Int(seat.cost!)) : "")
         self._noteInput = State(initialValue: seat.note ?? "")
         self._selectedSource = State(initialValue: seat.source ?? .facebook)
         self._dateSold = State(initialValue: seat.dateSold ?? Date())
@@ -10946,7 +10962,7 @@ struct SeatOptionsView: View {
                     
                     HStack {
                         Text("Cost: $")
-                        TextField("25", text: $costInput)
+                        TextField("0", text: $costInput)
                             .keyboardType(.decimalPad)
                             .textFieldStyle(.roundedBorder)
                             .toolbar {
@@ -10977,6 +10993,11 @@ struct SeatOptionsView: View {
                 .padding()
             }
             .navigationBarHidden(true)
+            .onAppear {
+                if costInput.isEmpty {
+                    costInput = String(Int(settingsManager.defaultSeatCost))
+                }
+            }
             .overlay(
                 Button("✕") {
                     dismiss()
@@ -14451,11 +14472,11 @@ struct BackupRestoreSection: View {
         // Clear all concert data and settings from storage
         concertManager.clearAllData()
 
-        // Reset SettingsManager to default values
-        settingsManager.suiteName = "Fire Suite"
+        // Reset SettingsManager to default values (must match SettingsManager.init defaults)
+        settingsManager.suiteName = "My Suite"
         settingsManager.venueLocation = "Ford Amphitheater"
-        settingsManager.familyTicketPrice = 75.0
-        settingsManager.defaultSeatCost = 150.0
+        settingsManager.familyTicketPrice = 50.0
+        settingsManager.defaultSeatCost = 25.0
 
         // Show confirmation
         showBackupAlert(title: "Data Cleared", message: "All app data has been permanently deleted. The app will now reset to its initial state.")
