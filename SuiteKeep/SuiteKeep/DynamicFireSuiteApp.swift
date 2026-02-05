@@ -930,65 +930,48 @@ struct ShareableBuyerView: View {
                     }
 
                     // Main suite card with U-shaped layout
+                    // Use consistent spacing so all seat gaps are equal
+                    let seatSize: CGFloat = 64
+                    let seatGap: CGFloat = 14
+                    let gridWidth: CGFloat = seatSize * 4 + seatGap * 3
+
                     ZStack {
-                        RoundedRectangle(cornerRadius: 20)
-                            .fill(.clear)
-                            .frame(height: 220)
-                            .liquidGlassCard(accentColor: .liquidTeal, cornerRadius: 20)
-
-                        RoundedRectangle(cornerRadius: 20)
-                            .fill(.clear)
-                            .frame(height: 220)
-                            .overlay(
-                            ZStack {
-                                // Bottom row
-                                VStack {
-                                    Spacer()
-                                    HStack(spacing: 14) {
-                                        ShareableCompactSeatView(seatNumber: 6, seat: concert.seats[5])
-                                        ShareableCompactSeatView(seatNumber: 5, seat: concert.seats[4])
-                                        ShareableCompactSeatView(seatNumber: 4, seat: concert.seats[3])
-                                        ShareableCompactSeatView(seatNumber: 3, seat: concert.seats[2])
-                                    }
-                                    .padding(.bottom, 8)
-                                }
-
-                                // Left side
-                                HStack {
-                                    VStack(spacing: -2) {
-                                        ShareableCompactSeatView(seatNumber: 8, seat: concert.seats[7])
-                                        ShareableCompactSeatView(seatNumber: 7, seat: concert.seats[6])
-                                        Spacer()
-                                            .frame(height: 72)
-                                    }
-                                    .padding(.leading, 8)
-
-                                    Spacer()
-                                }
-
-                                // Right side
-                                HStack {
-                                    Spacer()
-
-                                    VStack(spacing: -2) {
-                                        ShareableCompactSeatView(seatNumber: 1, seat: concert.seats[0])
-                                        ShareableCompactSeatView(seatNumber: 2, seat: concert.seats[1])
-                                        Spacer()
-                                            .frame(height: 72)
-                                    }
-                                    .padding(.trailing, 8)
-                                }
-
-                                // Center firepit
-                                VStack {
-                                    CompactFirepitView(isPulsing: true)
-                                        .offset(y: 25)
-                                    Spacer()
-                                }
+                        VStack(spacing: seatGap) {
+                            // Row 1: seat 8 (left), firepit, seat 1 (right)
+                            HStack {
+                                ShareableCompactSeatView(seatNumber: 8, seat: concert.seats[7])
+                                Spacer()
+                                ShareableCompactSeatView(seatNumber: 1, seat: concert.seats[0])
                             }
-                            .padding(.top, 20)
-                        )
+
+                            // Row 2: seat 7 (left), firepit, seat 2 (right)
+                            HStack {
+                                ShareableCompactSeatView(seatNumber: 7, seat: concert.seats[6])
+                                Spacer()
+                                ShareableCompactSeatView(seatNumber: 2, seat: concert.seats[1])
+                            }
+
+                            // Row 3: seats 6, 5, 4, 3
+                            HStack(spacing: seatGap) {
+                                ShareableCompactSeatView(seatNumber: 6, seat: concert.seats[5])
+                                ShareableCompactSeatView(seatNumber: 5, seat: concert.seats[4])
+                                ShareableCompactSeatView(seatNumber: 4, seat: concert.seats[3])
+                                ShareableCompactSeatView(seatNumber: 3, seat: concert.seats[2])
+                            }
+                        }
+                        .frame(width: gridWidth)
+
+                        // Center firepit overlaid on the upper two rows
+                        CompactFirepitView(isPulsing: true)
+                            .offset(y: -(seatSize + seatGap) / 2)
                     }
+                    .padding(.vertical, 20)
+                    .padding(.horizontal, 16)
+                    .background(
+                        RoundedRectangle(cornerRadius: 20)
+                            .fill(.clear)
+                            .liquidGlassCard(accentColor: .liquidTeal, cornerRadius: 20)
+                    )
                 }
 
                 Spacer()
@@ -1023,12 +1006,12 @@ struct ShareableCompactSeatView: View {
         // Seat button with liquid glass effect - status text inside tile
         ZStack {
             // Glass background
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 14)
                 .fill(.ultraThinMaterial)
-                .frame(width: 48, height: 48)
+                .frame(width: 64, height: 64)
 
             // Colored gradient overlay
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 14)
                 .fill(
                     RadialGradient(
                         colors: [
@@ -1037,26 +1020,26 @@ struct ShareableCompactSeatView: View {
                         ],
                         center: .center,
                         startRadius: 0,
-                        endRadius: 24
+                        endRadius: 32
                     )
                 )
-                .frame(width: 48, height: 48)
+                .frame(width: 64, height: 64)
 
             // Border
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 14)
                 .strokeBorder(seatColor.opacity(0.7), lineWidth: 2)
-                .frame(width: 48, height: 48)
+                .frame(width: 64, height: 64)
 
             // Seat number and status
-            VStack(spacing: 1) {
+            VStack(spacing: 2) {
                 Text("\(seatNumber)")
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
                     .foregroundColor(.white)
                     .shadow(color: .black.opacity(0.3), radius: 2)
 
                 if !statusText.isEmpty {
                     Text(statusText)
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(.white.opacity(0.85))
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
@@ -9649,137 +9632,121 @@ struct InteractiveFireSuiteView: View {
                 }
                 
                 // Main suite card with U-shaped layout
-                ZStack {
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(.clear)
-                        .frame(height: 220)
-                        .liquidGlassCard(accentColor: .liquidTeal, cornerRadius: 20)
+                // Use consistent spacing so all seat gaps are equal
+                // Each CompactSeatView is 64x64 in layout (48pt seat + 16pt glow frame)
+                let mgmtCellSize: CGFloat = SKSpacing.Seat.size + 16
+                let mgmtSeatGap: CGFloat = 10
+                let mgmtGridWidth: CGFloat = mgmtCellSize * 4 + mgmtSeatGap * 3
 
+                ZStack {
+                    VStack(spacing: mgmtSeatGap) {
+                        // Row 1: seat 8 (left), firepit, seat 1 (right)
+                        HStack {
+                            CompactSeatView(
+                                seatNumber: 8,
+                                seat: concert.seats[7],
+                                isSelected: selectedSeats.contains(7),
+                                isBatchMode: isBatchMode,
+                                isBuyerView: isBuyerView,
+                                onTap: { handleSeatTap(7) },
+                                onLongPress: { handleSeatLongPress(7) }
+                            )
+                            .id("seat-7-\(isBuyerView)")
+                            Spacer()
+                            CompactSeatView(
+                                seatNumber: 1,
+                                seat: concert.seats[0],
+                                isSelected: selectedSeats.contains(0),
+                                isBatchMode: isBatchMode,
+                                isBuyerView: isBuyerView,
+                                onTap: { handleSeatTap(0) },
+                                onLongPress: { handleSeatLongPress(0) }
+                            )
+                            .id("seat-0-\(isBuyerView)")
+                        }
+
+                        // Row 2: seat 7 (left), firepit, seat 2 (right)
+                        HStack {
+                            CompactSeatView(
+                                seatNumber: 7,
+                                seat: concert.seats[6],
+                                isSelected: selectedSeats.contains(6),
+                                isBatchMode: isBatchMode,
+                                isBuyerView: isBuyerView,
+                                onTap: { handleSeatTap(6) },
+                                onLongPress: { handleSeatLongPress(6) }
+                            )
+                            .id("seat-6-\(isBuyerView)")
+                            Spacer()
+                            CompactSeatView(
+                                seatNumber: 2,
+                                seat: concert.seats[1],
+                                isSelected: selectedSeats.contains(1),
+                                isBatchMode: isBatchMode,
+                                isBuyerView: isBuyerView,
+                                onTap: { handleSeatTap(1) },
+                                onLongPress: { handleSeatLongPress(1) }
+                            )
+                            .id("seat-1-\(isBuyerView)")
+                        }
+
+                        // Row 3: seats 6, 5, 4, 3
+                        HStack(spacing: mgmtSeatGap) {
+                            CompactSeatView(
+                                seatNumber: 6,
+                                seat: concert.seats[5],
+                                isSelected: selectedSeats.contains(5),
+                                isBatchMode: isBatchMode,
+                                isBuyerView: isBuyerView,
+                                onTap: { handleSeatTap(5) },
+                                onLongPress: { handleSeatLongPress(5) }
+                            )
+                            .id("seat-5-\(isBuyerView)")
+                            CompactSeatView(
+                                seatNumber: 5,
+                                seat: concert.seats[4],
+                                isSelected: selectedSeats.contains(4),
+                                isBatchMode: isBatchMode,
+                                isBuyerView: isBuyerView,
+                                onTap: { handleSeatTap(4) },
+                                onLongPress: { handleSeatLongPress(4) }
+                            )
+                            .id("seat-4-\(isBuyerView)")
+                            CompactSeatView(
+                                seatNumber: 4,
+                                seat: concert.seats[3],
+                                isSelected: selectedSeats.contains(3),
+                                isBatchMode: isBatchMode,
+                                isBuyerView: isBuyerView,
+                                onTap: { handleSeatTap(3) },
+                                onLongPress: { handleSeatLongPress(3) }
+                            )
+                            .id("seat-3-\(isBuyerView)")
+                            CompactSeatView(
+                                seatNumber: 3,
+                                seat: concert.seats[2],
+                                isSelected: selectedSeats.contains(2),
+                                isBatchMode: isBatchMode,
+                                isBuyerView: isBuyerView,
+                                onTap: { handleSeatTap(2) },
+                                onLongPress: { handleSeatLongPress(2) }
+                            )
+                            .id("seat-2-\(isBuyerView)")
+                        }
+                    }
+                    .frame(width: mgmtGridWidth)
+
+                    // Center firepit overlaid on the upper two rows
+                    CompactFirepitView(isPulsing: pulseFirepit)
+                        .offset(y: -(mgmtCellSize + mgmtSeatGap) / 2)
+                }
+                .padding(.vertical, 16)
+                .padding(.horizontal, 12)
+                .background(
                     RoundedRectangle(cornerRadius: 20)
                         .fill(.clear)
-                        .frame(height: 220)
-                        .overlay(
-                        ZStack {
-                            // Bottom row positioned at the bottom
-                            VStack {
-                                Spacer()
-                                HStack(spacing: 14) {
-                                    CompactSeatView(
-                                        seatNumber: 6,
-                                        seat: concert.seats[5],
-                                        isSelected: selectedSeats.contains(5),
-                                        isBatchMode: isBatchMode,
-                                        isBuyerView: isBuyerView,
-                                        onTap: { handleSeatTap(5) },
-                                        onLongPress: { handleSeatLongPress(5) }
-                                    )
-                                    .id("seat-5-\(isBuyerView)")
-                                    CompactSeatView(
-                                        seatNumber: 5,
-                                        seat: concert.seats[4],
-                                        isSelected: selectedSeats.contains(4),
-                                        isBatchMode: isBatchMode,
-                                        isBuyerView: isBuyerView,
-                                        onTap: { handleSeatTap(4) },
-                                        onLongPress: { handleSeatLongPress(4) }
-                                    )
-                                    .id("seat-4-\(isBuyerView)")
-                                    CompactSeatView(
-                                        seatNumber: 4,
-                                        seat: concert.seats[3],
-                                        isSelected: selectedSeats.contains(3),
-                                        isBatchMode: isBatchMode,
-                                        isBuyerView: isBuyerView,
-                                        onTap: { handleSeatTap(3) },
-                                        onLongPress: { handleSeatLongPress(3) }
-                                    )
-                                    .id("seat-3-\(isBuyerView)")
-                                    CompactSeatView(
-                                        seatNumber: 3,
-                                        seat: concert.seats[2],
-                                        isSelected: selectedSeats.contains(2),
-                                        isBatchMode: isBatchMode,
-                                        isBuyerView: isBuyerView,
-                                        onTap: { handleSeatTap(2) },
-                                        onLongPress: { handleSeatLongPress(2) }
-                                    )
-                                    .id("seat-2-\(isBuyerView)")
-                                }
-                                .padding(.bottom, 8)  // Moved closer to bottom edge, leaving minimal space for text
-                            }
-                            
-                            // Left side vertical stack aligned with seat 6
-                            HStack {
-                                VStack(spacing: -2) {  // Negative spacing to bring seat 7 very close to 8
-                                    CompactSeatView(
-                                        seatNumber: 8,
-                                        seat: concert.seats[7],
-                                        isSelected: selectedSeats.contains(7),
-                                        isBatchMode: isBatchMode,
-                                        isBuyerView: isBuyerView,
-                                        onTap: { handleSeatTap(7) },
-                                        onLongPress: { handleSeatLongPress(7) }
-                                    )
-                                    .id("seat-7-\(isBuyerView)")
-                                    CompactSeatView(
-                                        seatNumber: 7,
-                                        seat: concert.seats[6],
-                                        isSelected: selectedSeats.contains(6),
-                                        isBatchMode: isBatchMode,
-                                        isBuyerView: isBuyerView,
-                                        onTap: { handleSeatTap(6) },
-                                        onLongPress: { handleSeatLongPress(6) }
-                                    )
-                                    .id("seat-6-\(isBuyerView)")
-                                    Spacer()
-                                        .frame(height: 72) // Adjusted space to align with lower bottom row
-                                }
-                                .padding(.leading, 8)  // Moved closer to left edge
-                                
-                                Spacer()
-                            }
-                            
-                            // Right side vertical stack aligned with seat 3
-                            HStack {
-                                Spacer()
-                                
-                                VStack(spacing: -2) {  // Negative spacing to bring seat 2 very close to 1
-                                    CompactSeatView(
-                                        seatNumber: 1,
-                                        seat: concert.seats[0],
-                                        isSelected: selectedSeats.contains(0),
-                                        isBatchMode: isBatchMode,
-                                        isBuyerView: isBuyerView,
-                                        onTap: { handleSeatTap(0) },
-                                        onLongPress: { handleSeatLongPress(0) }
-                                    )
-                                    .id("seat-0-\(isBuyerView)")
-                                    CompactSeatView(
-                                        seatNumber: 2,
-                                        seat: concert.seats[1],
-                                        isSelected: selectedSeats.contains(1),
-                                        isBatchMode: isBatchMode,
-                                        isBuyerView: isBuyerView,
-                                        onTap: { handleSeatTap(1) },
-                                        onLongPress: { handleSeatLongPress(1) }
-                                    )
-                                    .id("seat-1-\(isBuyerView)")
-                                    Spacer()
-                                        .frame(height: 72) // Adjusted space to align with lower bottom row
-                                }
-                                .padding(.trailing, 8)  // Moved closer to right edge
-                            }
-                            
-                            // Center firepit positioned between upper seats (8,7 and 1,2)
-                            VStack {
-                                CompactFirepitView(isPulsing: pulseFirepit)
-                                    .offset(y: 25) // Center between seat rows
-                                Spacer()
-                            }
-                        }
-                        .padding(.top, 20)
-                    )
-                }
+                        .liquidGlassCard(accentColor: .liquidTeal, cornerRadius: 20)
+                )
             }
             
             // Enhanced status legend and metrics
