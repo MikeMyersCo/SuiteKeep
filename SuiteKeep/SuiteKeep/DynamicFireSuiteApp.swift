@@ -2665,6 +2665,8 @@ struct MetricCard: View {
                 Text(value)
                     .font(SKTypography.metricMedium)
                     .foregroundColor(SKColors.textPrimary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
                     .scaleEffect(animateValue ? 1.03 : 1.0)
                     .animation(SKMotion.stateChange, value: animateValue)
 
@@ -7269,21 +7271,21 @@ class ConcertDataManager: ObservableObject {
             // Create a CKRecord for the concert for personal CloudKit storage
             let recordID = CKRecord.ID(recordName: "concert_\(concert.id)")
             let record = CKRecord(recordType: "Concert", recordID: recordID)
-            
+
             // Set concert data
             record["id"] = String(concert.id)
             record["artist"] = concert.artist
             record["date"] = concert.date
-            
+
             // Encode seats as JSON data
             if let seatsData = try? JSONEncoder().encode(concert.seats) {
                 record["seats"] = seatsData
             }
-            
+
             // Save to personal CloudKit database
             _ = try await cloudKitDatabase.save(record)
             print("✅ Synced concert \(concert.id) (\(concert.artist)) to personal CloudKit")
-            
+
         } catch {
             print("❌ Failed to sync concert \(concert.id) to personal CloudKit: \(error.localizedDescription)")
             await MainActor.run {
@@ -8642,6 +8644,7 @@ struct ConcertDetailView: View {
     @State private var selectedSeats = Set<Int>()
     @State private var showingBatchOptions = false
     @State private var showSelloutConfetti = false
+    @State private var batchInitialStatus: SeatStatus = .available
 
     var body: some View {
         ZStack {
@@ -8840,6 +8843,7 @@ struct ConcertDetailView: View {
                                     GridItem(.flexible())
                                 ], spacing: 12) {
                                     Button(action: {
+                                        batchInitialStatus = .available
                                         showingBatchOptions = true
                                     }) {
                                         HStack(spacing: 8) {
@@ -8880,7 +8884,8 @@ struct ConcertDetailView: View {
                                     .buttonStyle(PlainButtonStyle())
                                     
                                     Button(action: {
-                                        batchSetStatus(.reserved)
+                                        batchInitialStatus = .reserved
+                                        showingBatchOptions = true
                                     }) {
                                         HStack(spacing: 8) {
                                             Image(systemName: "clock")
@@ -8900,7 +8905,8 @@ struct ConcertDetailView: View {
                                     .buttonStyle(PlainButtonStyle())
                                     
                                     Button(action: {
-                                        batchSetStatus(.sold)
+                                        batchInitialStatus = .sold
+                                        showingBatchOptions = true
                                     }) {
                                         HStack(spacing: 8) {
                                             Image(systemName: "checkmark")
@@ -9100,7 +9106,8 @@ struct ConcertDetailView: View {
                         isBatchMode = false
                         selectedSeats.removeAll()
                     }
-                }
+                },
+                initialStatus: batchInitialStatus
             )
             .environmentObject(settingsManager)
         }
@@ -14506,11 +14513,12 @@ struct BatchSeatOptionsView: View {
     let onUpdate: ([(Int, Seat)]) -> Void
     let onComplete: () -> Void
     let onCancel: () -> Void
-    
+    let initialStatus: SeatStatus
+
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject var settingsManager: SettingsManager
-    
-    @State private var selectedStatus: SeatStatus = .available
+
+    @State private var selectedStatus: SeatStatus
     @State private var priceInput: String = ""
     @State private var costInput: String = ""
     @State private var selectedSource: TicketSource = .family
@@ -14518,6 +14526,16 @@ struct BatchSeatOptionsView: View {
     @State private var familyPersonName: String = ""
     @State private var showingAlert = false
     @State private var alertMessage = ""
+
+    init(selectedSeats: [Int], concert: Concert, onUpdate: @escaping ([(Int, Seat)]) -> Void, onComplete: @escaping () -> Void, onCancel: @escaping () -> Void, initialStatus: SeatStatus = .available) {
+        self.selectedSeats = selectedSeats
+        self.concert = concert
+        self.onUpdate = onUpdate
+        self.onComplete = onComplete
+        self.onCancel = onCancel
+        self.initialStatus = initialStatus
+        _selectedStatus = State(initialValue: initialStatus)
+    }
     
     var body: some View {
         NavigationView {
